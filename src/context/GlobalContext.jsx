@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db } from './firebase';
+import { db, auth } from '../firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { 
   collection, 
   onSnapshot, 
@@ -25,10 +26,43 @@ export const GlobalProvider = ({ children }) => {
   const [staff, setStaff] = useState([]);
   const [channels, setChannels] = useState([]);
   const [couriers, setCouriers] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Auth Listener
+  useEffect(() => {
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // Check for 15-day session timeout
+        const loginTime = localStorage.getItem('thenga_login_timestamp');
+        const fifteenDaysInMs = 15 * 24 * 60 * 60 * 1000;
+        const now = Date.now();
+
+        if (loginTime && now - parseInt(loginTime) > fifteenDaysInMs) {
+          // Session expired
+          signOut(auth);
+          localStorage.removeItem('thenga_login_timestamp');
+          setCurrentUser(null);
+        } else {
+          // Valid session or new login
+          if (!loginTime) {
+            localStorage.setItem('thenga_login_timestamp', now.toString());
+          }
+          setCurrentUser(user);
+        }
+      } else {
+        setCurrentUser(null);
+        localStorage.removeItem('thenga_login_timestamp');
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubAuth();
+  }, []);
 
   // Real-time Listeners
   useEffect(() => {
+    if (!currentUser) return;
     const unsubStock = onSnapshot(collection(db, 'stock'), (snapshot) => {
       setStock(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
@@ -66,7 +100,9 @@ export const GlobalProvider = ({ children }) => {
       unsubStock(); unsubB2B(); unsubB2C(); unsubDamage(); 
       unsubReturns(); unsubStaff(); unsubChannels(); unsubCouriers();
     };
-  }, []);
+  }, [currentUser]);
+
+  const logout = () => signOut(auth);
 
   // API Methods
   const updateFirestoreStock = async (productName, quantity, operation = 'add', type = 'out') => {
@@ -187,17 +223,18 @@ export const GlobalProvider = ({ children }) => {
     await deleteDoc(doc(db, 'stock', id));
   };
 
-  if (loading && stock.length === 0) {
+  if (currentUser && loading && stock.length === 0) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
         <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-slate-600 font-medium">Connecting to Cloud Storage...</p>
+        <p className="text-slate-600 font-medium tracking-wide">Syncing data...</p>
       </div>
     );
   }
 
   return (
     <GlobalContext.Provider value={{ 
+      currentUser, logout, authLoading,
       stock, addSKU, updateSKU, deleteSKU,
       b2bShipments, addB2BShipment, deleteB2BShipment,
       b2cShipments, addB2CShipment, deleteB2CShipment,

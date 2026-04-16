@@ -110,7 +110,7 @@ const Dashboard = () => {
           <h2 className="text-2xl font-bold tracking-tight text-slate-900">Dashboard Overview</h2>
           <p className="text-sm text-slate-500 mt-1">Real-time metrics of shipments and inventory</p>
         </div>
-        <div className="flex items-center">
+        <div className="flex items-center gap-3">
           <select 
             className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer hover:bg-slate-50"
             value={timeFilter}

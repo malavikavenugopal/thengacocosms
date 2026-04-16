@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
@@ -13,7 +13,27 @@ import Staff from './pages/Staff';
 import Channels from './pages/Channels';
 import Couriers from './pages/Couriers';
 import Returns from './pages/Returns';
-import { GlobalProvider } from './context/GlobalContext';
+import Login from './pages/Login';
+import { GlobalProvider, useGlobalState } from './context/GlobalContext';
+
+const ProtectedRoute = ({ children }) => {
+  const { currentUser, authLoading } = useGlobalState();
+  
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
+        <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-slate-600 font-medium tracking-wide">Authenticating...</p>
+      </div>
+    );
+  }
+  
+  if (!currentUser) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return children;
+};
 
 function App() {
   return (
@@ -21,7 +41,13 @@ function App() {
       <Toaster position="top-right" reverseOrder={false} />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Layout />}>
+          <Route path="/login" element={<Login />} />
+          
+          <Route path="/" element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }>
             <Route index element={<Dashboard />} />
             <Route path="products" element={<Products />} />
             <Route path="staff" element={<Staff />} />

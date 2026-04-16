@@ -1,8 +1,10 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Package, Truck, AlertTriangle, ClipboardList, BarChart3, Box, X, Layers, Users, Globe, RotateCcw } from 'lucide-react';
+import { LayoutDashboard, Package, Truck, AlertTriangle, ClipboardList, BarChart3, Box, X, Layers, Users, Globe, RotateCcw, LogOut } from 'lucide-react';
+import { useGlobalState } from '../context/GlobalContext';
 
 const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
+  const { logout } = useGlobalState();
   const links = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
     { name: 'SKU Master', path: '/products', icon: <Layers size={20} /> },
@@ -37,7 +39,7 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
         </button>
       </div>
       
-      <nav className="flex-1 px-2 py-3 flex flex-col gap-0.5 overflow-hidden">
+      <nav className="flex-1 px-2 py-3 flex flex-col gap-0.5 overflow-y-auto">
         {links.map((link) => (
           <NavLink
             key={link.path}
@@ -57,13 +59,21 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
         ))}
       </nav>
       
-      <div className="p-3 bg-slate-950/30 border-t border-slate-800 hidden md:block">
-        <div className="flex items-center gap-3 px-2 py-2">
+      <div className="p-3 bg-slate-950/30 border-t border-slate-800 space-y-2">
+        <button 
+          onClick={logout}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 transition-all duration-200 text-sm"
+        >
+          <LogOut size={18} />
+          Logout System
+        </button>
+
+        <div className="hidden md:flex items-center gap-3 px-2 py-2">
           <div className="text-sm">
             <p className="font-medium text-white">Stock System v2.0</p>
             <p className="text-xs text-indigo-400 mt-0.5 flex items-center gap-1">
-               <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block shadow-[0_0_8px_rgba(34,197,94,0.8)]"></span>
-               Connected
+               <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>
+               Cloud Sync Active
             </p>
           </div>
         </div>

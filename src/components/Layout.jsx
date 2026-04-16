@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import { Menu, Search, User } from 'lucide-react';
+import { Menu, Search, User, LogOut } from 'lucide-react';
+import { useGlobalState } from '../context/GlobalContext';
 
 const Layout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { logout, currentUser } = useGlobalState();
   const location = useLocation();
 
   const getPageTitle = () => {
@@ -23,6 +25,8 @@ const Layout = () => {
       default: return 'Overview';
     }
   };
+
+  const userInitial = currentUser?.email ? currentUser.email.charAt(0).toUpperCase() : 'U';
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex font-sans">
@@ -49,8 +53,25 @@ const Layout = () => {
                 className="w-full pl-10 pr-4 py-2 bg-slate-100 border-transparent focus:border-indigo-500 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all text-slate-700"
               />
             </div>
-            <div className="h-9 w-9 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md cursor-pointer border-2 border-white ring-2 ring-slate-100">
-              M
+            
+            <div className="flex items-center gap-3 pl-4 border-l border-slate-100">
+              <div className="hidden lg:flex flex-col items-end">
+                <p className="text-xs font-bold text-slate-900 leading-none">{currentUser?.email?.split('@')[0] || 'User'}</p>
+                <p className="text-[10px] font-medium text-slate-500 mt-1">Administrator</p>
+              </div>
+              
+              <button 
+                onClick={logout}
+                className="flex items-center gap-2 px-3 py-2 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100 transition-all duration-200"
+                title="Log Out"
+              >
+                <LogOut size={18} />
+                <span className="text-xs font-bold hidden sm:block">Logout</span>
+              </button>
+
+              <div className="h-10 w-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-indigo-400 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-indigo-100 border-2 border-white">
+                {userInitial}
+              </div>
             </div>
           </div>
         </header>
