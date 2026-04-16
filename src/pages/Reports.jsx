@@ -1,0 +1,323 @@
+import React, { useState, useMemo } from 'react';
+import { Card, Input, Select, Button, Table } from '../components/ui';
+import { Download, Filter, FileSpreadsheet, Package, ShoppingCart, AlertCircle, RotateCcw } from 'lucide-react';
+import { useGlobalState } from '../context/GlobalContext';
+import { exportToCSV } from '../utils/exportUtils';
+
+const Reports = () => {
+  const { stock, b2bShipments, b2cShipments, damageRecords, returnRecords, channels } = useGlobalState();
+  const [activeTab, setActiveTab] = useState('shipments');
+  
+  // Filter states
+  const [filter, setFilter] = useState({
+    startDate: '',
+    endDate: '',
+    sku: 'All SKUs',
+    channel: 'All Channels'
+  });
+
+  const tabs = [
+    { id: 'shipments', label: 'Shipment Report' },
+    { id: 'products', label: 'SKU Report' },
+    { id: 'returns', label: 'Returns Report' },
+    { id: 'damage', label: 'Damage Report' },
+  ];
+
+  // Combined shipments for the shipments report
+  const allShipments = useMemo(() => {
+    const b2b = b2bShipments.map(s => ({ ...s, type: 'B2B', displayChannel: s.courier || 'N/A' }));
+    const b2c = b2cShipments.map(s => ({ ...s, type: 'B2C', displayChannel: s.channel || 'N/A' }));
+    return [...b2b, ...b2c].sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [b2bShipments, b2cShipments]);
+
+  // Apply filters
+  const filteredShipments = useMemo(() => {
+    return allShipments.filter(s => {
+      const dateMatch = (!filter.startDate || s.date >= filter.startDate) && 
+                        (!filter.endDate || s.date <= filter.endDate);
+      const skuMatch = filter.sku === 'All SKUs' || 
+                           s.products.some(p => p.name === filter.sku);
+      const channelMatch = filter.channel === 'All Channels' || 
+                           (s.type === 'B2B' && filter.channel === 'B2B Shipments') ||
+                           (s.type === 'B2C' && filter.channel === 'B2C Shipments') ||
+                           (s.type === 'B2C' && s.channel === filter.channel);
+      return dateMatch && skuMatch && channelMatch;
+    });
+  }, [allShipments, filter]);
+
+  const filteredDamages = useMemo(() => {
+    return damageRecords.filter(d => {
+      const dateMatch = (!filter.startDate || d.date >= filter.startDate) && 
+                        (!filter.endDate || d.date <= filter.endDate);
+      const skuMatch = filter.sku === 'All SKUs' || d.productName === filter.sku;
+      return dateMatch && skuMatch;
+    }).sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [damageRecords, filter]);
+
+  const filteredReturns = useMemo(() => {
+    return returnRecords.filter(r => {
+      const dateMatch = (!filter.startDate || r.date >= filter.startDate) && 
+                        (!filter.endDate || r.date <= filter.endDate);
+      const skuMatch = filter.sku === 'All SKUs' || r.productName === filter.sku;
+      const channelMatch = filter.channel === 'All Channels' || r.channel === filter.channel;
+      return dateMatch && skuMatch && channelMatch;
+    }).sort((a, b) => new Date(b.date) - new Date(a.date));
+  }, [returnRecords, filter]);
+
+  const productStats = useMemo(() => {
+    return stock.map(p => {
+      const b2bQty = b2bShipments.reduce((sum, s) => {
+        const item = s.products.find(prod => prod.name === p.name);
+        return sum + (item ? Number(item.quantity) : 0);
+      }, 0);
+      
+      const b2cQty = b2cShipments.reduce((sum, s) => {
+        const item = s.products.find(prod => prod.name === p.name);
+        return sum + (item ? Number(item.quantity) : 0);
+      }, 0);
+
+      const returnsQty = returnRecords.reduce((sum, r) => {
+        return sum + (r.productName === p.name ? Number(r.quantity) : 0);
+      }, 0);
+
+      const totalDispatched = b2bQty + b2cQty;
+      const currentStock = Number(p.opening) + Number(p.in) - (b2bQty + b2cQty) - Number(p.damage); // Note: GlobalContext stock calculation should already handle 'in'
+      const status = currentStock < 10 ? 'Low Stock' : 'Healthy';
+
+      return {
+        name: p.name,
+        totalDispatched,
+        b2bQty,
+        b2cQty,
+        returnsQty,
+        status,
+        currentStock
+      };
+    }).sort((a, b) => b.totalDispatched - a.totalDispatched);
+  }, [stock, b2bShipments, b2cShipments, returnRecords]);
+
+  const handleExport = () => {
+    let dataToExport = [];
+    let fileName = '';
+
+    if (activeTab === 'shipments') {
+      dataToExport = filteredShipments.map(s => ({
+        Date: s.date,
+        Type: s.type,
+        Channel: s.type === 'B2B' ? s.whoParceled : s.channel,
+        SKUs: s.products.map(p => `${p.name} (${p.quantity})`).join('; '),
+        TotalUnits: s.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)
+      }));
+      fileName = `shipments_report_${new Date().toISOString().split('T')[0]}.csv`;
+    } else if (activeTab === 'products') {
+      dataToExport = productStats.map(p => ({
+        SKUName: p.name,
+        TotalDispatched: p.totalDispatched,
+        B2BUnits: p.b2bQty,
+        B2CUnits: p.b2cQty,
+        ReturnUnits: p.returnsQty,
+        CurrentStock: p.currentStock,
+        Status: p.status
+      }));
+      fileName = `sku_report_${new Date().toISOString().split('T')[0]}.csv`;
+    } else if (activeTab === 'damage') {
+      dataToExport = filteredDamages.map(d => ({
+        Date: d.date,
+        SKU: d.productName,
+        Quantity: d.quantity,
+        Reason: d.reason || 'N/A'
+      }));
+      fileName = `damage_report_${new Date().toISOString().split('T')[0]}.csv`;
+    } else if (activeTab === 'returns') {
+      dataToExport = filteredReturns.map(r => ({
+        Date: r.date,
+        Channel: r.channel,
+        SKU: r.productName,
+        Quantity: r.quantity,
+        Reason: r.reason || 'N/A'
+      }));
+      fileName = `returns_report_${new Date().toISOString().split('T')[0]}.csv`;
+    }
+
+    exportToCSV(dataToExport, fileName);
+  };
+
+  const skuOptions = ['All SKUs', ...stock.map(p => p.name)];
+  const channelOptions = ['All Channels', 'B2B Shipments', 'B2C Shipments', ...channels.map(c => c.name)];
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Reports</h2>
+          <p className="text-sm text-slate-500">Generate and export operations analytics</p>
+        </div>
+        <Button onClick={handleExport} className="shrink-0 flex items-center gap-2">
+          <Download size={16} /> Export {tabs.find(t => t.id === activeTab)?.label}
+        </Button>
+      </div>
+
+      <Card className="p-4 bg-white">
+        <div className="flex items-center gap-2 mb-4 text-indigo-600 font-medium text-sm">
+          <Filter size={16} />
+          Filters
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Input 
+            label="Start Date" 
+            type="date" 
+            value={filter.startDate}
+            onChange={(e) => setFilter({...filter, startDate: e.target.value})}
+          />
+          <Input 
+            label="End Date" 
+            type="date" 
+            value={filter.endDate}
+            onChange={(e) => setFilter({...filter, endDate: e.target.value})}
+          />
+          <Select 
+            label="SKU" 
+            options={skuOptions} 
+            value={filter.sku}
+            onChange={(e) => setFilter({...filter, sku: e.target.value})}
+          />
+          <Select 
+            label="Channel" 
+            options={channelOptions} 
+            value={filter.channel}
+            onChange={(e) => setFilter({...filter, channel: e.target.value})}
+          />
+        </div>
+      </Card>
+
+      <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm">
+        <div className="flex border-b border-slate-100 bg-slate-50/50">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-6 py-4 text-sm font-medium transition-colors ${
+                activeTab === tab.id 
+                  ? 'bg-white text-indigo-600 border-b-2 border-indigo-600' 
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-0">
+          {activeTab === 'shipments' && (
+            <Table headers={['Date', 'Type', 'Destination/Channel', 'Details', 'Total Units']}>
+              {filteredShipments.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="py-12 text-center text-slate-400">No shipments found for the current filters.</td>
+                </tr>
+              ) : (
+                filteredShipments.map(s => (
+                  <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-4 px-6 text-sm text-slate-800">{s.date}</td>
+                    <td className="py-4 px-6 text-sm">
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide ${
+                        s.type === 'B2B' ? 'bg-indigo-50 text-indigo-700' : 'bg-emerald-50 text-emerald-700'
+                      }`}>
+                        {s.type}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 text-sm font-semibold text-slate-900">
+                      {s.type === 'B2B' ? s.whoParceled : s.channel}
+                    </td>
+                    <td className="py-4 px-6 text-sm text-slate-600 truncate max-w-xs">
+                      {s.products.map(p => `${p.name} (${p.quantity})`).join(', ')}
+                    </td>
+                    <td className="py-4 px-6 text-sm font-bold text-slate-800">
+                      {s.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </Table>
+          )}
+
+          {activeTab === 'products' && (
+            <Table headers={['SKU Name', 'Total Dispatched', 'B2B Qty', 'B2C Qty', 'Returns Qty', 'Stock Status']}>
+              {productStats.map(p => (
+                <tr key={p.name} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="py-4 px-6 text-sm font-semibold text-slate-900">{p.name}</td>
+                  <td className="py-4 px-6 text-sm font-bold text-slate-800">{p.totalDispatched}</td>
+                  <td className="py-4 px-6 text-sm font-medium text-indigo-600">{p.b2bQty}</td>
+                  <td className="py-4 px-6 text-sm font-medium text-emerald-600">{p.b2cQty}</td>
+                  <td className="py-4 px-6 text-sm font-medium text-rose-600">{p.returnsQty}</td>
+                  <td className="py-4 px-6 text-sm">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide ${
+                      p.status === 'Healthy' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                    }`}>
+                      {p.status}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          )}
+
+          {activeTab === 'returns' && (
+            <Table headers={['Date', 'Channel', 'SKU Name', 'Quantity', 'Reason']}>
+              {filteredReturns.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="py-12 text-center text-slate-400">No return records found for the current filters.</td>
+                </tr>
+              ) : (
+                filteredReturns.map(r => (
+                  <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-4 px-6 text-sm text-slate-800">{r.date}</td>
+                    <td className="py-4 px-6 text-sm font-semibold text-slate-900">{r.channel}</td>
+                    <td className="py-4 px-6 text-sm text-slate-600 truncate max-w-xs">{r.productName}</td>
+                    <td className="py-4 px-6 text-sm text-emerald-600 font-bold">+{r.quantity}</td>
+                    <td className="py-4 px-6 text-sm text-slate-600">{r.reason || 'N/A'}</td>
+                  </tr>
+                ))
+              )}
+            </Table>
+          )}
+
+          {activeTab === 'damage' && (
+            <Table headers={['Date', 'SKU Name', 'Quantity', 'Reason Category']}>
+              {filteredDamages.length === 0 ? (
+                <tr>
+                  <td colSpan="4" className="py-12 text-center text-slate-400">No damage records found for the current filters.</td>
+                </tr>
+              ) : (
+                filteredDamages.map(d => (
+                  <tr key={d.id} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-4 px-6 text-sm text-slate-800">{d.date}</td>
+                    <td className="py-4 px-6 text-sm font-semibold text-slate-900">{d.productName}</td>
+                    <td className="py-4 px-6 text-sm text-rose-600 font-bold">{d.quantity}</td>
+                    <td className="py-4 px-6 text-sm text-slate-600">{d.reason || 'N/A'}</td>
+                  </tr>
+                ))
+              )}
+            </Table>
+          )}
+        </div>
+      </div>
+      
+      <div className="bg-gradient-to-r from-indigo-50 to-blue-50 p-6 rounded-xl border border-indigo-100 flex flex-col sm:flex-row items-center justify-between gap-4 mt-8">
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-white rounded-full shadow-sm text-indigo-600">
+            <FileSpreadsheet size={24} />
+          </div>
+          <div>
+            <h4 className="font-semibold text-indigo-900">Need advanced analytics?</h4>
+            <p className="text-sm text-indigo-700 mt-1">Export raw data to Excel for custom pivot tables and charts.</p>
+          </div>
+        </div>
+        <Button variant="primary" className="shrink-0 w-full sm:w-auto" onClick={handleExport}>
+          Download All Raw Data
+        </Button>
+      </div>
+    </div>
+  );
+};
+
+export default Reports;
