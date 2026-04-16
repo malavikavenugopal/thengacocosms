@@ -28,13 +28,22 @@ const B2BShipments = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // Inject packSize from Master Data for each product before saving
+    const finalizedProducts = products.map(p => {
+      const masterSKU = stock.find(s => s.name === p.name);
+      return {
+        ...p,
+        packSize: masterSKU?.packSize || 1
+      };
+    });
+
     const newShipment = {
       ...formData,
-      products: [...products],
-      id: Date.now()
+      products: finalizedProducts
     };
     addB2BShipment(newShipment);
-    setFormData({ whoParceled: '', clientName: '', courierName: '', boxes: '', date: '' });
+    setFormData({ whoParceled: '', clientName: '', courierName: '', boxes: '', date: new Date().toISOString().split('T')[0] });
     setProducts([{ name: '', quantity: '' }]);
     toast.success('B2B Shipment recorded!');
   };
@@ -106,41 +115,65 @@ const B2BShipments = () => {
               </Button>
             </div>
             
-            <div className="space-y-3">
-              {products.map((product, index) => (
-                <div key={index} className="flex flex-col sm:flex-row gap-3 items-end">
-                  <div className="flex-1 w-full">
-                    <Select 
-                      label={index === 0 ? "SKU Name" : undefined}
-                      options={stock.map(s => s.name)}
-                      value={product.name}
-                      onChange={(e) => updateProduct(index, 'name', e.target.value)}
-                      required
-                    />
+            <div className="space-y-4">
+              {products.map((product, index) => {
+                const selectedSKU = stock.find(s => s.name === product.name);
+                const packSize = selectedSKU?.packSize || 1;
+                const totalDeduction = (Number(product.quantity) || 0) * packSize;
+
+                return (
+                  <div key={index} className="px-4 py-4 bg-slate-50 rounded-2xl border border-slate-100 relative group">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                      <div className="md:col-span-7">
+                        <Select 
+                          label={index === 0 ? "Select Product / SKU" : undefined}
+                          options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)}
+                          value={selectedSKU ? `[${selectedSKU.sku || 'N/A'}] ${selectedSKU.name} (Pack: ${selectedSKU.packSize || 1})` : ''}
+                          onChange={(e) => {
+                            const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === e.target.value)?.name;
+                            updateProduct(index, 'name', selectedName || '');
+                          }}
+                          required
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <Input 
+                          label={index === 0 ? "Quantity" : undefined}
+                          type="number"
+                          min="1"
+                          placeholder="0"
+                          value={product.quantity}
+                          onChange={(e) => updateProduct(index, 'quantity', e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="md:col-span-2 py-3 text-center border-l border-slate-200">
+                        <p className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-tighter">Inventory Deduction</p>
+                        <p className="font-bold text-indigo-600">
+                          {product.quantity ? `${product.quantity} x ${packSize} = ${totalDeduction}` : '-'}
+                        </p>
+                      </div>
+                      <div className="md:col-span-1 flex justify-end pb-2">
+                        <button 
+                          type="button" 
+                          onClick={() => handleRemoveProduct(index)}
+                          disabled={products.length === 1}
+                          className="p-2 text-slate-300 hover:text-rose-500 disabled:opacity-0 transition-all font-bold"
+                        >
+                          <Trash2 size={20} />
+                        </button>
+                      </div>
+                    </div>
+                    {selectedSKU && (
+                      <div className="mt-2 flex items-center gap-3">
+                         <span className="text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded font-bold uppercase tracking-wider">SKU Code: {selectedSKU.sku}</span>
+                         <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold uppercase tracking-wider">Default Pack Size: {selectedSKU.packSize || 1}</span>
+                         <span className="text-[10px] px-2 py-0.5 bg-slate-200 text-slate-600 rounded font-medium italic">{selectedSKU.category}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="w-full sm:w-32">
-                    <Input 
-                      label={index === 0 ? "Quantity" : undefined}
-                      type="number"
-                      min="1"
-                      placeholder="0"
-                      value={product.quantity}
-                      onChange={(e) => updateProduct(index, 'quantity', e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="pb-1">
-                    <button 
-                      type="button" 
-                      onClick={() => handleRemoveProduct(index)}
-                      disabled={products.length === 1}
-                      className="p-2 text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors"
-                    >
-                      <Trash2 size={20} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

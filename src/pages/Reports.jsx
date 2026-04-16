@@ -18,10 +18,53 @@ const Reports = () => {
 
   const tabs = [
     { id: 'shipments', label: 'Shipment Report' },
+    { id: 'b2cPivot', label: 'B2C Sales Summary' },
     { id: 'products', label: 'SKU Report' },
     { id: 'returns', label: 'Returns Report' },
     { id: 'damage', label: 'Damage Report' },
   ];
+
+  // B2C Pivot Logic: Group by SKU and Channel
+  const b2cPivotData = useMemo(() => {
+    const activeB2C = b2cShipments.filter(s => {
+      const dateMatch = (!filter.startDate || s.date >= filter.startDate) && 
+                        (!filter.endDate || s.date <= filter.endDate);
+      return dateMatch;
+    });
+
+    const results = stock.map(p => {
+      const channelCounts = {};
+      channels.forEach(c => {
+        channelCounts[c.name] = 0;
+      });
+      
+      let rowTotal = 0;
+      activeB2C.forEach(s => {
+        const item = s.products.find(prod => prod.name === p.name);
+        if (item) {
+          const qty = Number(item.quantity) || 0;
+          const channelName = s.channel || 'Unknown';
+          channelCounts[channelName] = (channelCounts[channelName] || 0) + qty;
+          rowTotal += qty;
+        }
+      });
+
+      return {
+        category: p.category || 'Other',
+        sku: p.sku || 'N/A',
+        name: p.name,
+        channels: channelCounts,
+        total: rowTotal
+      };
+    });
+
+    // Only show products that have sales in selected period OR if specifically filtered
+    return results.filter(row => {
+      const hasSales = row.total > 0;
+      const skuMatch = filter.sku === 'All SKUs' || row.name === filter.sku;
+      return hasSales && skuMatch;
+    }).sort((a, b) => b.total - a.total);
+  }, [stock, b2cShipments, channels, filter.startDate, filter.endDate, filter.sku]);
 
   // Combined shipments for the shipments report
   const allShipments = useMemo(() => {
@@ -65,7 +108,7 @@ const Reports = () => {
   }, [returnRecords, filter]);
 
   const productStats = useMemo(() => {
-    return stock.map(p => {
+    return stock.filter(p => !p.isComposite).map(p => {
       const b2bQty = b2bShipments.reduce((sum, s) => {
         const item = s.products.find(prod => prod.name === p.name);
         return sum + (item ? Number(item.quantity) : 0);
@@ -81,7 +124,7 @@ const Reports = () => {
       }, 0);
 
       const totalDispatched = b2bQty + b2cQty;
-      const currentStock = Number(p.opening) + Number(p.in) - (b2bQty + b2cQty) - Number(p.damage); // Note: GlobalContext stock calculation should already handle 'in'
+      const currentStock = Number(p.opening) + Number(p.in) - (b2bQty + b2cQty) - Number(p.damage); 
       const status = currentStock < 10 ? 'Low Stock' : 'Healthy';
 
       return {
@@ -109,6 +152,20 @@ const Reports = () => {
         TotalUnits: s.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)
       }));
       fileName = `shipments_report_${new Date().toISOString().split('T')[0]}.csv`;
+    } else if (activeTab === 'b2cPivot') {
+      dataToExport = b2cPivotData.map(row => {
+        const rowData = {
+          Category: row.category,
+          SKU: row.sku,
+          Product: row.name
+        };
+        channels.forEach(c => {
+          rowData[c.name.toUpperCase()] = row.channels[c.name] || 0;
+        });
+        rowData.TOTAL = row.total;
+        return rowData;
+      });
+      fileName = `b2c_sales_summary_${new Date().toISOString().split('T')[0]}.csv`;
     } else if (activeTab === 'products') {
       dataToExport = productStats.map(p => ({
         SKUName: p.name,
@@ -208,6 +265,47 @@ const Reports = () => {
         </div>
 
         <div className="p-0">
+          {activeTab === 'b2cPivot' && (
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="py-3 px-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200 sticky left-0 bg-slate-50 z-10">Category</th>
+                    <th className="py-3 px-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200 sticky left-[120px] bg-slate-50 z-10">SKU</th>
+                    <th className="py-3 px-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200">Product</th>
+                    {channels.map(c => (
+                      <th key={c.id} className="py-3 px-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200 min-w-[100px]">
+                        {c.name}
+                      </th>
+                    ))}
+                    <th className="py-3 px-4 text-center text-xs font-bold text-slate-900 uppercase tracking-wider bg-indigo-50/50">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {b2cPivotData.length === 0 ? (
+                    <tr>
+                      <td colSpan={channels.length + 4} className="py-12 text-center text-slate-400">No sales records found for this period.</td>
+                    </tr>
+                  ) : (
+                    b2cPivotData.map((row, idx) => (
+                      <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-3 px-4 text-sm text-slate-600 border-r border-slate-100 bg-emerald-50/20 sticky left-0 z-1 min-w-[100px]">{row.category}</td>
+                        <td className="py-3 px-4 text-sm font-mono text-indigo-600 border-r border-slate-100 bg-rose-50/20 sticky left-[120px] z-1 min-w-[100px]">{row.sku}</td>
+                        <td className="py-3 px-4 text-sm text-slate-800 border-r border-slate-100 min-w-[250px] bg-blue-50/10 leading-relaxed">{row.name}</td>
+                        {channels.map(c => (
+                          <td key={c.id} className={`py-3 px-4 text-center text-sm border-r border-slate-100 ${row.channels[c.name] > 0 ? 'font-bold text-slate-900 bg-emerald-50/30' : 'text-slate-300'}`}>
+                            {row.channels[c.name]}
+                          </td>
+                        ))}
+                        <td className="py-3 px-4 text-center text-sm font-bold text-slate-900 bg-indigo-50/30">{row.total}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+
           {activeTab === 'shipments' && (
             <Table headers={['Date', 'Type', 'Destination/Channel', 'Details', 'Total Units']}>
               {filteredShipments.length === 0 ? (
@@ -228,7 +326,7 @@ const Reports = () => {
                     <td className="py-4 px-6 text-sm font-semibold text-slate-900">
                       {s.type === 'B2B' ? s.whoParceled : s.channel}
                     </td>
-                    <td className="py-4 px-6 text-sm text-slate-600 truncate max-w-xs">
+                    <td className="py-4 px-6 text-sm text-slate-600 leading-relaxed">
                       {s.products.map(p => `${p.name} (${p.quantity})`).join(', ')}
                     </td>
                     <td className="py-4 px-6 text-sm font-bold text-slate-800">
@@ -244,7 +342,7 @@ const Reports = () => {
             <Table headers={['SKU Name', 'Total Dispatched', 'B2B Qty', 'B2C Qty', 'Returns Qty', 'Stock Status']}>
               {productStats.map(p => (
                 <tr key={p.name} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="py-4 px-6 text-sm font-semibold text-slate-900">{p.name}</td>
+                  <td className="py-4 px-6 text-sm font-semibold text-slate-900 leading-relaxed min-w-[200px]">{p.name}</td>
                   <td className="py-4 px-6 text-sm font-bold text-slate-800">{p.totalDispatched}</td>
                   <td className="py-4 px-6 text-sm font-medium text-indigo-600">{p.b2bQty}</td>
                   <td className="py-4 px-6 text-sm font-medium text-emerald-600">{p.b2cQty}</td>
@@ -272,7 +370,7 @@ const Reports = () => {
                   <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-4 px-6 text-sm text-slate-800">{r.date}</td>
                     <td className="py-4 px-6 text-sm font-semibold text-slate-900">{r.channel}</td>
-                    <td className="py-4 px-6 text-sm text-slate-600 truncate max-w-xs">{r.productName}</td>
+                    <td className="py-4 px-6 text-sm text-slate-600 leading-relaxed min-w-[200px]">{r.productName}</td>
                     <td className="py-4 px-6 text-sm text-emerald-600 font-bold">+{r.quantity}</td>
                     <td className="py-4 px-6 text-sm text-slate-600">{r.reason || 'N/A'}</td>
                   </tr>

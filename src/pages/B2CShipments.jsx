@@ -11,7 +11,7 @@ const B2CShipments = () => {
   const [formData, setFormData] = useState({
     whoParceled: '',
     channel: '',
-    date: ''
+    date: new Date().toISOString().split('T')[0]
   });
 
   const handleAddProduct = () => setProducts([...products, { name: '', quantity: '' }]);
@@ -25,13 +25,23 @@ const B2CShipments = () => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // Inject packSize from Master Data for each product before saving
+    const finalizedProducts = products.map(p => {
+      const masterSKU = stock.find(s => s.name === p.name);
+      return {
+        ...p,
+        packSize: masterSKU?.packSize || 1
+      };
+    });
+
     const newShipment = {
       ...formData,
-      products: [...products],
-      id: Date.now()
+      products: finalizedProducts,
+      timestamp: Date.now()
     };
     addB2CShipment(newShipment);
-    setFormData({ whoParceled: '', channel: '', date: '' });
+    setFormData({ ...formData, whoParceled: '', channel: '' });
     setProducts([{ name: '', quantity: '' }]);
     toast.success('B2C Order recorded!');
   };
@@ -45,9 +55,14 @@ const B2CShipments = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-gray-900">B2C Shipments</h2>
-        <p className="text-sm text-gray-500">Manage your direct-to-consumer e-commerce orders</p>
+      <div className="flex items-center gap-3">
+        <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+          <ShoppingCart size={24} />
+        </div>
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">B2C Retail Orders</h2>
+          <p className="text-sm text-slate-500">Sales recorded here use the multiplier set in SKU Master</p>
+        </div>
       </div>
 
       <Card>
@@ -61,14 +76,14 @@ const B2CShipments = () => {
               required
             />
             <Select 
-              label="Channel" 
+              label="Sales Channel" 
               options={channels.map(c => c.name)} 
               value={formData.channel}
               onChange={(e) => setFormData({...formData, channel: e.target.value})}
               required
             />
             <Input 
-              label="Date" 
+              label="Order Date" 
               type="date" 
               value={formData.date}
               onChange={(e) => setFormData({...formData, date: e.target.value})}
@@ -76,58 +91,82 @@ const B2CShipments = () => {
             />
           </div>
 
-          <div className="border-t border-gray-100 pt-6">
+          <div className="border-t border-slate-100 pt-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                <ShoppingCart size={18} className="text-gray-500" />
-                SKUs in Order
+              <h3 className="font-semibold text-slate-900 flex items-center gap-2">
+                <Plus size={18} className="text-indigo-600" />
+                Add Products to Order
               </h3>
               <Button type="button" variant="ghost" onClick={handleAddProduct} className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50">
-                <Plus size={16} /> Add SKU
+                + Add SKU
               </Button>
             </div>
             
-            <div className="space-y-3">
-              {products.map((product, index) => (
-                <div key={index} className="flex flex-col sm:flex-row gap-3 items-end">
-                  <div className="flex-1 w-full">
-                    <Select 
-                      label={index === 0 ? "SKU Name" : undefined}
-                      options={stock.map(s => s.name)}
-                      value={product.name}
-                      onChange={(e) => updateProduct(index, 'name', e.target.value)}
-                      required
-                    />
+            <div className="space-y-4">
+              {products.map((product, index) => {
+                const selectedSKU = stock.find(s => s.name === product.name);
+                const packSize = selectedSKU?.packSize || 1;
+                const totalDeduction = (Number(product.quantity) || 0) * packSize;
+                
+                return (
+                  <div key={index} className="px-4 py-4 bg-slate-50 rounded-2xl border border-slate-100 relative group">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+                      <div className="md:col-span-7">
+                        <Select 
+                          label="Select Product / SKU"
+                          options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)}
+                          value={selectedSKU ? `[${selectedSKU.sku || 'N/A'}] ${selectedSKU.name} (Pack: ${selectedSKU.packSize || 1})` : ''}
+                          onChange={(e) => {
+                            const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === e.target.value)?.name;
+                            updateProduct(index, 'name', selectedName || '');
+                          }}
+                          required
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <Input 
+                          label="Order Qty"
+                          type="number"
+                          min="1"
+                          placeholder="0"
+                          value={product.quantity}
+                          onChange={(e) => updateProduct(index, 'quantity', e.target.value)}
+                          required
+                        />
+                      </div>
+                      <div className="md:col-span-2 py-3 text-center border-l border-slate-200">
+                        <p className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-tighter">Inventory Deduction</p>
+                        <p className="font-bold text-indigo-600">
+                          {product.quantity ? `${product.quantity} x ${packSize} = ${totalDeduction}` : '-'}
+                        </p>
+                      </div>
+                      <div className="md:col-span-1 flex justify-end pb-2">
+                        <button 
+                          type="button" 
+                          onClick={() => handleRemoveProduct(index)}
+                          disabled={products.length === 1}
+                          className="p-2 text-slate-300 hover:text-rose-500 disabled:opacity-0 transition-all font-bold"
+                        >
+                          <Trash2 size={20} />
+                        </button>
+                      </div>
+                    </div>
+                    {selectedSKU && (
+                      <div className="mt-2 flex items-center gap-3">
+                         <span className="text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded font-bold uppercase tracking-wider">SKU Code: {selectedSKU.sku}</span>
+                         <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold uppercase tracking-wider">Default Pack Size: {selectedSKU.packSize || 1}</span>
+                         <span className="text-[10px] px-2 py-0.5 bg-slate-200 text-slate-600 rounded font-medium italic">{selectedSKU.category}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="w-full sm:w-32">
-                    <Input 
-                      label={index === 0 ? "Quantity" : undefined}
-                      type="number"
-                      min="1"
-                      placeholder="0"
-                      value={product.quantity}
-                      onChange={(e) => updateProduct(index, 'quantity', e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="pb-1">
-                    <button 
-                      type="button" 
-                      onClick={() => handleRemoveProduct(index)}
-                      disabled={products.length === 1}
-                      className="p-2 text-gray-400 hover:text-red-500 disabled:opacity-50 transition-colors"
-                    >
-                      <Trash2 size={20} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
-          <div className="flex justify-end pt-4 border-t border-gray-100">
-            <Button type="submit">
-              <Save size={16} /> Record Order
+          <div className="flex justify-end pt-4 border-t border-slate-100">
+            <Button type="submit" className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white shadow-xl shadow-slate-200">
+              <Save size={18} className="mr-2" /> Record B2C Order
             </Button>
           </div>
         </form>
@@ -137,7 +176,7 @@ const B2CShipments = () => {
         <div className="mb-4">
           <h3 className="font-semibold text-gray-900">Recent B2C Orders</h3>
         </div>
-        <Table headers={['Date', 'Channel', 'Parceled By', 'Total Units', 'SKUs', 'Action']}>
+        <Table headers={['Date', 'Channel', 'Parceled By', 'Products (Qty x Pack)', 'Total Units', 'Action']}>
           {shipments.length === 0 ? (
             <tr>
               <td colSpan="6" className="py-16 text-center text-slate-500">
@@ -165,13 +204,20 @@ const B2CShipments = () => {
                   </span>
                 </td>
                 <td className="py-4 px-6 text-sm text-slate-600 whitespace-nowrap">{s.whoParceled}</td>
-                <td className="py-4 px-6 text-sm text-slate-900 font-bold">
-                  {s.products.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0)} units
+                <td className="py-4 px-6 text-sm text-slate-500">
+                  <div className="flex flex-col gap-1">
+                    {s.products.map((p, idx) => (
+                      <div key={idx} className="flex items-center gap-1.5">
+                        <span className="font-semibold text-slate-900">{p.name}</span>
+                        <span className="text-xs text-slate-400">({p.quantity} × {p.packSize || 1})</span>
+                      </div>
+                    ))}
+                  </div>
                 </td>
-                <td className="py-4 px-6 text-sm text-slate-500 truncate max-w-sm">
-                  {s.products.map(p => `${p.name} (${p.quantity})`).join(', ')}
+                <td className="py-4 px-6 text-sm text-indigo-600 font-bold">
+                  {s.products.reduce((acc, curr) => acc + (Number(curr.quantity) * (Number(curr.packSize) || 1)), 0)} units
                 </td>
-                <td className="py-4 px-6 text-sm text-center">
+                <td className="py-4 px-6 text-sm text-right">
                   <button 
                     onClick={() => handleDelete(s.id)}
                     className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"

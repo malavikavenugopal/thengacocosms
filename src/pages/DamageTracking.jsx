@@ -57,10 +57,13 @@ const DamageTracking = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Select 
-              label="SKU Name" 
-              options={stock.map(s => s.name)} 
-              value={formData.productName}
-              onChange={(e) => setFormData({...formData, productName: e.target.value})}
+              label="Select Product / SKU" 
+              options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)} 
+              value={formData.productName ? stock.find(s => s.name === formData.productName) ? `[${stock.find(s => s.name === formData.productName).sku || 'N/A'}] ${formData.productName} (Pack: ${stock.find(s => s.name === formData.productName).packSize || 1})` : '' : ''}
+              onChange={(e) => {
+                const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === e.target.value)?.name;
+                setFormData({...formData, productName: selectedName || ''});
+              }}
               required
             />
             <Input 

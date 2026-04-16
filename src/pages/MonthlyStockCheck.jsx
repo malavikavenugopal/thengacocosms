@@ -66,24 +66,24 @@ const MonthlyStockCheck = () => {
         </div>
       </div>
 
-      <Card className="px-0 pt-0 pb-0 overflow-hidden">
-        <div className="w-full overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-max">
+      <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
+        <div className="w-full">
+          <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 border-b border-slate-200 shadow-sm sticky top-0 z-10">
-              <tr className="text-xs uppercase tracking-wider text-slate-500 font-semibold backdrop-blur-sm">
-                <th className="py-4 px-6">SKU Name</th>
-                <th className="py-4 px-6 text-center">Opening Stock</th>
-                <th className="py-4 px-6 text-center text-indigo-600">Stock In</th>
-                <th className="py-4 px-6 text-center text-emerald-600">Returns</th>
-                <th className="py-4 px-6 text-center text-amber-600">Stock Out</th>
-                <th className="py-4 px-6 text-center text-red-600">Damage</th>
-                <th className="py-4 px-6 text-center bg-slate-100">Expected Stock</th>
-                <th className="py-4 px-6 text-center bg-indigo-50/50">Physical Count</th>
-                <th className="py-4 px-6 text-center">Difference</th>
+              <tr className="text-[10px] uppercase tracking-wider text-slate-500 font-bold backdrop-blur-sm">
+                <th className="py-4 px-4 w-1/4">SKU Name</th>
+                <th className="py-4 px-2 text-center">Opening</th>
+                <th className="py-4 px-2 text-center text-indigo-600">Stock In</th>
+                <th className="py-4 px-2 text-center text-emerald-600">Returns</th>
+                <th className="py-4 px-2 text-center text-amber-600">Out</th>
+                <th className="py-4 px-2 text-center text-red-600">Damage</th>
+                <th className="py-4 px-2 text-center bg-slate-100">Expected</th>
+                <th className="py-4 px-2 text-center bg-indigo-50/50">Physical</th>
+                <th className="py-4 px-4 text-center">Diff</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {stock.map((item) => {
+              {stock.filter(item => !item.isComposite).map((item) => {
                 const expected = calculateExpected(item);
                 const physical = item.physical !== undefined && item.physical !== '' ? Number(item.physical) : null;
                 const diff = physical !== null ? physical - expected : null;
@@ -102,45 +102,45 @@ const MonthlyStockCheck = () => {
 
                 return (
                   <tr key={item.id} className={`transition-colors duration-200 ${rowBg}`}>
-                    <td className="py-4 px-6 text-sm font-semibold text-slate-900 border-r border-slate-100">
+                    <td className="py-4 px-4 text-sm font-semibold text-slate-900 border-r border-slate-100 leading-tight">
                       {item.name}
                     </td>
-                    <td className="py-3 px-6 text-center">
+                    <td className="py-3 px-1 text-center">
                       <input 
                         type="number" 
-                        className="w-20 mx-auto block px-2 py-1 text-center text-sm border-slate-200 rounded-md focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+                        className="w-16 mx-auto block px-1 py-1 text-center text-sm border-slate-200 rounded focus:ring-1 focus:ring-indigo-500/30 outline-none transition-all"
                         value={item.opening}
                         onChange={(e) => handleStockEdit(item.id, 'opening', e.target.value)}
                       />
                     </td>
-                    <td className="py-3 px-6 text-center">
+                    <td className="py-3 px-1 text-center">
                       <input 
                         type="number" 
-                        className="w-20 mx-auto block px-2 py-1 text-center text-sm border-slate-200 rounded-md focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500"
+                        className="w-16 mx-auto block px-1 py-1 text-center text-sm border-slate-200 rounded focus:ring-1 focus:ring-indigo-500/30 outline-none transition-all"
                         value={item.in}
                         onChange={(e) => handleStockEdit(item.id, 'in', e.target.value)}
                       />
                     </td>
-                    <td className="py-4 px-6 text-sm text-center text-emerald-600 font-bold">
+                    <td className="py-4 px-2 text-sm text-center text-emerald-600 font-bold">
                       {item.returned || 0}
                     </td>
-                    <td className="py-4 px-6 text-sm text-center text-amber-600 font-medium">{item.out}</td>
-                    <td className="py-4 px-6 text-sm text-center text-red-600 font-bold">{item.damage}</td>
-                    <td className="py-4 px-6 text-sm text-center font-bold bg-slate-50 border-x border-slate-100">
+                    <td className="py-4 px-2 text-sm text-center text-amber-600 font-medium">{item.out}</td>
+                    <td className="py-4 px-2 text-sm text-center text-red-600 font-bold">{item.damage}</td>
+                    <td className="py-4 px-2 text-sm text-center font-bold bg-slate-50 border-x border-slate-100">
                       {expected}
                     </td>
-                    <td className="py-3 px-6 bg-indigo-50/10 border-r border-slate-100">
+                    <td className="py-3 px-2 bg-indigo-50/10 border-r border-slate-100">
                       <input
                         type="number"
-                        className="w-24 mx-auto block px-3 py-2 text-center text-sm border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 shadow-sm transition-all bg-white"
+                        className="w-20 mx-auto block px-2 py-1.5 text-center text-sm border-slate-200 rounded focus:ring-1 focus:ring-indigo-500 shadow-sm transition-all bg-white"
                         value={item.physical || ''}
                         onChange={(e) => handlePhysicalChange(item.id, e.target.value)}
                         placeholder="--"
                       />
                     </td>
-                    <td className="py-4 px-6 text-sm text-center">
+                    <td className="py-4 px-4 text-sm text-center">
                       {diff !== null ? (
-                        <span className={`inline-flex min-w-[3rem] justify-center px-3 py-1 rounded-full text-xs font-bold tracking-wide ${
+                        <span className={`inline-flex min-w-[2.5rem] justify-center px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide ${
                           diff < 0 ? 'bg-red-100 text-red-800' : 
                           diff > 0 ? 'bg-amber-100 text-amber-800' : 
                           'bg-emerald-100 text-emerald-800'
@@ -148,7 +148,7 @@ const MonthlyStockCheck = () => {
                           {diff > 0 ? `+${diff}` : diff}
                         </span>
                       ) : (
-                        <span className="text-slate-400 font-medium">-</span>
+                        <span className="text-slate-400 font-medium text-xs">-</span>
                       )}
                     </td>
                   </tr>
