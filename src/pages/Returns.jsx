@@ -12,14 +12,17 @@ const Returns = () => {
     quantity: '',
     channel: '',
     date: new Date().toISOString().split('T')[0],
-    reason: ''
+    reason: '',
+    condition: 'Good (Reuse)' // Default
   });
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const newRecord = {
       ...formData,
-      id: Date.now()
+      isReusable: formData.condition === 'Good (Reuse)',
+      isDamaged: formData.condition === 'Damaged (Waste)',
+      timestamp: Date.now()
     };
     addReturnRecord(newRecord);
     setFormData({
@@ -27,9 +30,10 @@ const Returns = () => {
       quantity: '',
       channel: '',
       date: new Date().toISOString().split('T')[0],
-      reason: ''
+      reason: '',
+      condition: 'Good (Reuse)'
     });
-    toast.success('Return logged & Stock restocked!');
+    toast.success('Return logged successfully!');
   };
 
   const handleDelete = (id) => {
@@ -57,9 +61,9 @@ const Returns = () => {
           Log a Return
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <Select 
-              label="Select Product / SKU" 
+              label="Product / SKU" 
               options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)} 
               value={formData.productName ? stock.find(s => s.name === formData.productName) ? `[${stock.find(s => s.name === formData.productName).sku || 'N/A'}] ${formData.productName} (Pack: ${stock.find(s => s.name === formData.productName).packSize || 1})` : '' : ''}
               onChange={(e) => {
@@ -74,6 +78,13 @@ const Returns = () => {
               min="1"
               value={formData.quantity}
               onChange={(e) => setFormData({...formData, quantity: e.target.value})}
+              required
+            />
+            <Select 
+              label="Condition" 
+              options={['Good (Reuse)', 'Damaged (Waste)']}
+              value={formData.condition}
+              onChange={(e) => setFormData({...formData, condition: e.target.value})}
               required
             />
             <Select 
@@ -95,12 +106,12 @@ const Returns = () => {
             <div className="flex-1 w-full">
               <Input 
                 label="Reason for Return" 
-                placeholder="e.g. Size issue, Order cancellation" 
+                placeholder="e.g. Broken in transit, Customer changed mind" 
                 value={formData.reason}
                 onChange={(e) => setFormData({...formData, reason: e.target.value})}
               />
             </div>
-            <Button type="submit" className="w-full sm:w-auto h-[42px]">
+            <Button type="submit" className="w-full sm:w-auto h-[42px] px-8">
               <Save size={18} /> Log Return
             </Button>
           </div>
@@ -110,23 +121,32 @@ const Returns = () => {
       <Card className="px-0 pt-0 pb-0 overflow-hidden">
         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
           <h3 className="font-semibold text-slate-900">Return History</h3>
-          <div className="text-xs px-2.5 py-1 bg-rose-50 text-rose-600 rounded-full font-bold">
-            RESTOCKED
-          </div>
         </div>
-        <Table headers={['Date', 'Channel', 'SKU Name', 'Qty', 'Reason', 'Action']}>
+        <Table headers={['Date', 'Condition', 'Channel', 'SKU Name', 'Qty', 'Reason', 'Action']}>
           {returnRecords.length === 0 ? (
             <tr>
-              <td colSpan="6" className="py-12 text-center text-slate-400">No return records found.</td>
+              <td colSpan="7" className="py-12 text-center text-slate-400">No return records found.</td>
             </tr>
           ) : (
             [...returnRecords].sort((a,b) => new Date(b.date) - new Date(a.date)).map(record => (
               <tr key={record.id} className="hover:bg-slate-50 transition-colors">
                 <td className="py-4 px-6 text-sm text-slate-600">{record.date}</td>
+                <td className="py-4 px-6 text-sm">
+                   {record.isReusable ? (
+                     <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-bold">RESTOCKED</span>
+                   ) : (
+                     <span className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded-full text-[10px] font-bold">DAMAGED</span>
+                   )}
+                </td>
                 <td className="py-4 px-6 text-sm font-semibold text-slate-900">{record.channel}</td>
-                <td className="py-4 px-6 text-sm text-slate-800">{record.productName}</td>
-                <td className="py-4 px-6 text-sm text-emerald-600 font-bold">+{record.quantity}</td>
-                <td className="py-4 px-6 text-sm text-slate-500 truncate max-w-xs">{record.reason || 'N/A'}</td>
+                <td className="py-4 px-6 text-sm text-slate-800 leading-relaxed">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono font-bold text-rose-600 uppercase tracking-tighter">{stock.find(s => s.name === record.productName)?.sku || 'N/A'}</span>
+                    <span className="font-semibold text-slate-900">{record.productName}</span>
+                  </div>
+                </td>
+                <td className={`py-4 px-6 text-sm font-bold ${record.isReusable ? 'text-emerald-600' : 'text-rose-600'}`}>+{record.quantity}</td>
+                <td className="py-4 px-6 text-sm text-slate-500 leading-relaxed">{record.reason || 'N/A'}</td>
                 <td className="py-4 px-6 text-right">
                   <button 
                     onClick={() => handleDelete(record.id)}

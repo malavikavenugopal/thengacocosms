@@ -51,7 +51,7 @@ const Reports = () => {
 
       return {
         category: p.category || 'Other',
-        sku: p.sku || 'N/A',
+        sku: p.sku || '-',
         name: p.name,
         channels: channelCounts,
         total: rowTotal
@@ -129,6 +129,7 @@ const Reports = () => {
 
       return {
         name: p.name,
+        sku: p.sku || 'N/A',
         totalDispatched,
         b2bQty,
         b2cQty,
@@ -290,7 +291,7 @@ const Reports = () => {
                     b2cPivotData.map((row, idx) => (
                       <tr key={idx} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3 px-4 text-sm text-slate-600 border-r border-slate-100 bg-emerald-50/20 sticky left-0 z-1 min-w-[100px]">{row.category}</td>
-                        <td className="py-3 px-4 text-sm font-mono text-indigo-600 border-r border-slate-100 bg-rose-50/20 sticky left-[120px] z-1 min-w-[100px]">{row.sku}</td>
+                        <td className="py-3 px-4 text-sm font-mono text-indigo-600 border-r border-slate-100 bg-rose-50/20 sticky left-[120px] z-1 min-w-[100px]">{row.sku || '-'}</td>
                         <td className="py-3 px-4 text-sm text-slate-800 border-r border-slate-100 min-w-[250px] bg-blue-50/10 leading-relaxed">{row.name}</td>
                         {channels.map(c => (
                           <td key={c.id} className={`py-3 px-4 text-center text-sm border-r border-slate-100 ${row.channels[c.name] > 0 ? 'font-bold text-slate-900 bg-emerald-50/30' : 'text-slate-300'}`}>
@@ -339,9 +340,10 @@ const Reports = () => {
           )}
 
           {activeTab === 'products' && (
-            <Table headers={['SKU Name', 'Total Dispatched', 'B2B Qty', 'B2C Qty', 'Returns Qty', 'Stock Status']}>
+            <Table headers={['SKU Code', 'Product Name', 'Total Dispatched', 'B2B Qty', 'B2C Qty', 'Returns Qty', 'Stock Status']}>
               {productStats.map(p => (
                 <tr key={p.name} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="py-4 px-6 text-sm font-mono font-bold text-indigo-600">{p.sku}</td>
                   <td className="py-4 px-6 text-sm font-semibold text-slate-900 leading-relaxed min-w-[200px]">{p.name}</td>
                   <td className="py-4 px-6 text-sm font-bold text-slate-800">{p.totalDispatched}</td>
                   <td className="py-4 px-6 text-sm font-medium text-indigo-600">{p.b2bQty}</td>

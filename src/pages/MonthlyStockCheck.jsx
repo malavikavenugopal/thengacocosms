@@ -102,8 +102,11 @@ const MonthlyStockCheck = () => {
 
                 return (
                   <tr key={item.id} className={`transition-colors duration-200 ${rowBg}`}>
-                    <td className="py-4 px-4 text-sm font-semibold text-slate-900 border-r border-slate-100 leading-tight">
-                      {item.name}
+                    <td className="py-4 px-4 text-sm border-r border-slate-100 leading-tight">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-mono font-bold text-indigo-600 uppercase tracking-tighter">{item.sku || '-'}</span>
+                        <span className="font-semibold text-slate-900">{item.name}</span>
+                      </div>
                     </td>
                     <td className="py-3 px-1 text-center">
                       <input 

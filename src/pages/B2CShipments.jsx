@@ -206,12 +206,16 @@ const B2CShipments = () => {
                 <td className="py-4 px-6 text-sm text-slate-600 whitespace-nowrap">{s.whoParceled}</td>
                 <td className="py-4 px-6 text-sm text-slate-500">
                   <div className="flex flex-col gap-1">
-                    {s.products.map((p, idx) => (
-                      <div key={idx} className="flex items-center gap-1.5">
-                        <span className="font-semibold text-slate-900">{p.name}</span>
-                        <span className="text-xs text-slate-400">({p.quantity} × {p.packSize || 1})</span>
-                      </div>
-                    ))}
+                    {s.products.map((p, idx) => {
+                      const masterSKU = stock.find(item => item.name === p.name);
+                      return (
+                        <div key={idx} className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-mono font-bold text-emerald-600 bg-emerald-50 px-1 rounded">{masterSKU?.sku || 'N/A'}</span>
+                          <span className="font-semibold text-slate-900">{p.name}</span>
+                          <span className="text-xs text-slate-400">({p.quantity} × {p.packSize || 1})</span>
+                        </div>
+                      );
+                    })}
                   </div>
                 </td>
                 <td className="py-4 px-6 text-sm text-indigo-600 font-bold">

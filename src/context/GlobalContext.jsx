@@ -223,7 +223,12 @@ export const GlobalProvider = ({ children }) => {
 
     await addDoc(collection(db, 'returnRecords'), finalizedRecord);
     const totalUnits = (Number(record.quantity) || 0) * (masterSKU?.packSize || 1);
-    await updateFirestoreStock(record.productName, totalUnits, 'add', 'returned');
+    
+    // LOGIC: ONLY add to stock if it is REUSABLE (SELLABLE). 
+    // If damaged/waste, we keep the history but it stays OUT of inventory.
+    if (record.isReusable) {
+      await updateFirestoreStock(record.productName, totalUnits, 'add', 'returned');
+    }
   };
 
   const deleteReturnRecord = async (id) => {
@@ -234,7 +239,10 @@ export const GlobalProvider = ({ children }) => {
       try {
         await deleteDoc(doc(db, 'returnRecords', docId));
         const totalUnits = (Number(record.quantity) || 0) * (Number(record.packSize) || 1);
-        await updateFirestoreStock(record.productName, totalUnits, 'sub', 'returned');
+        
+        if (record.isReusable) {
+          await updateFirestoreStock(record.productName, totalUnits, 'sub', 'returned');
+        }
       } catch (err) {
         console.error("Firebase Return Delete Error:", err);
       }

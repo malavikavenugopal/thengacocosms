@@ -216,8 +216,19 @@ const B2BShipments = () => {
                 <td className="py-4 px-6 text-sm text-slate-900 font-bold">
                   {s.products.reduce((acc, curr) => acc + (Number(curr.quantity) || 0), 0)} units
                 </td>
-                <td className="py-4 px-6 text-sm text-slate-500 truncate max-w-sm">
-                  {s.products.map(p => `${p.name} (${p.quantity})`).join(', ')}
+                <td className="py-4 px-6 text-sm text-slate-500">
+                  <div className="flex flex-col gap-1">
+                    {s.products.map((p, idx) => {
+                      const masterSKU = stock.find(item => item.name === p.name);
+                      return (
+                        <div key={idx} className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-mono font-bold text-indigo-500 bg-indigo-50 px-1 rounded">{masterSKU?.sku || 'N/A'}</span>
+                          <span className="font-medium text-slate-700">{p.name}</span>
+                          <span className="text-xs text-slate-400">({p.quantity})</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </td>
                 <td className="py-4 px-6 text-sm text-center">
                   <button 

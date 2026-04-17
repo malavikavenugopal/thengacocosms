@@ -111,7 +111,12 @@ const DamageTracking = () => {
             records.map(r => (
               <tr key={r.id} className="hover:bg-slate-50 transition-colors">
                 <td className="py-4 px-6 text-sm text-slate-600">{r.date}</td>
-                <td className="py-4 px-6 text-sm font-semibold text-slate-900">{r.productName}</td>
+                <td className="py-4 px-6 text-sm">
+                  <div className="flex flex-col">
+                    <span className="text-[10px] font-mono font-bold text-amber-600 uppercase tracking-tighter">{stock.find(s => s.name === r.productName)?.sku || 'N/A'}</span>
+                    <span className="font-semibold text-slate-900">{r.productName}</span>
+                  </div>
+                </td>
                 <td className="py-4 px-6 text-sm text-rose-600 font-bold">-{r.quantity}</td>
                 <td className="py-4 px-6 text-sm text-slate-500">{r.reason}</td>
                 <td className="py-4 px-6 text-sm text-center">
