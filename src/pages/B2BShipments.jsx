@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Input, Select, Button, Table } from '../components/ui';
+import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
 import { Plus, Trash2, Save, Package, ShoppingCart } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -65,11 +65,11 @@ const B2BShipments = () => {
       <Card>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Select 
+            <SearchableSelect 
               label="Who Parceled" 
               options={staff.map(s => s.name)} 
               value={formData.whoParceled}
-              onChange={(e) => setFormData({...formData, whoParceled: e.target.value})}
+              onChange={(val) => setFormData({...formData, whoParceled: val})}
               required
             />
             <Input 
@@ -79,11 +79,11 @@ const B2BShipments = () => {
               onChange={(e) => setFormData({...formData, clientName: e.target.value})}
               required
             />
-            <Select 
+            <SearchableSelect 
               label="Courier Name" 
               options={couriers.map(c => c.name)} 
               value={formData.courierName}
-              onChange={(e) => setFormData({...formData, courierName: e.target.value})}
+              onChange={(val) => setFormData({...formData, courierName: val})}
               required
             />
             <Input 
@@ -125,15 +125,14 @@ const B2BShipments = () => {
                   <div key={index} className="px-4 py-4 bg-slate-50 rounded-2xl border border-slate-100 relative group">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                       <div className="md:col-span-7">
-                        <Select 
+                        <SearchableSelect 
                           label={index === 0 ? "Select Product / SKU" : undefined}
                           options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)}
                           value={selectedSKU ? `[${selectedSKU.sku || 'N/A'}] ${selectedSKU.name} (Pack: ${selectedSKU.packSize || 1})` : ''}
-                          onChange={(e) => {
-                            const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === e.target.value)?.name;
+                          onChange={(val) => {
+                            const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
                             updateProduct(index, 'name', selectedName || '');
                           }}
-                          required
                         />
                       </div>
                       <div className="md:col-span-2">

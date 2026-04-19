@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import { Card, Input, Select, Button, Table } from '../components/ui';
+import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
 import { Plus, Trash2, RotateCcw, Save } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
@@ -62,15 +61,14 @@ const Returns = () => {
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <Select 
+            <SearchableSelect 
               label="Product / SKU" 
               options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)} 
               value={formData.productName ? stock.find(s => s.name === formData.productName) ? `[${stock.find(s => s.name === formData.productName).sku || 'N/A'}] ${formData.productName} (Pack: ${stock.find(s => s.name === formData.productName).packSize || 1})` : '' : ''}
-              onChange={(e) => {
-                const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === e.target.value)?.name;
+              onChange={(val) => {
+                const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
                 setFormData({...formData, productName: selectedName || ''});
               }}
-              required
             />
             <Input 
               label="Quantity" 
@@ -87,11 +85,11 @@ const Returns = () => {
               onChange={(e) => setFormData({...formData, condition: e.target.value})}
               required
             />
-            <Select 
+            <SearchableSelect 
               label="From Channel" 
               options={channels.map(c => c.name)} 
               value={formData.channel}
-              onChange={(e) => setFormData({...formData, channel: e.target.value})}
+              onChange={(val) => setFormData({...formData, channel: val})}
               required
             />
             <Input 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Input, Select, Button, Table } from '../components/ui';
+import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
 import { Plus, Trash2, Save, ShoppingCart } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
@@ -68,18 +68,18 @@ const B2CShipments = () => {
       <Card>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Select 
+            <SearchableSelect 
               label="Who Parceled" 
               options={staff.map(s => s.name)} 
               value={formData.whoParceled}
-              onChange={(e) => setFormData({...formData, whoParceled: e.target.value})}
+              onChange={(val) => setFormData({...formData, whoParceled: val})}
               required
             />
-            <Select 
+            <SearchableSelect 
               label="Sales Channel" 
               options={channels.map(c => c.name)} 
               value={formData.channel}
-              onChange={(e) => setFormData({...formData, channel: e.target.value})}
+              onChange={(val) => setFormData({...formData, channel: val})}
               required
             />
             <Input 
@@ -112,15 +112,14 @@ const B2CShipments = () => {
                   <div key={index} className="px-4 py-4 bg-slate-50 rounded-2xl border border-slate-100 relative group">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                       <div className="md:col-span-7">
-                        <Select 
+                        <SearchableSelect 
                           label="Select Product / SKU"
                           options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)}
                           value={selectedSKU ? `[${selectedSKU.sku || 'N/A'}] ${selectedSKU.name} (Pack: ${selectedSKU.packSize || 1})` : ''}
-                          onChange={(e) => {
-                            const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === e.target.value)?.name;
+                          onChange={(val) => {
+                            const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
                             updateProduct(index, 'name', selectedName || '');
                           }}
-                          required
                         />
                       </div>
                       <div className="md:col-span-2">

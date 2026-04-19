@@ -1,81 +1,10 @@
-import React, { useState } from 'react';
-import { Card, Input, Button, Table } from '../components/ui';
-import { Plus, Trash2, Edit2, Check, X, Layers, Box, Upload, FileDown } from 'lucide-react';
+import { Card, Input, Button, Table, SearchableSelect } from '../components/ui';
+import { Plus, Trash2, Edit2, Check, X, Layers, Box, Upload, FileDown, AlertCircle } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
+import { exportToCSV } from '../utils/exportUtils';
+import { Download } from 'lucide-react';
 
-const SearchableSelect = ({ options, value, onChange, placeholder = "Select..." }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
-  const wrapperRef = React.useRef(null);
-
-  const filteredOptions = options.filter(opt => 
-    opt.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  React.useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [wrapperRef]);
-
-  return (
-    <div className="relative" ref={wrapperRef}>
-      <div 
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-white cursor-pointer flex justify-between items-center hover:border-indigo-300 transition-colors"
-      >
-        <span className={value ? "text-slate-900 font-medium" : "text-slate-400"}>
-          {value || placeholder}
-        </span>
-        <div className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
-          <Plus size={12} className="rotate-45 text-slate-400" />
-        </div>
-      </div>
-
-      {isOpen && (
-        <div className="absolute z-[100] mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-2xl p-2 animate-in fade-in zoom-in-95 duration-100">
-          <input 
-            autoFocus
-            type="text"
-            className="w-full p-2 mb-2 text-xs border-b border-slate-100 outline-none placeholder:text-slate-300 font-medium"
-            placeholder="Search items..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            onClick={(e) => e.stopPropagation()}
-          />
-          <div className="max-h-48 overflow-y-auto custom-scrollbar">
-            {filteredOptions.length > 0 ? (
-              filteredOptions.map((opt, i) => (
-                <div 
-                  key={i}
-                  className={`p-2 text-xs rounded-lg cursor-pointer transition-colors ${
-                    value === opt 
-                      ? 'bg-indigo-50 text-indigo-700 font-bold' 
-                      : 'text-slate-600 hover:bg-slate-50'
-                  }`}
-                  onClick={() => {
-                    onChange(opt);
-                    setIsOpen(false);
-                    setSearchTerm('');
-                  }}
-                >
-                  {opt}
-                </div>
-              ))
-            ) : (
-              <div className="p-2 text-[10px] text-slate-400 italic text-center">No results found</div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
 
 const Products = () => {
   const { stock, addSKU, updateSKU, deleteSKU } = useGlobalState();
@@ -92,6 +21,7 @@ const Products = () => {
   
   // Filter State
   const [filterType, setFilterType] = useState('all'); // all, solo, composite
+  const [viewBundlesFor, setViewBundlesFor] = useState(null);
 
   const handleAddProduct = async (e) => {
     e.preventDefault();
@@ -291,6 +221,54 @@ const Products = () => {
     a.click();
   };
 
+  const handleExportSKUs = () => {
+    const dataToExport = stock.map(p => ({
+      Category: p.category || 'Other',
+      SKU: p.sku || '-',
+      Name: p.name,
+      Type: p.isComposite ? 'Composite' : 'Solo',
+      PackSize: p.packSize || 1,
+      OpeningStock: p.isComposite ? 0 : (p.opening || 0),
+      Components: p.isComposite ? p.components.map(c => `${c.name}:${c.quantity}`).join(';') : ''
+    }));
+    
+    exportToCSV(dataToExport, `sku_master_${new Date().toISOString().split('T')[0]}.csv`);
+    toast.success('SKU Master exported!');
+  };
+
+  const handleExportByType = (type) => {
+    const filtered = stock.filter(p => 
+      type === 'solo' ? !p.isComposite : p.isComposite
+    );
+    
+    const dataToExport = filtered.map(p => ({
+      Category: p.category || 'Other',
+      SKU: p.sku || '-',
+      Name: p.name,
+      Type: p.isComposite ? 'Composite' : 'Solo',
+      PackSize: p.packSize || 1,
+      OpeningStock: p.isComposite ? 0 : (p.opening || 0),
+      Components: p.isComposite ? p.components.map(c => `${c.name}:${c.quantity}`).join(';') : ''
+    }));
+    
+    exportToCSV(dataToExport, `${type}_products_${new Date().toISOString().split('T')[0]}.csv`);
+    toast.success(`${type.charAt(0).toUpperCase() + type.slice(1)} products exported!`);
+  };
+
+  const getBundlesIncluding = (productName) => {
+    return stock.filter(p => 
+      p.isComposite && p.components.some(c => c.name === productName)
+    );
+  };
+
+  const soloProductNames = new Set(stock.filter(p => !p.isComposite).map(p => p.name));
+  
+  const isComponentValid = (name) => soloProductNames.has(name);
+  
+  const brokenBundles = stock.filter(p => 
+    p.isComposite && p.components.some(c => !isComponentValid(c.name))
+  );
+
   const filteredStock = stock.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (p.sku && p.sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -346,6 +324,30 @@ const Products = () => {
                 <Upload size={16} className="mr-2" /> Bulk Upload
               </Button>
            </div>
+           <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleExportSKUs}
+              className="text-emerald-600 border border-emerald-200 hover:bg-emerald-50"
+            >
+              <Download size={16} className="mr-2" /> Master
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => handleExportByType('solo')}
+              className="text-amber-600 border border-amber-200 hover:bg-amber-50"
+            >
+              <Box size={16} className="mr-2" /> Solo
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => handleExportByType('composite')}
+              className="text-fuchsia-600 border border-fuchsia-200 hover:bg-fuchsia-50"
+            >
+              <Layers size={16} className="mr-2" /> Composite
+            </Button>
            <div className="flex gap-1 bg-slate-100/50 p-1 rounded-lg">
               <Button variant="ghost" size="sm" onClick={() => downloadTemplate(false)} className="h-8 text-[10px] font-bold text-slate-500 hover:text-indigo-600 px-2" title="Solo Template">
                 <FileDown size={14} className="mr-1" /> SOLO TEMPLATE
@@ -467,6 +469,14 @@ const Products = () => {
               <h3 className="font-semibold text-slate-900">Product List</h3>
               <p className="text-[10px] text-slate-500">Managing {filteredStock.length} items</p>
             </div>
+            {brokenBundles.length > 0 && (
+              <div className="flex-1 max-w-md px-3 py-2 bg-rose-50 border border-rose-100 rounded-lg flex items-center gap-2 animate-pulse">
+                <AlertCircle className="text-rose-500" size={16} />
+                <p className="text-[10px] font-bold text-rose-700">
+                  {brokenBundles.length} Bundles have missing solo products! Check items in red below.
+                </p>
+              </div>
+            )}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                   {['all', 'solo', 'composite'].map((t) => (
@@ -505,11 +515,35 @@ const Products = () => {
                 </td>
                 <td className="py-4 px-6 text-sm font-semibold text-slate-800">
                     <div className="flex flex-col">
-                      <span>{product.name}</span>
+                      <div className="flex items-center gap-2">
+                        <span>{product.name}</span>
+                        {!product.isComposite && (
+                          <button 
+                            onClick={() => setViewBundlesFor(product)}
+                            className="p-1 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+                            title="View bundles containing this product"
+                          >
+                            <Box size={12} />
+                          </button>
+                        )}
+                      </div>
                       {product.isComposite && (
-                        <span className="text-[9px] text-indigo-500 font-bold uppercase mt-0.5 flex items-center gap-1">
-                          Bundle: {product.components?.map(c => `${c.quantity}x ${c.name}`).join(', ')}
-                        </span>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <span className="text-[9px] text-indigo-500 font-bold uppercase mr-1">Bundle: </span>
+                          {product.components?.map((c, i) => {
+                            const valid = isComponentValid(c.name);
+                            return (
+                              <span key={i} className={`text-[9px] px-1.5 py-0.5 rounded-md flex items-center gap-1 font-bold ${
+                                valid 
+                                  ? 'bg-slate-100 text-slate-600' 
+                                  : 'bg-rose-100 text-rose-600 border border-rose-200'
+                              }`}>
+                                {c.quantity}x {c.name}
+                                {!valid && <AlertCircle size={8} />}
+                              </span>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                 </td>
@@ -595,6 +629,58 @@ const Products = () => {
           </div>
         </Card>
       </div>
+
+      {/* Bundles Lookup Modal */}
+      {viewBundlesFor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-50 text-amber-600 rounded-lg">
+                  <Layers size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Bundles Usage</h3>
+                  <p className="text-xs text-slate-500">Composite products containing: <span className="font-bold text-slate-700">{viewBundlesFor.name}</span></p>
+                </div>
+              </div>
+              <button onClick={() => setViewBundlesFor(null)} className="p-2 text-slate-400 hover:bg-slate-50 rounded-full transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              {getBundlesIncluding(viewBundlesFor.name).length > 0 ? (
+                <div className="space-y-2">
+                  {getBundlesIncluding(viewBundlesFor.name).map((bundle, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">{bundle.name}</p>
+                        <p className="text-[10px] text-slate-500 font-mono">{bundle.sku || 'No SKU'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] font-bold text-indigo-600 uppercase">Qty in bundle</p>
+                        <p className="text-sm font-black text-slate-700">
+                          x{bundle.components.find(c => c.name === viewBundlesFor.name)?.quantity || 0}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-slate-400">
+                  <Box size={32} className="mx-auto mb-2 opacity-20" />
+                  <p className="text-sm font-medium">This product is not part of any bundle.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 bg-slate-50 flex justify-end border-t border-slate-100">
+              <Button variant="ghost" className="w-full" onClick={() => setViewBundlesFor(null)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Modal */}
       {isEditModalOpen && editingProduct && (

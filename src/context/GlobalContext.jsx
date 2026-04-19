@@ -289,7 +289,29 @@ export const GlobalProvider = ({ children }) => {
   };
   
   const updateSKU = async (id, updates) => {
+    const oldProduct = stock.find(p => p.id === id);
+    const oldName = oldProduct?.name;
+    const newName = updates.name;
+
+    // 1. Update the product itself
     await updateDoc(doc(db, 'stock', id), updates);
+
+    // 2. Cascade name change to all composite bundles if necessary
+    if (oldName && newName && oldName !== newName) {
+      console.log(`Renaming "${oldName}" to "${newName}". Updating bundles...`);
+      const compositesToUpdate = stock.filter(p => 
+        p.isComposite && p.components?.some(c => c.name === oldName)
+      );
+
+      for (const composite of compositesToUpdate) {
+        const updatedComponents = (composite.components || []).map(c => 
+          c.name === oldName ? { ...c, name: newName } : c
+        );
+        await updateDoc(doc(db, 'stock', composite.id), { 
+          components: updatedComponents 
+        });
+      }
+    }
   };
 
   const deleteSKU = async (id) => {

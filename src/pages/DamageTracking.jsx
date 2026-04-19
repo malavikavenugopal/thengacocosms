@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Input, Button, Table, Select } from '../components/ui';
+import { Card, Input, Button, Table, Select, SearchableSelect } from '../components/ui';
 import { AlertTriangle, Plus, Trash2, Save } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
@@ -56,15 +56,14 @@ const DamageTracking = () => {
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Select 
+            <SearchableSelect 
               label="Select Product / SKU" 
               options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)} 
               value={formData.productName ? stock.find(s => s.name === formData.productName) ? `[${stock.find(s => s.name === formData.productName).sku || 'N/A'}] ${formData.productName} (Pack: ${stock.find(s => s.name === formData.productName).packSize || 1})` : '' : ''}
-              onChange={(e) => {
-                const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === e.target.value)?.name;
+              onChange={(val) => {
+                const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
                 setFormData({...formData, productName: selectedName || ''});
               }}
-              required
             />
             <Input 
               label="Quantity" 

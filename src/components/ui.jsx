@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Plus } from 'lucide-react';
 
 export const Card = ({ children, className = '', noPadding = false }) => (
   <div className={`bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 ${noPadding ? '' : 'p-6'} transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.05)] ${className}`}>
@@ -35,6 +36,83 @@ export const Select = ({ label, options, className = '', ...props }) => (
     </div>
   </div>
 );
+
+export const SearchableSelect = ({ label, options, value, onChange, placeholder = "Select...", className = "" }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const wrapperRef = useRef(null);
+
+  const filteredOptions = options.filter(opt => 
+    opt.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className={`flex flex-col gap-1.5 w-full ${className}`} ref={wrapperRef}>
+      {label && <label className="text-sm font-semibold text-slate-700">{label}</label>}
+      <div className="relative">
+        <div 
+          onClick={() => setIsOpen(!isOpen)}
+          className={`w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer flex justify-between items-center hover:border-indigo-300 transition-all text-sm ${isOpen ? 'ring-2 ring-indigo-500/30 border-indigo-500 bg-white' : ''}`}
+        >
+          <span className={value ? "text-slate-900 font-medium" : "text-slate-400"}>
+            {value || placeholder}
+          </span>
+          <div className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
+            <Plus size={16} className="rotate-45 text-slate-400" />
+          </div>
+        </div>
+
+        {isOpen && (
+          <div className="absolute z-[100] mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-2xl p-2 animate-in fade-in zoom-in-95 duration-100 max-h-72 overflow-hidden flex flex-col">
+            <input 
+              autoFocus
+              type="text"
+              className="w-full p-2.5 mb-2 text-sm border-b border-slate-100 outline-none placeholder:text-slate-300 font-medium"
+              placeholder="Type to search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div className="overflow-y-auto custom-scrollbar flex-1">
+              {filteredOptions.length > 0 ? (
+                filteredOptions.map((opt, i) => (
+                  <div 
+                    key={i}
+                    className={`p-2.5 text-sm rounded-lg cursor-pointer transition-colors mb-1 last:mb-0 ${
+                      value === opt 
+                        ? 'bg-indigo-50 text-indigo-700 font-bold' 
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onChange(opt);
+                      setIsOpen(false);
+                      setSearchTerm('');
+                    }}
+                  >
+                    {opt}
+                  </div>
+                ))
+              ) : (
+                <div className="p-4 text-xs text-slate-400 italic text-center">No results found</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 export const Table = ({ headers, children }) => (
   <div className="w-full overflow-x-auto rounded-xl border border-slate-200 relative shadow-sm">
