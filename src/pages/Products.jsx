@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from 'react';
 import { Card, Input, Button, Table, SearchableSelect } from '../components/ui';
 import { Plus, Trash2, Edit2, Check, X, Layers, Box, Upload, FileDown, AlertCircle } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
@@ -44,7 +45,7 @@ const Products = () => {
         opening: Number(newProduct.opening) || 0,
         packSize: Number(newProduct.packSize) || 1,
         isComposite: newProduct.isComposite,
-        components: newProduct.isComposite ? newProduct.components : []
+        components: newProduct.isComposite ? newProduct.components.map(c => ({ name: c.name, quantity: c.quantity })) : []
       });
       setNewProduct({ name: '', sku: '', category: '', opening: 0, packSize: 1, isComposite: false, components: [] });
       toast.success('Product added successfully!');
@@ -54,28 +55,28 @@ const Products = () => {
   };
 
   const addComponentRow = (isEdit = false) => {
+    const newComp = { id: Date.now() + Math.random(), name: '', quantity: 1 };
     if (isEdit) {
-      setEditFields({ ...editFields, components: [...editFields.components, { name: '', quantity: 1 }] });
+      setEditingProduct({ ...editingProduct, components: [...editingProduct.components, newComp] });
     } else {
-      setNewProduct({ ...newProduct, components: [...newProduct.components, { name: '', quantity: 1 }] });
+      setNewProduct({ ...newProduct, components: [...newProduct.components, newComp] });
     }
   };
 
-  const removeComponentRow = (index, isEdit = false) => {
+  const removeComponentRow = (id, isEdit = false) => {
     if (isEdit) {
-      setEditFields({ ...editFields, components: editFields.components.filter((_, i) => i !== index) });
+      setEditingProduct({ ...editingProduct, components: editingProduct.components.filter((c) => c.id !== id) });
     } else {
-      setNewProduct({ ...newProduct, components: newProduct.components.filter((_, i) => i !== index) });
+      setNewProduct({ ...newProduct, components: newProduct.components.filter((c) => c.id !== id) });
     }
   };
 
-  const updateComponent = (index, field, value, isEdit = false) => {
-    const target = isEdit ? { ...editFields } : { ...newProduct };
-    const newComps = [...target.components];
-    newComps[index][field] = value;
+  const updateComponent = (id, field, value, isEdit = false) => {
     if (isEdit) {
-      setEditFields({ ...editFields, components: newComps });
+      const newComps = editingProduct.components.map(c => c.id === id ? { ...c, [field]: value } : c);
+      setEditingProduct({ ...editingProduct, components: newComps });
     } else {
+      const newComps = newProduct.components.map(c => c.id === id ? { ...c, [field]: value } : c);
       setNewProduct({ ...newProduct, components: newComps });
     }
   };
@@ -83,7 +84,7 @@ const Products = () => {
   const startEdit = (product) => {
     setEditingProduct({
       ...product,
-      components: product.components || []
+      components: (product.components || []).map(c => ({ ...c, id: Math.random() }))
     });
     setIsEditModalOpen(true);
   };
@@ -289,7 +290,7 @@ const Products = () => {
   );
 
   // Reset to first page on search or filter change
-  React.useEffect(() => {
+  useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, filterType]);
 
@@ -431,14 +432,14 @@ const Products = () => {
                   </p>
                   <button type="button" onClick={() => addComponentRow(false)} className="text-[10px] font-bold text-indigo-600 hover:text-indigo-700">+ Add Part</button>
                 </div>
-                {newProduct.components.map((comp, idx) => (
-                  <div key={idx} className="flex gap-2 items-start">
+                {newProduct.components.map((comp) => (
+                  <div key={comp.id} className="flex gap-2 items-start">
                     <div className="flex-1">
                       <SearchableSelect 
                         placeholder="Select Part..."
                         value={comp.name}
                         options={stock.filter(s => !s.isComposite && s.name !== newProduct.name).map(s => s.name)}
-                        onChange={(val) => updateComponent(idx, 'name', val, false)}
+                        onChange={(val) => updateComponent(comp.id, 'name', val, false)}
                       />
                     </div>
                     <div className="w-16">
@@ -447,11 +448,11 @@ const Products = () => {
                         min="1"
                         className="w-full text-xs p-2 border border-slate-200 rounded-lg outline-none"
                         value={comp.quantity}
-                        onChange={(e) => updateComponent(idx, 'quantity', e.target.value, false)}
+                        onChange={(e) => updateComponent(comp.id, 'quantity', e.target.value, false)}
                         required
                       />
                     </div>
-                    <button type="button" onClick={() => removeComponentRow(idx, false)} className="text-slate-300 hover:text-rose-500 pt-2"><Trash2 size={14}/></button>
+                    <button type="button" onClick={() => removeComponentRow(comp.id, false)} className="text-slate-300 hover:text-rose-500 pt-2"><Trash2 size={14}/></button>
                   </div>
                 ))}
               </div>
@@ -756,18 +757,14 @@ const Products = () => {
                       setEditingProduct({...editingProduct, components: newComps});
                     }} className="text-[10px] font-bold text-indigo-600">+ Add Part</button>
                   </div>
-                  {editingProduct.components.map((comp, idx) => (
-                    <div key={idx} className="flex gap-2 items-start">
+                  {editingProduct.components.map((comp) => (
+                    <div key={comp.id} className="flex gap-2 items-start">
                       <div className="flex-1">
                         <SearchableSelect 
                           placeholder="Select Part..."
                           value={comp.name}
                           options={stock.filter(s => !s.isComposite && s.id !== editingProduct.id).map(s => s.name)}
-                          onChange={(val) => {
-                            const newComps = [...editingProduct.components];
-                            newComps[idx].name = val;
-                            setEditingProduct({...editingProduct, components: newComps});
-                          }}
+                          onChange={(val) => updateComponent(comp.id, 'name', val, true)}
                         />
                       </div>
                       <div className="w-16">
@@ -775,17 +772,10 @@ const Products = () => {
                           type="number" 
                           className="w-full text-xs p-2 border border-slate-200 rounded-lg"
                           value={comp.quantity}
-                          onChange={(e) => {
-                            const newComps = [...editingProduct.components];
-                            newComps[idx].quantity = e.target.value;
-                            setEditingProduct({...editingProduct, components: newComps});
-                          }}
+                          onChange={(e) => updateComponent(comp.id, 'quantity', e.target.value, true)}
                         />
                       </div>
-                      <button onClick={() => {
-                        const newComps = editingProduct.components.filter((_, i) => i !== idx);
-                        setEditingProduct({...editingProduct, components: newComps});
-                      }} className="text-rose-500 pt-2"><Trash2 size={14}/></button>
+                      <button onClick={() => removeComponentRow(comp.id, true)} className="text-rose-500 pt-2"><Trash2 size={14}/></button>
                     </div>
                   ))}
                 </div>

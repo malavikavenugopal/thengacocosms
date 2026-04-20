@@ -6,7 +6,7 @@ import toast from 'react-hot-toast';
 import { useGlobalState } from '../context/GlobalContext';
 
 const B2BShipments = () => {
-  const [products, setProducts] = useState([{ name: '', quantity: '' }]);
+  const [products, setProducts] = useState([{ id: Date.now(), name: '', quantity: '' }]);
   const { stock, staff, couriers, b2bShipments: shipments, addB2BShipment, deleteB2BShipment } = useGlobalState();
   
   const [formData, setFormData] = useState({
@@ -14,16 +14,14 @@ const B2BShipments = () => {
     clientName: '',
     courierName: '',
     boxes: '',
-    date: ''
+    date: new Date().toISOString().split('T')[0]
   });
 
-  const handleAddProduct = () => setProducts([...products, { name: '', quantity: '' }]);
-  const handleRemoveProduct = (index) => setProducts(products.filter((_, i) => i !== index));
+  const handleAddProduct = () => setProducts([...products, { id: Date.now() + products.length, name: '', quantity: '' }]);
+  const handleRemoveProduct = (id) => setProducts(products.filter((p) => p.id !== id));
 
-  const updateProduct = (index, field, value) => {
-    const newProducts = [...products];
-    newProducts[index][field] = value;
-    setProducts(newProducts);
+  const updateProduct = (id, field, value) => {
+    setProducts(products.map(p => p.id === id ? { ...p, [field]: value } : p));
   };
 
   const handleSubmit = (e) => {
@@ -33,7 +31,8 @@ const B2BShipments = () => {
     const finalizedProducts = products.map(p => {
       const masterSKU = stock.find(s => s.name === p.name);
       return {
-        ...p,
+        name: p.name,
+        quantity: p.quantity,
         packSize: masterSKU?.packSize || 1
       };
     });
@@ -44,7 +43,7 @@ const B2BShipments = () => {
     };
     addB2BShipment(newShipment);
     setFormData({ whoParceled: '', clientName: '', courierName: '', boxes: '', date: new Date().toISOString().split('T')[0] });
-    setProducts([{ name: '', quantity: '' }]);
+    setProducts([{ id: Date.now(), name: '', quantity: '' }]);
     toast.success('B2B Shipment recorded!');
   };
 
@@ -116,33 +115,33 @@ const B2BShipments = () => {
             </div>
             
             <div className="space-y-4">
-              {products.map((product, index) => {
+              {products.map((product) => {
                 const selectedSKU = stock.find(s => s.name === product.name);
                 const packSize = selectedSKU?.packSize || 1;
                 const totalDeduction = (Number(product.quantity) || 0) * packSize;
 
                 return (
-                  <div key={index} className="px-4 py-4 bg-slate-50 rounded-2xl border border-slate-100 relative group">
+                  <div key={product.id} className="px-4 py-4 bg-slate-50 rounded-2xl border border-slate-100 relative group">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
                       <div className="md:col-span-7">
                         <SearchableSelect 
-                          label={index === 0 ? "Select Product / SKU" : undefined}
+                          label={products[0].id === product.id ? "Select Product / SKU" : undefined}
                           options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)}
                           value={selectedSKU ? `[${selectedSKU.sku || 'N/A'}] ${selectedSKU.name} (Pack: ${selectedSKU.packSize || 1})` : ''}
                           onChange={(val) => {
                             const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
-                            updateProduct(index, 'name', selectedName || '');
+                            updateProduct(product.id, 'name', selectedName || '');
                           }}
                         />
                       </div>
                       <div className="md:col-span-2">
                         <Input 
-                          label={index === 0 ? "Quantity" : undefined}
+                          label={products[0].id === product.id ? "Quantity" : undefined}
                           type="number"
                           min="1"
                           placeholder="0"
                           value={product.quantity}
-                          onChange={(e) => updateProduct(index, 'quantity', e.target.value)}
+                          onChange={(e) => updateProduct(product.id, 'quantity', e.target.value)}
                           required
                         />
                       </div>
@@ -155,7 +154,7 @@ const B2BShipments = () => {
                       <div className="md:col-span-1 flex justify-end pb-2">
                         <button 
                           type="button" 
-                          onClick={() => handleRemoveProduct(index)}
+                          onClick={() => handleRemoveProduct(product.id)}
                           disabled={products.length === 1}
                           className="p-2 text-slate-300 hover:text-rose-500 disabled:opacity-0 transition-all font-bold"
                         >

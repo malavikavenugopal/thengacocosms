@@ -1,3 +1,4 @@
+import React, { useState } from 'react';
 import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
 import { Plus, Trash2, RotateCcw, Save } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
