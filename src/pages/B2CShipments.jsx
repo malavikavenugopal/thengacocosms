@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
-import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock } from 'lucide-react';
+import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Package } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
+import { exportFormattedShipments } from '../utils/exportUtils';
 import { isRecordEditable } from '../utils/dateUtils';
 
 const B2CShipments = () => {
@@ -24,12 +25,56 @@ const B2CShipments = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
+  // Filters
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
   // Sync draft
   React.useEffect(() => {
     if (!isEditing) {
       updateDraft('b2c', { formData, products });
     }
   }, [formData, products, isEditing]);
+
+  const filteredShipments = useMemo(() => {
+    return shipments.filter(shipment => {
+      // Date Filter
+      let dateMatch = true;
+      if (filterStartDate || filterEndDate) {
+        const shipmentDate = new Date(shipment.date);
+        const start = filterStartDate ? new Date(filterStartDate) : null;
+        const end = filterEndDate ? new Date(filterEndDate) : null;
+        
+        if (start && end) dateMatch = shipmentDate >= start && shipmentDate <= end;
+        else if (start) dateMatch = shipmentDate >= start;
+        else if (end) dateMatch = shipmentDate <= end;
+      }
+      if (!dateMatch) return false;
+
+      // Search Filter
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const channelMatch = shipment.channel.toLowerCase().includes(term);
+        const staffMatch = shipment.whoParceled.toLowerCase().includes(term);
+        const productMatch = shipment.products.some(p => {
+          const masterSKU = stock.find(item => item.name === p.name);
+          return p.name.toLowerCase().includes(term) || masterSKU?.sku?.toLowerCase().includes(term);
+        });
+        return channelMatch || staffMatch || productMatch;
+      }
+
+      return true;
+    });
+  }, [shipments, filterStartDate, filterEndDate, searchTerm, stock]);
+
+  const exportToExcel = () => {
+    exportFormattedShipments(
+      filteredShipments, 
+      'B2C', 
+      `B2C_Sales_${new Date().toISOString().split('T')[0]}.xls`
+    );
+  };
 
   const handleAddProduct = () => setProducts([...products, { id: Date.now() + products.length, name: '', quantity: '' }]);
   const handleRemoveProduct = (id) => setProducts(products.filter((p) => p.id !== id));
@@ -234,11 +279,61 @@ const B2CShipments = () => {
       </Card>
 
       <Card>
-        <div className="mb-4">
-          <h3 className="font-semibold text-gray-900">Recent B2C Orders</h3>
+        <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div className="flex flex-col md:flex-row items-center gap-4 flex-1">
+             <div className="w-full md:w-64">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">Quick Search</label>
+                <div className="relative">
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                  <input 
+                    type="text"
+                    placeholder="Channel, SKU, Product..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 transition-all outline-none placeholder:text-slate-300"
+                  />
+                </div>
+             </div>
+             <div className="w-full md:w-auto">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">Start Date</label>
+                <div className="relative">
+                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                  <input 
+                    type="date"
+                    value={filterStartDate}
+                    onChange={(e) => setFilterStartDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 transition-all outline-none"
+                  />
+                </div>
+             </div>
+             <div className="w-full md:w-auto">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">End Date</label>
+                <div className="relative">
+                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                  <input 
+                    type="date"
+                    value={filterEndDate}
+                    onChange={(e) => setFilterEndDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 transition-all outline-none"
+                  />
+                </div>
+             </div>
+             {(filterStartDate || filterEndDate || searchTerm) && (
+               <button 
+                onClick={() => { setFilterStartDate(''); setFilterEndDate(''); setSearchTerm(''); }}
+                className="text-xs font-bold text-rose-500 hover:text-rose-600 underline flex items-center md:pt-6"
+               >
+                 Clear All
+               </button>
+             )}
+          </div>
+          <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100">
+            <Download size={16} className="mr-2" /> Export to Excel
+          </Button>
         </div>
+
         <Table headers={['Date', 'Channel', 'Parceled By', 'Products (Qty x Pack)', 'Total Units', 'Action']}>
-          {shipments.length === 0 ? (
+          {filteredShipments.length === 0 ? (
             <tr>
               <td colSpan="6" className="py-16 text-center text-slate-500">
                 <div className="flex flex-col items-center justify-center">
@@ -246,12 +341,12 @@ const B2CShipments = () => {
                     <ShoppingCart size={32} className="text-slate-300" />
                   </div>
                   <p className="text-base font-medium text-slate-800">No shipments found</p>
-                  <p className="text-sm text-slate-500 mt-1">Fill out the form above to record your first B2C order.</p>
+                  <p className="text-sm text-slate-500 mt-1">Try adjusting your filters or record a new sale.</p>
                 </div>
               </td>
             </tr>
           ) : (
-            shipments.map(s => (
+            filteredShipments.map(s => (
               <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
                 <td className="py-4 px-6 text-sm text-slate-800 whitespace-nowrap">{s.date}</td>
                 <td className="py-4 px-6 text-sm font-medium">
@@ -313,6 +408,50 @@ const B2CShipments = () => {
             ))
           )}
         </Table>
+      </Card>
+      <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-emerald-50/10">
+          <h3 className="font-bold text-slate-900 flex items-center gap-2">
+            <Package size={18} className="text-emerald-500" />
+            Product-wise Summary (Filtered)
+          </h3>
+          <p className="text-xs text-slate-500 mt-1 italic">Total units ordered across all filtered retail channels</p>
+        </div>
+        <div className="overflow-x-auto">
+          <Table headers={['SKU Code', 'Product Name', 'Total Orders', 'Total Units Sold']}>
+            {Object.entries(
+              filteredShipments.flatMap(s => s.products).reduce((acc, curr) => {
+                if (!acc[curr.name]) acc[curr.name] = { qty: 0, units: 0 };
+                acc[curr.name].qty += Number(curr.quantity) || 0;
+                acc[curr.name].units += (Number(curr.quantity) || 0) * (Number(curr.packSize) || 1);
+                return acc;
+              }, {})
+            ).length === 0 ? (
+              <tr><td colSpan="4" className="py-12 text-center text-slate-400 font-medium whitespace-nowrap">No summary data available.</td></tr>
+            ) : (
+              Object.entries(
+                filteredShipments.flatMap(s => s.products).reduce((acc, curr) => {
+                  if (!acc[curr.name]) acc[curr.name] = { qty: 0, units: 0 };
+                  acc[curr.name].qty += Number(curr.quantity) || 0;
+                  acc[curr.name].units += (Number(curr.quantity) || 0) * (Number(curr.packSize) || 1);
+                  return acc;
+                }, {})
+              ).map(([name, data], idx) => {
+                const masterSKU = stock.find(s => s.name === name);
+                return (
+                  <tr key={idx} className="hover:bg-slate-50 border-b border-slate-50 last:border-0 font-medium font-semibold text-slate-900">
+                    <td className="py-4 px-6 text-sm">
+                      <span className="text-[10px] font-mono font-bold text-emerald-500 bg-emerald-50 px-1 rounded">{masterSKU?.sku || 'N/A'}</span>
+                    </td>
+                    <td className="py-4 px-6 text-sm">{name}</td>
+                    <td className="py-4 px-6 text-sm text-center font-bold text-slate-600">{data.qty} Orders</td>
+                    <td className="py-4 px-6 text-sm text-right font-black text-emerald-600 pr-12">{data.units} Units</td>
+                  </tr>
+                );
+              })
+            )}
+          </Table>
+        </div>
       </Card>
     </div>
   );

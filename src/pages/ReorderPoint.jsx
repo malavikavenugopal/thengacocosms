@@ -1,31 +1,32 @@
-import React, { useState } from 'react';
+import * as React from 'react';
 import { Card, Input, Table, Button } from '../components/ui';
 import { AlertCircle, AlertTriangle, CheckCircle, Package, Search, Settings2, BarChart3, TrendingDown, Info } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 
 const ReorderPoint = () => {
-    const { stock, b2bShipments, b2cShipments, updateSKU } = useGlobalState();
-    const [searchTerm, setSearchTerm] = useState('');
-    const [editMode, setEditMode] = useState(false);
+    const { stock = [], b2bShipments = [], b2cShipments = [], updateSKU } = useGlobalState();
+    const [searchTerm, setSearchTerm] = React.useState('');
+    const [editMode, setEditMode] = React.useState(false);
 
     const monthsShort = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const currentMonthNum = new Date().getMonth(); // 0-11
+    const isFirstHalf = currentMonthNum < 6; // Jan-Jun
 
     // Filter out composite products as ROP usually applies to solo components
-    const products = stock
-        .filter(s => !s.isComposite)
-        .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
-
-    const getCurrentMonth = () => new Date().getMonth(); // 0-11
-    const isFirstHalf = getCurrentMonth() < 6; // Jan-Jun
+    const products = React.useMemo(() => {
+        return stock
+            .filter(s => !s.isComposite)
+            .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+    }, [stock, searchTerm]);
 
     const getMonthlyConsumption = (productName) => {
         const consumption = Array(12).fill(0);
         const currentYear = new Date().getFullYear();
         
-        const processShipments = (shipments) => {
-            shipments.forEach(s => {
+        const processShipments = (shipQueue) => {
+            if (!shipQueue) return;
+            shipQueue.forEach(s => {
                 if (!s.date) return;
-                // Handle both YYYY-MM-DD (standard) and potentially DD-MM-YYYY
                 const parts = s.date.split('-');
                 let y, m;
                 if (parts[0].length === 4) {
@@ -46,8 +47,8 @@ const ReorderPoint = () => {
             });
         };
 
-        processShipments(b2bShipments || []);
-        processShipments(b2cShipments || []);
+        processShipments(b2bShipments);
+        processShipments(b2cShipments);
         return consumption;
     };
 
@@ -55,12 +56,25 @@ const ReorderPoint = () => {
         updateSKU(id, { [field]: Number(value) || 0 });
     };
 
+    // Calculate metrics
+    const stats = React.useMemo(() => {
+        const critical = products.filter(p => {
+            const activeROP = isFirstHalf ? (p.ropJanJun || 0) : (p.ropJulDec || 0);
+            const totalStock = (Number(p.in) || 0) + (Number(p.returned) || 0) - (Number(p.out) || 0) - (Number(p.damage) || 0);
+            return totalStock < activeROP;
+        }).length;
+        
+        return {
+            critical,
+            health: Math.round((products.length - critical) / (products.length || 1) * 100)
+        };
+    }, [products, isFirstHalf]);
+
     return (
         <div className="space-y-6">
-            {/* Header ... */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-slate-900">Reorder Point (ROP) Planning</h2>
+                    <h2 className="text-2xl font-bold tracking-tight text-slate-900 text-sans">Reorder Point (ROP) Planning</h2>
                     <p className="text-sm text-slate-500">Manage safety stocks, lead times, and replenishment alerts</p>
                 </div>
                 <div className="flex gap-3">
@@ -69,7 +83,7 @@ const ReorderPoint = () => {
                         <input
                             type="text"
                             placeholder="Search products..."
-                            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-64"
+                            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-64 shadow-sm transition-all"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -85,73 +99,58 @@ const ReorderPoint = () => {
                 </div>
             </div>
 
-            {/* Metrics Overview ... */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card className="bg-rose-50 border-rose-100 font-sans">
+                <Card className="bg-rose-50 border-rose-100 ring-4 ring-white shadow-xl">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
                             <TrendingDown size={24} />
                         </div>
                         <div>
                             <p className="text-xs font-bold text-rose-600 uppercase tracking-wider">Critical Shortage</p>
-                            <p className="text-2xl font-black text-rose-900">
-                                {products.filter(p => {
-                                    const activeROP = isFirstHalf ? (p.ropJanJun || 0) : (p.ropJulDec || 0);
-                                    const totalStock = (Number(p.in) || 0) + (Number(p.returned) || 0) - (Number(p.out) || 0) - (Number(p.damage) || 0);
-                                    return totalStock < activeROP;
-                                }).length} Items
-                            </p>
+                            <p className="text-2xl font-black text-rose-900">{stats.critical} Items</p>
                         </div>
                     </div>
                 </Card>
-                <Card className="bg-indigo-50 border-indigo-100">
+                <Card className="bg-indigo-50 border-indigo-100 ring-4 ring-white shadow-xl">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
                             <BarChart3 size={24} />
                         </div>
                         <div>
                             <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider">Active Season</p>
-                            <p className="text-2xl font-black text-indigo-900">
-                                {isFirstHalf ? 'JAN - JUN' : 'JUL - DEC'}
-                            </p>
+                            <p className="text-2xl font-black text-indigo-900">{isFirstHalf ? 'JAN - JUN' : 'JUL - DEC'}</p>
                         </div>
                     </div>
                 </Card>
-                <Card className="bg-emerald-50 border-emerald-100">
+                <Card className="bg-emerald-50 border-emerald-100 ring-4 ring-white shadow-xl">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
                             <CheckCircle size={24} />
                         </div>
                         <div>
                             <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Stock Health</p>
-                            <p className="text-2xl font-black text-emerald-900">
-                                {Math.round((products.length - products.filter(p => {
-                                    const activeROP = isFirstHalf ? (p.ropJanJun || 0) : (p.ropJulDec || 0);
-                                    const totalStock = (Number(p.in) || 0) + (Number(p.returned) || 0) - (Number(p.out) || 0) - (Number(p.damage) || 0);
-                                    return totalStock < activeROP;
-                                }).length) / (products.length || 1) * 100)}%
-                            </p>
+                            <p className="text-2xl font-black text-emerald-900">{stats.health}%</p>
                         </div>
                     </div>
                 </Card>
             </div>
 
-            <Card className="px-0 pt-0 pb-0 overflow-hidden">
+            <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-2xl border-slate-200">
                 <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse min-w-[1400px]">
                         <thead className="bg-slate-50 border-b border-slate-200">
                             <tr className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                <th className="py-4 px-6 sticky left-0 bg-slate-50 z-10 border-r border-slate-200 min-w-[180px]">Product</th>
+                                <th className="py-4 px-6 sticky left-0 bg-slate-50 z-10 border-r border-slate-200 min-w-[180px]">Product Name / SKU</th>
                                 {monthsShort.map(m => (
-                                    <th key={m} className="py-4 px-2 text-center text-[9px]">{m}</th>
+                                    <th key={m} className="py-4 px-2 text-center text-[9px] text-slate-400">{m}</th>
                                 ))}
                                 <th className="py-4 px-3 text-center border-l border-slate-200">LT</th>
                                 <th className="py-4 px-3 text-center">SS</th>
                                 <th className="py-4 px-3 text-center bg-indigo-50/30 text-indigo-700">ROP 1</th>
                                 <th className="py-4 px-3 text-center bg-indigo-50/30 text-indigo-700">ROP 2</th>
-                                <th className="py-4 px-3 text-center border-l border-slate-200">Stock</th>
+                                <th className="py-4 px-3 text-center border-l border-slate-200">Current Stock</th>
                                 <th className="py-4 px-3 text-center">Status</th>
-                                <th className="py-4 px-3 text-center">Needed</th>
+                                <th className="py-4 px-3 text-center">Shortage</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -159,14 +158,14 @@ const ReorderPoint = () => {
                                 const activeROP = isFirstHalf ? (p.ropJanJun || 0) : (p.ropJulDec || 0);
                                 const totalStock = (Number(p.in) || 0) + (Number(p.returned) || 0) - (Number(p.out) || 0) - (Number(p.damage) || 0);
                                 const isLow = totalStock < activeROP;
-                                const shortage = isLow ? activeROP - totalStock : 0;
+                                const shortageAmt = isLow ? activeROP - totalStock : 0;
                                 const monthly = getMonthlyConsumption(p.name);
 
                                 return (
-                                    <tr key={p.id} className={`hover:bg-slate-50 transition-colors ${isLow ? 'bg-rose-50/30' : ''}`}>
+                                    <tr key={p.id} className={`hover:bg-slate-50/80 transition-colors ${isLow ? 'bg-rose-50/20' : ''}`}>
                                         <td className="py-4 px-6 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-slate-200 shadow-[2px_0_5px_rgba(0,0,0,0.05)]">
                                             <span className="text-xs font-bold text-slate-900 block truncate w-40" title={p.name}>{p.name}</span>
-                                            <span className="text-[9px] font-mono font-bold text-slate-400">{p.sku || '-'}</span>
+                                            <span className="text-[9px] font-mono font-bold text-slate-400">{p.sku || 'NO SKU'}</span>
                                         </td>
                                         
                                         {monthly.map((val, idx) => (
@@ -228,26 +227,26 @@ const ReorderPoint = () => {
                                         </td>
 
                                         <td className="py-4 px-3 border-l border-slate-100 text-center">
-                                            <span className={`text-sm font-black ${isLow ? 'text-rose-600 animate-pulse' : 'text-emerald-600'}`}>
+                                            <span className={`text-sm font-black ${isLow ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                 {totalStock}
                                             </span>
                                         </td>
 
                                         <td className="py-4 px-3">
                                             {isLow ? (
-                                                <div className="flex items-center justify-center gap-1 px-2 py-0.5 rounded-full bg-rose-600 text-white text-[9px] font-black uppercase tracking-tighter">
-                                                    ORDER
+                                                <div className="flex items-center justify-center gap-1 px-2 py-0.5 rounded-full bg-rose-600 text-white text-[9px] font-black uppercase tracking-tighter shadow-sm shadow-rose-200">
+                                                    ORDER NOW
                                                 </div>
                                             ) : (
                                                 <div className="flex items-center justify-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[9px] font-black uppercase tracking-tighter">
-                                                    OK
+                                                    HEALTHY
                                                 </div>
                                             )}
                                         </td>
 
                                         <td className="py-4 px-3 text-center">
-                                            {shortage > 0 ? (
-                                                <span className="text-xs font-black text-rose-600">+{shortage}</span>
+                                            {shortageAmt > 0 ? (
+                                                <span className="text-[11px] font-black text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-100">+{shortageAmt}</span>
                                             ) : (
                                                 <span className="text-slate-300">-</span>
                                             )}
@@ -260,13 +259,13 @@ const ReorderPoint = () => {
                 </div>
             </Card>
 
-            <div className="p-4 bg-slate-900 rounded-3xl border border-slate-800 flex items-start gap-4 text-white shadow-2xl shadow-indigo-500/10">
+            <div className="p-4 bg-slate-900 rounded-3xl border border-slate-800 flex items-start gap-4 text-white shadow-2xl">
                 <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl flex-shrink-0">
                     <Info size={20} />
                 </div>
                 <div className="text-sm">
-                    <p className="font-bold text-indigo-300 mb-1">Consumption History & ROP Strategy:</p>
-                    <p className="text-slate-400">The historical consumption shown in the JAN-DEC columns is calculated based on your total <strong>Dispatch (Out)</strong> across all channels. Use this data to adjust your <strong>ROP 1 (Jan-Jun)</strong> and <strong>ROP 2 (Jul-Dec)</strong> seasonal targets. Setting accurate Lead Times (LT) ensures the status correctly flags <span className="text-rose-400 font-bold italic">"ORDER NOW"</span> before you hit zero.</p>
+                    <p className="font-bold text-indigo-300 mb-1">Stock Availability Strategy:</p>
+                    <p className="text-slate-400 leading-relaxed text-xs">This planner tracks your real-time stock vs. seasonal targets. If <strong>Current Stock</strong> falls below your <strong>Active Season ROP</strong>, the item will flag as <strong>ORDER NOW</strong>. Use Planning Mode to adjust Lead Times (LT) and Safety Stocks (SS) to prevent stockouts.</p>
                 </div>
             </div>
         </div>
@@ -274,3 +273,4 @@ const ReorderPoint = () => {
 };
 
 export default ReorderPoint;
+

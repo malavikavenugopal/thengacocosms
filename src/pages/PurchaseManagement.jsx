@@ -1,24 +1,37 @@
 import React, { useState } from 'react';
 import { Card, Input, Button, Table, SearchableSelect } from '../components/ui';
-import { ShoppingCart, Plus, Trash2, Save, MapPin, Calendar, History, Lock, Edit2, X } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Save, MapPin, Calendar, History, Lock, Edit2, X, ClipboardCheck, CheckCircle2, XCircle, PackagePlus, MinusCircle } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import { isRecordEditable } from '../utils/dateUtils';
 
 const PurchaseManagement = () => {
-  const { stock, purchaseRecords, addPurchaseRecord, updatePurchaseRecord, deletePurchaseRecord, drafts, updateDraft, clearDraft } = useGlobalState();
+  const { stock, purchaseRecords, addPurchaseRecord, updatePurchaseRecord, deletePurchaseRecord, drafts, updateDraft, clearDraft, qcRecords } = useGlobalState();
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   
   const [formData, setFormData] = useState(() => {
-    return drafts.purchase || {
-      productName: '',
-      quantity: '',
+    const defaultData = {
       vendorName: '',
       place: '',
-      date: new Date().toISOString().split('T')[0]
+      date: new Date().toISOString().split('T')[0],
+      items: [{ productName: '', quantity: '' }]
     };
+
+    if (!drafts.purchase) return defaultData;
+
+    // Backward compatibility for old drafts
+    const saved = drafts.purchase;
+    if (!saved.items) {
+      return {
+        vendorName: saved.vendorName || '',
+        place: saved.place || '',
+        date: saved.date || defaultData.date,
+        items: [{ productName: saved.productName || '', quantity: saved.quantity || '' }]
+      };
+    }
+    return saved;
   });
 
   // Sync draft
@@ -28,26 +41,62 @@ const PurchaseManagement = () => {
     }
   }, [formData, isEditing]);
 
+  const addRow = () => {
+    setFormData(prev => ({
+      ...prev,
+      items: [...prev.items, { productName: '', quantity: '' }]
+    }));
+  };
+
+  const removeRow = (index) => {
+    if (formData.items.length <= 1) return;
+    const newItems = formData.items.filter((_, i) => i !== index);
+    setFormData({ ...formData, items: newItems });
+  };
+
+  const updateRow = (index, field, value) => {
+    const newItems = [...formData.items];
+    newItems[index][field] = value;
+    setFormData({ ...formData, items: newItems });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.productName || !formData.quantity || !formData.vendorName) {
-      toast.error('Please fill in all required fields.');
+    if (!formData.vendorName || formData.items.some(item => !item.productName || !item.quantity)) {
+      toast.error('Please fill in all vendor and product fields.');
       return;
     }
 
     try {
-      const recordData = {
-        ...formData,
-        timestamp: Date.now()
-      };
-      
       if (isEditing) {
+        // Multi-edit is complex so we only edit the single record that was selected
+        // In multi-mode, "isEditing" only triggers for the record clicked.
+        const item = formData.items[0];
+        const recordData = {
+          vendorName: formData.vendorName,
+          place: formData.place,
+          date: formData.date,
+          productName: item.productName,
+          quantity: item.quantity,
+          timestamp: Date.now()
+        };
         await updatePurchaseRecord(editingId, recordData);
-        toast.success('Purchase record updated and stock adjusted!');
+        toast.success('Purchase record updated!');
       } else {
-        await addPurchaseRecord({ ...recordData, id: Date.now() });
-        toast.success('Purchase recorded and stock updated!');
+        // Add multiple records
+        for (const item of formData.items) {
+          const recordData = {
+            vendorName: formData.vendorName,
+            place: formData.place,
+            date: formData.date,
+            productName: item.productName,
+            quantity: item.quantity,
+            timestamp: Date.now()
+          };
+          await addPurchaseRecord({ ...recordData, id: Date.now() + Math.random() });
+        }
+        toast.success(`Successfully added ${formData.items.length} products!`);
         clearDraft('purchase');
       }
       handleCancel();
@@ -60,11 +109,10 @@ const PurchaseManagement = () => {
     setIsEditing(true);
     setEditingId(r.id);
     setFormData({
-      productName: r.productName,
-      quantity: r.quantity,
       vendorName: r.vendorName,
       place: r.place || '',
-      date: r.date
+      date: r.date,
+      items: [{ productName: r.productName, quantity: r.quantity }]
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -73,11 +121,10 @@ const PurchaseManagement = () => {
     setIsEditing(false);
     setEditingId(null);
     setFormData({
-      productName: '',
-      quantity: '',
       vendorName: '',
       place: '',
-      date: new Date().toISOString().split('T')[0]
+      date: new Date().toISOString().split('T')[0],
+      items: [{ productName: '', quantity: '' }]
     });
   };
 
@@ -102,6 +149,8 @@ const PurchaseManagement = () => {
     });
   };
 
+  const soloProducts = stock.filter(s => !s.isComposite);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -116,37 +165,19 @@ const PurchaseManagement = () => {
 
       <Card className="border-indigo-100 bg-indigo-50/20">
         <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-indigo-600 font-bold">
-            <Plus size={18} />
-            {isEditing ? 'Edit Purchase Entry' : 'New Stock Purchase / Arrival'}
+          <div className="flex items-center gap-2 text-indigo-600 font-bold uppercase tracking-wider text-xs">
+            <PackagePlus size={18} />
+            {isEditing ? 'Edit Purchase Entry' : 'Bulk Stock Arrival'}
           </div>
           {isEditing && (
-            <Button variant="ghost" size="sm" onClick={handleCancel} className="text-rose-600">
+            <Button variant="ghost" size="sm" onClick={handleCancel} className="text-rose-600 p-0 h-auto">
                <X size={16} className="mr-1" /> Cancel Edit
             </Button>
           )}
         </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            <SearchableSelect 
-              label="Select Product" 
-              options={stock.filter(s => !s.isComposite).map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)} 
-              value={formData.productName ? stock.find(s => s.name === formData.productName) ? `[${stock.find(s => s.name === formData.productName).sku || 'N/A'}] ${formData.productName} (Pack: ${stock.find(s => s.name === formData.productName).packSize || 1})` : '' : ''}
-              onChange={(val) => {
-                const selectedName = stock.find(s => !s.isComposite && `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
-                setFormData({...formData, productName: selectedName || ''});
-              }}
-              required
-            />
-            <Input 
-              label="Quantity" 
-              type="number" 
-              min="1"
-              placeholder="Total Units"
-              value={formData.quantity}
-              onChange={(e) => setFormData({...formData, quantity: e.target.value})}
-              required
-            />
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Metadata Section */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white/50 p-4 rounded-xl border border-white">
             <Input 
               label="Vendor Name" 
               placeholder="e.g. Sree Agencies" 
@@ -155,32 +186,89 @@ const PurchaseManagement = () => {
               required
             />
             <Input 
-              label="Place" 
-              placeholder="e.g. Cochin" 
+              label="Arrival Place" 
+              placeholder="e.g. Cochin Warehouse" 
               value={formData.place}
               onChange={(e) => setFormData({...formData, place: e.target.value})}
             />
             <Input 
-              label="Purchase Date" 
+              label="Arrival Date" 
               type="date"
               value={formData.date}
               onChange={(e) => setFormData({...formData, date: e.target.value})}
               required
             />
           </div>
-          <div className="flex justify-end gap-3 pt-2">
-            {isEditing && (
-              <Button type="button" variant="secondary" onClick={handleCancel}>Cancel</Button>
+
+          {/* Dynamic Items Section */}
+          <div className="space-y-3">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+               Products in this Batch
+               <div className="h-px flex-1 bg-slate-200"></div>
+            </div>
+            {formData.items.map((item, index) => (
+              <div key={index} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="md:col-span-8">
+                  <SearchableSelect 
+                    label={index === 0 ? "Select Product" : ""} 
+                    options={soloProducts.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)} 
+                    value={item.productName ? `${soloProducts.find(s => s.name === item.productName) ? `[${soloProducts.find(s => s.name === item.productName).sku || 'N/A'}] ${item.productName} (Pack: ${soloProducts.find(s => s.name === item.productName).packSize || 1})` : ''}` : ''}
+                    onChange={(val) => {
+                      const selectedName = soloProducts.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
+                      updateRow(index, 'productName', selectedName || '');
+                    }}
+                    required
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <Input 
+                    label={index === 0 ? "Quantity" : ""} 
+                    type="number" 
+                    min="1"
+                    placeholder="Units"
+                    value={item.quantity}
+                    onChange={(e) => updateRow(index, 'quantity', e.target.value)}
+                    required
+                  />
+                </div>
+                {!isEditing && (
+                  <div className="md:col-span-1 flex justify-center pb-2">
+                    <button 
+                      type="button" 
+                      onClick={() => removeRow(index)}
+                      className={`text-slate-300 hover:text-rose-500 transition-colors ${formData.items.length === 1 ? 'opacity-20 cursor-not-allowed' : ''}`}
+                    >
+                      <MinusCircle size={24} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+            
+            {!isEditing && (
+              <button 
+                type="button" 
+                onClick={addRow}
+                className="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50/30 transition-all flex items-center justify-center gap-2 text-sm font-bold"
+              >
+                <Plus size={18} /> Add Another Product to this Arrival
+              </button>
             )}
-            <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-100">
-              <Save size={18} /> {isEditing ? 'Update Purchase' : 'Save Purchase'}
+          </div>
+
+          <div className="flex justify-end gap-3 pt-6 border-t border-white/50">
+            {isEditing && (
+              <Button type="button" variant="secondary" onClick={handleCancel}>Cancel Edit</Button>
+            )}
+            <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700 shadow-xl shadow-indigo-200 px-8 py-3 h-auto">
+              <Save size={18} /> {isEditing ? 'Update Selection' : 'Save all Arrivals'}
             </Button>
           </div>
         </form>
       </Card>
 
       <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
-        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white">
           <h3 className="font-bold text-slate-900 flex items-center gap-2">
             <History size={18} className="text-slate-400" />
             Purchase History
@@ -196,7 +284,7 @@ const PurchaseManagement = () => {
                   <td className="py-4 px-6 text-sm text-slate-500 whitespace-nowrap">{r.date}</td>
                   <td className="py-4 px-6">
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-mono font-bold text-indigo-500 uppercase tracking-tighter">{stock.find(s => s.name === r.productName)?.sku || 'N/A'}</span>
+                      <span className="text-[10px] font-mono font-bold text-indigo-500 uppercase tracking-tighter">{soloProducts.find(s => s.name === r.productName)?.sku || 'N/A'}</span>
                       <span className="text-sm font-bold text-slate-900">{r.productName}</span>
                     </div>
                   </td>
@@ -240,8 +328,60 @@ const PurchaseManagement = () => {
           </Table>
         </div>
       </Card>
+      
+      {/* Quality Check Report Section */}
+      <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
+        <div className="p-6 border-b border-slate-100 bg-indigo-50/10">
+          <h3 className="font-bold text-slate-900 flex items-center gap-2">
+            <ClipboardCheck size={20} className="text-indigo-500" />
+            Quality Check Report (Last Arrivals)
+          </h3>
+          <p className="text-xs text-slate-500 mt-1">Inspection logs for products received from vendors</p>
+        </div>
+        <div className="overflow-x-auto">
+          <Table headers={['Date', 'Product / SKU', 'Vendor', 'Checked', 'Good', 'Damaged', 'Status']}>
+            {qcRecords.length === 0 ? (
+              <tr><td colSpan="7" className="py-12 text-center text-slate-400 font-medium">No QC reports available.</td></tr>
+            ) : (
+              [...qcRecords].sort((a,b) => new Date(b.date) - new Date(a.date)).slice(0, 10).map(r => (
+                <tr key={r.id} className="hover:bg-slate-50 border-b border-slate-50 last:border-0 font-medium">
+                  <td className="py-4 px-6 text-sm text-slate-500">{r.date}</td>
+                  <td className="py-4 px-6">
+                     <div className="flex flex-col">
+                        <span className="text-[10px] font-bold text-indigo-500 font-mono italic">{soloProducts.find(s => s.name === r.productName)?.sku || 'N/A'}</span>
+                        <span className="text-sm font-bold text-slate-900">{r.productName}</span>
+                     </div>
+                  </td>
+                  <td className="py-4 px-6 text-sm text-slate-600 font-semibold">{r.vendorName || 'N/A'}</td>
+                  <td className="py-4 px-6 text-sm font-bold text-slate-700">{r.checked}</td>
+                  <td className="py-4 px-6 text-sm">
+                    <div className="flex items-center gap-1.5 text-emerald-600 font-black">
+                      <CheckCircle2 size={14} />
+                      {r.good}
+                    </div>
+                  </td>
+                  <td className="py-4 px-6 text-sm">
+                     <div className={`flex items-center gap-1.5 font-black ${Number(r.damaged) > 0 ? 'text-rose-600' : 'text-slate-300'}`}>
+                      <XCircle size={14} />
+                      {r.damaged}
+                    </div>
+                  </td>
+                  <td className="py-4 px-6 text-sm">
+                     {r.deducted ? (
+                       <span className="inline-flex items-center px-2 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold italic">DEDUCTED</span>
+                     ) : (
+                       <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-bold">LOG ONLY</span>
+                     )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </Table>
+        </div>
+      </Card>
     </div>
   );
 };
 
 export default PurchaseManagement;
+

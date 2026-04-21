@@ -138,6 +138,7 @@ export const Button = ({ children, variant = 'primary', className = '', ...props
     primary: 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/30 active:bg-indigo-800 border-transparent',
     secondary: 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-900 shadow-sm active:bg-slate-100',
     danger: 'bg-red-500 text-white hover:bg-red-600 hover:shadow-lg hover:shadow-red-500/30 active:bg-red-700 border-transparent',
+    success: 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-500/30 active:bg-emerald-800 border-transparent',
     ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-transparent'
   };
 

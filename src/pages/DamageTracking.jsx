@@ -5,9 +5,37 @@ import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import { isRecordEditable } from '../utils/dateUtils';
+import emailjs from 'emailjs-com';
 
 const DamageTracking = () => {
-  const { stock, damageRecords, addDamageRecord, updateDamageRecord, deleteDamageRecord, qcRecords, addQCRecord, updateQCRecord, deleteQCRecord, drafts, updateDraft, clearDraft } = useGlobalState();
+  const { stock, damageRecords, addDamageRecord, updateDamageRecord, deleteDamageRecord, qcRecords, addQCRecord, updateQCRecord, deleteQCRecord, drafts, updateDraft, clearDraft, purchaseRecords } = useGlobalState();
+  
+  const sendQCEmail = (qcData) => {
+    // Replace these with your actual EmailJS credentials
+    const SERVICE_ID = "service_xkm5bck";
+    const TEMPLATE_ID = "template_hatngnl";
+    const PUBLIC_KEY = "NWluldMCpFboOvNZG";
+
+    const templateParams = {
+      to_email: "malavikavenu914@gmail.com, nandanalakshmi21@gmail.com",
+      product_name: qcData.productName,
+      vendor_name: qcData.vendorName || "N/A",
+      checked_qty: qcData.checked,
+      damaged_qty: qcData.damaged,
+      approved_qty: Number(qcData.checked) - Number(qcData.damaged),
+      date: qcData.date
+    };
+
+    emailjs.send(SERVICE_ID, TEMPLATE_ID, templateParams, PUBLIC_KEY)
+      .then((res) => {
+        console.log("Email Result:", res.status, res.text);
+        toast.success("Email sent to accounts!");
+      })
+      .catch((err) => {
+        console.error("Email Failed:", err);
+        toast.error("Failed to send email notification.");
+      });
+  };
   const [activeTab, setActiveTab] = useState('qc'); 
   
   const [isEditing, setIsEditing] = useState(false);
@@ -28,10 +56,13 @@ const DamageTracking = () => {
     return drafts.qc || {
       date: new Date().toISOString().split('T')[0],
       productName: '',
+      vendorName: '',
       checked: '',
       damaged: '',
     };
   });
+
+  const vendors = Array.from(new Set(purchaseRecords.map(r => r.vendorName))).filter(Boolean);
 
   // Sync drafts
   React.useEffect(() => {
@@ -104,6 +135,22 @@ const DamageTracking = () => {
           toast.success(result.isConfirmed ? 'QC recorded & Stock deducted.' : 'QC recorded (Log only).');
           clearDraft('qc');
         }
+
+        // Ask to send email to accounts
+        Swal.fire({
+          title: 'Notify Accounts?',
+          text: "Do you want to send this QC report to the accounts department via email?",
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#4f46e5',
+          confirmButtonText: 'Yes, Send Email',
+          cancelButtonText: 'No, Just Log'
+        }).then((emailResult) => {
+          if (emailResult.isConfirmed) {
+            sendQCEmail(newQC);
+          }
+        });
+
         handleCancel();
       });
     } else {
@@ -112,6 +159,22 @@ const DamageTracking = () => {
       } else {
         addQCRecord({ ...newQC, id: Date.now() }, false);
       }
+      
+      // Also ask for email even if no damages found
+      Swal.fire({
+        title: 'Notify Accounts?',
+        text: "Send this QC check result (No damages) to accounts?",
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#4f46e5',
+        confirmButtonText: 'Yes, Send Email',
+        cancelButtonText: 'No'
+      }).then((emailResult) => {
+        if (emailResult.isConfirmed) {
+            sendQCEmail(newQC);
+        }
+      });
+
       handleCancel();
       toast.success(isEditing ? 'QC updated (No damages found).' : 'QC check recorded (No damages found).');
     }
@@ -137,6 +200,7 @@ const DamageTracking = () => {
     setQcForm({
       date: r.date,
       productName: r.productName,
+      vendorName: r.vendorName || '',
       checked: r.checked,
       damaged: r.damaged
     });
@@ -225,6 +289,16 @@ const DamageTracking = () => {
                   onChange={(e) => setQcForm({...qcForm, damaged: e.target.value})}
                   required
                 />
+                <div className="lg:col-span-1">
+                  <SearchableSelect 
+                    label="Vendor Name" 
+                    options={vendors}
+                    placeholder="Search vendor..."
+                    value={qcForm.vendorName}
+                    onChange={(val) => setQcForm({...qcForm, vendorName: val})}
+                    required
+                  />
+                </div>
                 <Input 
                   label="Check Date" 
                   type="date"
@@ -262,7 +336,7 @@ const DamageTracking = () => {
               </h3>
             </div>
             <div className="overflow-x-auto">
-              <Table headers={['Date', 'Product / SKU', 'Checked', 'Good', 'Damaged', 'Deducted?', 'Action']}>
+              <Table headers={['Date', 'Product / SKU', 'Vendor', 'Checked', 'Good', 'Damaged', 'Deducted?', 'Action']}>
                 {qcRecords.length === 0 ? (
                   <tr><td colSpan="7" className="py-12 text-center text-slate-400 font-medium">No QC records yet.</td></tr>
                 ) : (
@@ -275,6 +349,7 @@ const DamageTracking = () => {
                             <span className="text-sm font-bold text-slate-900">{r.productName}</span>
                          </div>
                       </td>
+                      <td className="py-4 px-6 text-sm text-slate-600 font-semibold">{r.vendorName || 'N/A'}</td>
                       <td className="py-4 px-6 text-sm font-bold text-slate-700">{r.checked}</td>
                       <td className="py-4 px-6 text-sm">
                         <div className="flex items-center gap-1.5 text-emerald-600 font-black">

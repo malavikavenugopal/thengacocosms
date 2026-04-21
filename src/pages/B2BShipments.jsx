@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
-import { Plus, Trash2, Save, Package, ShoppingCart, Edit2, X, Lock } from 'lucide-react';
+import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Truck, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
+import * as XLSX from 'xlsx';
 
 import { useGlobalState } from '../context/GlobalContext';
+import { exportFormattedShipments } from '../utils/exportUtils';
 import { isRecordEditable } from '../utils/dateUtils';
 
 const B2BShipments = () => {
@@ -27,12 +29,57 @@ const B2BShipments = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
+  // Filters
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+
   // Sync draft
   React.useEffect(() => {
     if (!isEditing) {
       updateDraft('b2b', { formData, products });
     }
   }, [formData, products, isEditing]);
+
+  const filteredShipments = useMemo(() => {
+    return shipments.filter(shipment => {
+      // Date Filter
+      let dateMatch = true;
+      if (filterStartDate || filterEndDate) {
+        const shipmentDate = new Date(shipment.date);
+        const start = filterStartDate ? new Date(filterStartDate) : null;
+        const end = filterEndDate ? new Date(filterEndDate) : null;
+        
+        if (start && end) dateMatch = shipmentDate >= start && shipmentDate <= end;
+        else if (start) dateMatch = shipmentDate >= start;
+        else if (end) dateMatch = shipmentDate <= end;
+      }
+      if (!dateMatch) return false;
+
+      // Search Filter
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        const clientMatch = shipment.clientName.toLowerCase().includes(term);
+        const courierMatch = shipment.courierName.toLowerCase().includes(term);
+        const staffMatch = shipment.whoParceled.toLowerCase().includes(term);
+        const productMatch = shipment.products.some(p => {
+          const masterSKU = stock.find(item => item.name === p.name);
+          return p.name.toLowerCase().includes(term) || masterSKU?.sku?.toLowerCase().includes(term);
+        });
+        return clientMatch || courierMatch || staffMatch || productMatch;
+      }
+
+      return true;
+    });
+  }, [shipments, filterStartDate, filterEndDate, searchTerm, stock]);
+
+  const exportToExcel = () => {
+    exportFormattedShipments(
+      filteredShipments, 
+      'B2B', 
+      `B2B_Shipments_${new Date().toISOString().split('T')[0]}.xls`
+    );
+  };
 
   const handleAddProduct = () => setProducts([...products, { id: Date.now() + products.length, name: '', quantity: '' }]);
   const handleRemoveProduct = (id) => setProducts(products.filter((p) => p.id !== id));
@@ -44,7 +91,6 @@ const B2BShipments = () => {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    // Inject packSize from Master Data for each product before saving
     const finalizedProducts = products.map(p => {
       const masterSKU = stock.find(s => s.name === p.name);
       return {
@@ -116,11 +162,13 @@ const B2BShipments = () => {
           <h2 className="text-2xl font-bold tracking-tight text-gray-900">{isEditing ? 'Edit B2B Shipment' : 'B2B Shipments'}</h2>
           <p className="text-sm text-gray-500">Manage your business-to-business dispatches</p>
         </div>
-        {isEditing && (
-          <Button variant="ghost" onClick={handleCancel} className="text-rose-600 hover:bg-rose-50">
-            <X size={16} /> Cancel Edit
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {isEditing && (
+            <Button variant="ghost" onClick={handleCancel} className="text-rose-600 hover:bg-rose-50">
+              <X size={16} className="mr-2" /> Cancel Edit
+            </Button>
+          )}
+        </div>
       </div>
 
       <Card>
@@ -244,18 +292,68 @@ const B2BShipments = () => {
               </Button>
             )}
             <Button type="submit">
-              <Save size={16} /> {isEditing ? 'Update Order' : 'Record Order'}
+              <Save size={16} className="mr-2" /> {isEditing ? 'Update Order' : 'Record Order'}
             </Button>
           </div>
         </form>
       </Card>
 
       <Card>
-        <div className="mb-4">
-          <h3 className="font-semibold text-gray-900">Recent B2B Orders</h3>
+        <div className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div className="flex flex-col md:flex-row items-center gap-4 flex-1">
+             <div className="w-full md:w-64">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">Quick Search</label>
+                <div className="relative">
+                  <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                  <input 
+                    type="text"
+                    placeholder="Client, MCQ, Product..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 transition-all outline-none placeholder:text-slate-300"
+                  />
+                </div>
+             </div>
+             <div className="w-full md:w-auto">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">Start Date</label>
+                <div className="relative">
+                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                  <input 
+                    type="date"
+                    value={filterStartDate}
+                    onChange={(e) => setFilterStartDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
+                  />
+                </div>
+             </div>
+             <div className="w-full md:w-auto">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">End Date</label>
+                <div className="relative">
+                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                  <input 
+                    type="date"
+                    value={filterEndDate}
+                    onChange={(e) => setFilterEndDate(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
+                  />
+                </div>
+             </div>
+             {(filterStartDate || filterEndDate || searchTerm) && (
+               <button 
+                onClick={() => { setFilterStartDate(''); setFilterEndDate(''); setSearchTerm(''); }}
+                className="text-xs font-bold text-rose-500 hover:text-rose-600 underline flex items-center md:pt-6"
+               >
+                 Clear All
+               </button>
+             )}
+          </div>
+          <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100">
+            <Download size={16} className="mr-2" /> Export to Excel
+          </Button>
         </div>
+        
         <Table headers={['Date', 'Client', 'Courier', 'Parceled By', 'Total Units', 'SKUs', 'Action']}>
-          {shipments.length === 0 ? (
+          {filteredShipments.length === 0 ? (
             <tr>
               <td colSpan="7" className="py-16 text-center text-slate-500">
                  <div className="flex flex-col items-center justify-center">
@@ -263,12 +361,12 @@ const B2BShipments = () => {
                     <Package size={32} className="text-slate-300" />
                   </div>
                   <p className="text-base font-medium text-slate-800">No shipments found</p>
-                  <p className="text-sm text-slate-500 mt-1">Fill out the form above to record your first B2B order.</p>
+                  <p className="text-sm text-slate-500 mt-1">Try adjusting your date filters or add a new record.</p>
                 </div>
               </td>
             </tr>
           ) : (
-            shipments.map(s => (
+            filteredShipments.map(s => (
               <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
                 <td className="py-4 px-6 text-sm text-slate-800 whitespace-nowrap">{s.date}</td>
                 <td className="py-4 px-6 text-sm font-medium text-slate-900">{s.clientName}</td>
@@ -326,6 +424,50 @@ const B2BShipments = () => {
             ))
           )}
         </Table>
+      </Card>
+      <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-indigo-50/10">
+          <h3 className="font-bold text-slate-900 flex items-center gap-2">
+            <Package size={18} className="text-indigo-500" />
+            Product-wise Summary (Filtered)
+          </h3>
+          <p className="text-xs text-slate-500 mt-1 italic">Total units ordered across all filtered shipments</p>
+        </div>
+        <div className="overflow-x-auto">
+          <Table headers={['SKU Code', 'Product Name', 'Total Orders', 'Total Units Shipped']}>
+            {Object.entries(
+              filteredShipments.flatMap(s => s.products).reduce((acc, curr) => {
+                if (!acc[curr.name]) acc[curr.name] = { qty: 0, units: 0 };
+                acc[curr.name].qty += Number(curr.quantity) || 0;
+                acc[curr.name].units += (Number(curr.quantity) || 0) * (Number(curr.packSize) || 1);
+                return acc;
+              }, {})
+            ).length === 0 ? (
+              <tr><td colSpan="4" className="py-12 text-center text-slate-400 font-medium whitespace-nowrap">No summary data available.</td></tr>
+            ) : (
+              Object.entries(
+                filteredShipments.flatMap(s => s.products).reduce((acc, curr) => {
+                  if (!acc[curr.name]) acc[curr.name] = { qty: 0, units: 0 };
+                  acc[curr.name].qty += Number(curr.quantity) || 0;
+                  acc[curr.name].units += (Number(curr.quantity) || 0) * (Number(curr.packSize) || 1);
+                  return acc;
+                }, {})
+              ).map(([name, data], idx) => {
+                const masterSKU = stock.find(s => s.name === name);
+                return (
+                  <tr key={idx} className="hover:bg-slate-50 border-b border-slate-50 last:border-0 font-medium font-semibold text-slate-900">
+                    <td className="py-4 px-6 text-sm">
+                      <span className="text-[10px] font-mono font-bold text-indigo-500 bg-indigo-50 px-1 rounded">{masterSKU?.sku || 'N/A'}</span>
+                    </td>
+                    <td className="py-4 px-6 text-sm">{name}</td>
+                    <td className="py-4 px-6 text-sm text-center font-bold text-slate-600">{data.qty} Orders</td>
+                    <td className="py-4 px-6 text-sm text-right font-black text-indigo-600 pr-12">{data.units} Units</td>
+                  </tr>
+                );
+              })
+            )}
+          </Table>
+        </div>
       </Card>
     </div>
   );
