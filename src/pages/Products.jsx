@@ -59,9 +59,9 @@ const Products = () => {
   const addComponentRow = (isEdit = false) => {
     const newComp = { id: Date.now() + Math.random(), name: '', quantity: 1 };
     if (isEdit) {
-      setEditingProduct({ ...editingProduct, components: [...editingProduct.components, newComp] });
+      setEditingProduct({ ...editingProduct, components: [...(editingProduct.components || []), newComp] });
     } else {
-      setNewProduct({ ...newProduct, components: [...newProduct.components, newComp] });
+      setNewProduct({ ...newProduct, components: [...(newProduct.components || []), newComp] });
     }
   };
 
@@ -75,10 +75,14 @@ const Products = () => {
 
   const updateComponent = (id, field, value, isEdit = false) => {
     if (isEdit) {
-      const newComps = editingProduct.components.map(c => c.id === id ? { ...c, [field]: value } : c);
+      const newComps = editingProduct.components.map(c => 
+        c.id === id ? { ...c, [field]: field === 'quantity' ? Number(value) : value } : c
+      );
       setEditingProduct({ ...editingProduct, components: newComps });
     } else {
-      const newComps = newProduct.components.map(c => c.id === id ? { ...c, [field]: value } : c);
+      const newComps = newProduct.components.map(c => 
+        c.id === id ? { ...c, [field]: field === 'quantity' ? Number(value) : value } : c
+      );
       setNewProduct({ ...newProduct, components: newComps });
     }
   };
@@ -92,8 +96,20 @@ const Products = () => {
   };
 
   const saveEdit = async () => {
-    if (!editingProduct.name.trim()) return;
-    if (editingProduct.isComposite && !editingProduct.sku.trim()) return;
+    if (editingProduct.isComposite) {
+      if (!editingProduct.sku.trim()) {
+        toast.error('SKU Code is required for bundles');
+        return;
+      }
+      if (!editingProduct.components || editingProduct.components.length === 0) {
+        toast.error('At least one component is required for a bundle');
+        return;
+      }
+      if (editingProduct.components.some(c => !c.name)) {
+        toast.error('All components must have a selected product');
+        return;
+      }
+    }
     
     try {
       await updateSKU(editingProduct.id, {
@@ -102,7 +118,7 @@ const Products = () => {
         category: editingProduct.category.trim() || 'Other',
         packSize: Number(editingProduct.packSize) || 1,
         isComposite: editingProduct.isComposite,
-        components: editingProduct.isComposite ? editingProduct.components : []
+        components: editingProduct.isComposite ? editingProduct.components.map(c => ({ name: c.name, quantity: Number(c.quantity) || 1 })) : []
       });
       setIsEditModalOpen(false);
       setEditingProduct(null);
@@ -759,7 +775,9 @@ const Products = () => {
                       onChange={(e) => setEditingProduct({
                         ...editingProduct, 
                         isComposite: e.target.checked,
-                        components: e.target.checked && editingProduct.components.length === 0 ? [{name: '', quantity: 1}] : editingProduct.components
+                        components: e.target.checked && (!editingProduct.components || editingProduct.components.length === 0) 
+                          ? [{ id: Date.now(), name: '', quantity: 1 }] 
+                          : (editingProduct.components || [])
                       })}
                     />
                     <span className="text-sm font-semibold text-slate-700">Composite Product / Bundle?</span>
@@ -780,9 +798,9 @@ const Products = () => {
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-bold text-indigo-600 uppercase">Composition</p>
                     <button type="button" onClick={() => {
-                      const newComps = [...editingProduct.components, { name: '', quantity: 1 }];
+                      const newComps = [...(editingProduct.components || []), { id: Date.now() + Math.random(), name: '', quantity: 1 }];
                       setEditingProduct({...editingProduct, components: newComps});
-                    }} className="text-[10px] font-bold text-indigo-600">+ Add Part</button>
+                    }} className="text-[10px] font-bold text-indigo-600 uppercase tracking-tighter hover:text-indigo-800 transition-colors">+ Add Part</button>
                   </div>
                   {editingProduct.components.map((comp) => (
                     <div key={comp.id} className="flex gap-2 items-start">
@@ -802,7 +820,9 @@ const Products = () => {
                           onChange={(e) => updateComponent(comp.id, 'quantity', e.target.value, true)}
                         />
                       </div>
-                      <button onClick={() => removeComponentRow(comp.id, true)} className="text-rose-500 pt-2"><Trash2 size={14}/></button>
+                      <button type="button" onClick={() => removeComponentRow(comp.id, true)} className="text-rose-500 pt-2 hover:bg-rose-50 p-1 rounded-md transition-colors">
+                        <Trash2 size={14}/>
+                      </button>
                     </div>
                   ))}
                 </div>
