@@ -26,6 +26,7 @@ export const GlobalProvider = ({ children }) => {
   const [staff, setStaff] = useState([]);
   const [channels, setChannels] = useState([]);
   const [couriers, setCouriers] = useState([]);
+  const [monthlyStockData, setMonthlyStockData] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
@@ -93,12 +94,17 @@ export const GlobalProvider = ({ children }) => {
 
     const unsubCouriers = onSnapshot(collection(db, 'couriers'), (snapshot) => {
       setCouriers(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
+
+    const unsubMonthly = onSnapshot(collection(db, 'monthlyStockData'), (snapshot) => {
+      setMonthlyStockData(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       setLoading(false);
     });
 
     return () => {
       unsubStock(); unsubB2B(); unsubB2C(); unsubDamage(); 
       unsubReturns(); unsubStaff(); unsubChannels(); unsubCouriers();
+      unsubMonthly();
     };
   }, [currentUser]);
 
@@ -379,7 +385,16 @@ export const GlobalProvider = ({ children }) => {
       returnRecords, addReturnRecord, deleteReturnRecord,
       staff, addStaffMember, updateStaffMember, deleteStaffMember,
       channels, addChannel, updateChannel, deleteChannel,
-      couriers, addCourier, updateCourier, deleteCourier
+      couriers, addCourier, updateCourier, deleteCourier,
+      monthlyStockData,
+      saveMonthlyStock: async (month, productId, updates) => {
+        const id = `${month}_${productId}`;
+        await setDoc(doc(db, 'monthlyStockData', id), {
+          ...updates,
+          month,
+          productId
+        }, { merge: true });
+      }
     }}>
       {children}
     </GlobalContext.Provider>

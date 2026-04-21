@@ -22,6 +22,7 @@ const Products = () => {
   
   // Filter State
   const [filterType, setFilterType] = useState('all'); // all, solo, composite
+  const [showBrokenOnly, setShowBrokenOnly] = useState(false);
   const [viewBundlesFor, setViewBundlesFor] = useState(null);
 
   const handleAddProduct = async (e) => {
@@ -279,7 +280,10 @@ const Products = () => {
       (filterType === 'solo' && !p.isComposite) || 
       (filterType === 'composite' && p.isComposite);
       
-    return matchesSearch && matchesFilter;
+    const matchesBroken = !showBrokenOnly || 
+      (p.isComposite && p.components.some(c => !isComponentValid(c.name)));
+      
+    return matchesSearch && matchesFilter && matchesBroken;
   });
 
   // Pagination Logic
@@ -292,6 +296,7 @@ const Products = () => {
   // Reset to first page on search or filter change
   useEffect(() => {
     setCurrentPage(1);
+    if (filterType !== 'composite') setShowBrokenOnly(false);
   }, [searchTerm, filterType]);
 
   return (
@@ -471,12 +476,23 @@ const Products = () => {
               <p className="text-[10px] text-slate-500">Managing {filteredStock.length} items</p>
             </div>
             {brokenBundles.length > 0 && (
-              <div className="flex-1 max-w-md px-3 py-2 bg-rose-50 border border-rose-100 rounded-lg flex items-center gap-2 animate-pulse">
-                <AlertCircle className="text-rose-500" size={16} />
-                <p className="text-[10px] font-bold text-rose-700">
-                  {brokenBundles.length} Bundles have missing solo products! Check items in red below.
+              <button 
+                onClick={() => {
+                  setFilterType('composite');
+                  setShowBrokenOnly(!showBrokenOnly);
+                }}
+                className={`flex-1 max-w-md px-3 py-2 border rounded-lg flex items-center gap-2 transition-all group ${
+                  showBrokenOnly 
+                    ? 'bg-rose-100 border-rose-300 ring-4 ring-rose-500/10' 
+                    : 'bg-rose-50 border-rose-100 hover:bg-rose-100/50 animate-pulse'
+                }`}
+              >
+                <AlertCircle className={showBrokenOnly ? 'text-rose-600' : 'text-rose-500'} size={16} />
+                <p className={`text-[10px] font-bold ${showBrokenOnly ? 'text-rose-800' : 'text-rose-700'}`}>
+                  {showBrokenOnly ? 'Showing ONLY Broken Bundles' : `${brokenBundles.length} Bundles have missing solo products! Click to view.`}
                 </p>
-              </div>
+                {showBrokenOnly && <X size={12} className="ml-auto text-rose-400 group-hover:text-rose-600" />}
+              </button>
             )}
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">

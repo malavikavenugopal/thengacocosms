@@ -18,6 +18,7 @@ const Reports = () => {
 
   const tabs = [
     { id: 'shipments', label: 'Shipment Report' },
+    { id: 'b2bPivot', label: 'B2B Sales Summary' },
     { id: 'b2cPivot', label: 'B2C Sales Summary' },
     { id: 'products', label: 'SKU Report' },
     { id: 'returns', label: 'Returns Report' },
@@ -78,6 +79,36 @@ const Reports = () => {
 
     return { b2cPivotData: filteredResults, activeChannels: channelsWithSales };
   }, [stock, b2cShipments, channels, filter.startDate, filter.endDate, filter.sku]);
+
+  // B2B Sales Summary Logic: Group by Product
+  const b2bPivotData = useMemo(() => {
+    const totals = {};
+    
+    b2bShipments.forEach(s => {
+      const dateMatch = (!filter.startDate || s.date >= filter.startDate) && 
+                        (!filter.endDate || s.date <= filter.endDate);
+      if (!dateMatch) return;
+
+      s.products.forEach(p => {
+        const qty = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+        totals[p.name] = (totals[p.name] || 0) + qty;
+      });
+    });
+
+    return stock
+      .filter(p => !p.isComposite)
+      .map(p => ({
+        sku: p.sku || '-',
+        name: p.name,
+        total: totals[p.name] || 0
+      }))
+      .filter(row => {
+        const hasSales = row.total > 0;
+        const skuMatch = filter.sku === 'All SKUs' || row.name === filter.sku;
+        return hasSales && skuMatch;
+      })
+      .sort((a, b) => b.total - a.total);
+  }, [stock, b2bShipments, filter.startDate, filter.endDate, filter.sku]);
 
   // Combined shipments for the shipments report
   const allShipments = useMemo(() => {
@@ -180,6 +211,13 @@ const Reports = () => {
         return rowData;
       });
       fileName = `b2c_sales_summary_${new Date().toISOString().split('T')[0]}.xls`;
+    } else if (activeTab === 'b2bPivot') {
+      dataToExport = b2bPivotData.map(row => ({
+        SKU: row.sku,
+        Product: row.name,
+        Quantity: row.total
+      }));
+      fileName = `b2b_sales_summary_${new Date().toISOString().split('T')[0]}.xls`;
     } else if (activeTab === 'products') {
       dataToExport = productStats.map(p => ({
         SKUName: p.name,
@@ -323,6 +361,28 @@ const Reports = () => {
                 </tbody>
               </table>
             </div>
+          )}
+
+          {activeTab === 'b2bPivot' && (
+            <Table headers={['SKU Code', 'Product Name', 'Total Quantity Dispatched']}>
+              {b2bPivotData.length === 0 ? (
+                <tr>
+                  <td colSpan="3" className="py-12 text-center text-slate-400">No B2B sales records found for this period.</td>
+                </tr>
+              ) : (
+                b2bPivotData.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-4 px-6 text-sm font-mono font-bold text-indigo-600">{row.sku}</td>
+                    <td className="py-4 px-6 text-sm font-semibold text-slate-900 leading-relaxed">{row.name}</td>
+                    <td className="py-4 px-6 text-sm font-bold text-slate-900">
+                      <span className="inline-flex items-center px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full font-bold">
+                        {row.total} units
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </Table>
           )}
 
           {activeTab === 'shipments' && (
