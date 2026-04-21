@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
-import { Plus, Trash2, Save, Package, ShoppingCart } from 'lucide-react';
+import { Plus, Trash2, Save, Package, ShoppingCart, Edit2, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 import { useGlobalState } from '../context/GlobalContext';
 
 const B2BShipments = () => {
   const [products, setProducts] = useState([{ id: Date.now(), name: '', quantity: '' }]);
-  const { stock, staff, couriers, b2bShipments: shipments, addB2BShipment, deleteB2BShipment } = useGlobalState();
+  const { stock, staff, couriers, b2bShipments: shipments, addB2BShipment, updateB2BShipment, deleteB2BShipment } = useGlobalState();
   
   const [formData, setFormData] = useState({
     whoParceled: '',
@@ -16,6 +16,9 @@ const B2BShipments = () => {
     boxes: '',
     date: new Date().toISOString().split('T')[0]
   });
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const handleAddProduct = () => setProducts([...products, { id: Date.now() + products.length, name: '', quantity: '' }]);
   const handleRemoveProduct = (id) => setProducts(products.filter((p) => p.id !== id));
@@ -37,14 +40,41 @@ const B2BShipments = () => {
       };
     });
 
-    const newShipment = {
+    const shipmentData = {
       ...formData,
       products: finalizedProducts
     };
-    addB2BShipment(newShipment);
+
+    if (isEditing) {
+      updateB2BShipment(editingId, shipmentData);
+      toast.success('B2B Shipment updated!');
+    } else {
+      addB2BShipment(shipmentData);
+      toast.success('B2B Shipment recorded!');
+    }
+
+    handleCancel();
+  };
+
+  const handleEdit = (s) => {
+    setIsEditing(true);
+    setEditingId(s.id);
+    setFormData({
+      whoParceled: s.whoParceled,
+      clientName: s.clientName,
+      courierName: s.courierName,
+      boxes: s.boxes,
+      date: s.date
+    });
+    setProducts(s.products.map((p, idx) => ({ ...p, id: Date.now() + idx })));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+    setEditingId(null);
     setFormData({ whoParceled: '', clientName: '', courierName: '', boxes: '', date: new Date().toISOString().split('T')[0] });
     setProducts([{ id: Date.now(), name: '', quantity: '' }]);
-    toast.success('B2B Shipment recorded!');
   };
 
   const handleDelete = (id) => {
@@ -56,9 +86,16 @@ const B2BShipments = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight text-gray-900">B2B Shipments</h2>
-        <p className="text-sm text-gray-500">Manage your business-to-business dispatches</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-gray-900">{isEditing ? 'Edit B2B Shipment' : 'B2B Shipments'}</h2>
+          <p className="text-sm text-gray-500">Manage your business-to-business dispatches</p>
+        </div>
+        {isEditing && (
+          <Button variant="ghost" onClick={handleCancel} className="text-rose-600 hover:bg-rose-50">
+            <X size={16} /> Cancel Edit
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -175,9 +212,14 @@ const B2BShipments = () => {
             </div>
           </div>
 
-          <div className="flex justify-end pt-4 border-t border-gray-100">
+          <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+            {isEditing && (
+              <Button type="button" variant="ghost" onClick={handleCancel}>
+                Cancel
+              </Button>
+            )}
             <Button type="submit">
-              <Save size={16} /> Record Order
+              <Save size={16} /> {isEditing ? 'Update Order' : 'Record Order'}
             </Button>
           </div>
         </form>
@@ -229,13 +271,22 @@ const B2BShipments = () => {
                   </div>
                 </td>
                 <td className="py-4 px-6 text-sm text-center">
-                  <button 
-                    onClick={() => handleDelete(s.id)}
-                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
-                    title="Delete Record & Restore Stock"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                  <div className="flex items-center justify-center gap-2">
+                    <button 
+                      onClick={() => handleEdit(s)}
+                      className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100"
+                      title="Edit Record"
+                    >
+                      <Edit2 size={18} />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(s.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                      title="Delete Record & Restore Stock"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))

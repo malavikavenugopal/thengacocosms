@@ -1,18 +1,21 @@
 import React, { useState } from 'react';
 import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
-import { Plus, Trash2, Save, ShoppingCart } from 'lucide-react';
+import { Plus, Trash2, Save, ShoppingCart, Edit2, X } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
 
 const B2CShipments = () => {
   const [products, setProducts] = useState([{ id: Date.now(), name: '', quantity: '' }]);
-  const { stock, staff, channels, b2cShipments: shipments, addB2CShipment, deleteB2CShipment } = useGlobalState();
+  const { stock, staff, channels, b2cShipments: shipments, addB2CShipment, updateB2CShipment, deleteB2CShipment } = useGlobalState();
   
   const [formData, setFormData] = useState({
     whoParceled: '',
     channel: '',
     date: new Date().toISOString().split('T')[0]
   });
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const handleAddProduct = () => setProducts([...products, { id: Date.now() + products.length, name: '', quantity: '' }]);
   const handleRemoveProduct = (id) => setProducts(products.filter((p) => p.id !== id));
@@ -34,15 +37,40 @@ const B2CShipments = () => {
       };
     });
 
-    const newShipment = {
+    const shipmentData = {
       ...formData,
       products: finalizedProducts,
       timestamp: Date.now()
     };
-    addB2CShipment(newShipment);
-    setFormData({ ...formData, whoParceled: '', channel: '' });
+
+    if (isEditing) {
+      updateB2CShipment(editingId, shipmentData);
+      toast.success('B2C Order updated!');
+    } else {
+      addB2CShipment(shipmentData);
+      toast.success('B2C Order recorded!');
+    }
+
+    handleCancel();
+  };
+
+  const handleEdit = (s) => {
+    setIsEditing(true);
+    setEditingId(s.id);
+    setFormData({
+      whoParceled: s.whoParceled,
+      channel: s.channel,
+      date: s.date
+    });
+    setProducts(s.products.map((p, idx) => ({ ...p, id: Date.now() + idx })));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancel = () => {
+    setIsEditing(false);
+    setEditingId(null);
+    setFormData({ whoParceled: '', channel: '', date: new Date().toISOString().split('T')[0] });
     setProducts([{ id: Date.now(), name: '', quantity: '' }]);
-    toast.success('B2C Order recorded!');
   };
 
   const handleDelete = (id) => {
@@ -58,10 +86,15 @@ const B2CShipments = () => {
         <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
           <ShoppingCart size={24} />
         </div>
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">B2C Retail Orders</h2>
+        <div className="flex-1">
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">{isEditing ? 'Edit B2C Order' : 'B2C Retail Orders'}</h2>
           <p className="text-sm text-slate-500">Sales recorded here use the multiplier set in SKU Master</p>
         </div>
+        {isEditing && (
+          <Button variant="ghost" onClick={handleCancel} className="text-rose-600 hover:bg-rose-50">
+            <X size={16} className="mr-2" /> Cancel Edit
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -162,9 +195,14 @@ const B2CShipments = () => {
             </div>
           </div>
 
-          <div className="flex justify-end pt-4 border-t border-slate-100">
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+            {isEditing && (
+              <Button type="button" variant="ghost" onClick={handleCancel}>
+                Cancel
+              </Button>
+            )}
             <Button type="submit" className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white shadow-xl shadow-slate-200">
-              <Save size={18} className="mr-2" /> Record B2C Order
+              <Save size={18} className="mr-2" /> {isEditing ? 'Update B2C Order' : 'Record B2C Order'}
             </Button>
           </div>
         </form>
@@ -219,14 +257,23 @@ const B2CShipments = () => {
                 <td className="py-4 px-6 text-sm text-indigo-600 font-bold">
                   {s.products.reduce((acc, curr) => acc + (Number(curr.quantity) * (Number(curr.packSize) || 1)), 0)} units
                 </td>
-                <td className="py-4 px-6 text-sm text-right">
-                  <button 
-                    onClick={() => handleDelete(s.id)}
-                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
-                    title="Delete Record & Restore Stock"
-                  >
-                    <Trash2 size={18} />
-                  </button>
+                <td className="py-4 px-6 text-sm text-center">
+                  <div className="flex items-center justify-center gap-2">
+                    <button 
+                      onClick={() => handleEdit(s)}
+                      className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100"
+                      title="Edit Record"
+                    >
+                      <Edit2 size={18} />
+                    </button>
+                    <button 
+                      onClick={() => handleDelete(s.id)}
+                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                      title="Delete Record & Restore Stock"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))

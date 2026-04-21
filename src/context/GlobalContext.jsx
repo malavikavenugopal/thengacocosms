@@ -160,6 +160,28 @@ export const GlobalProvider = ({ children }) => {
     }
   };
 
+  const updateB2BShipment = async (id, updatedShipment) => {
+    const oldShipment = b2bShipments.find(s => s.id === id);
+    if (!oldShipment) return;
+
+    // 1. Revert old stock
+    for (const p of oldShipment.products) {
+      const multiplier = (Number(p.packSize) || 1);
+      const totalUnits = (Number(p.quantity) || 0) * multiplier;
+      await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+    }
+
+    // 2. Update Document
+    await updateDoc(doc(db, 'b2bShipments', String(id)), updatedShipment);
+
+    // 3. Apply new stock
+    for (const p of updatedShipment.products) {
+      const multiplier = (Number(p.packSize) || 1);
+      const totalUnits = (Number(p.quantity) || 0) * multiplier;
+      await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
+    }
+  };
+
   const addB2CShipment = async (shipment) => {
     await addDoc(collection(db, 'b2cShipments'), shipment);
     for (const p of shipment.products) {
@@ -188,6 +210,26 @@ export const GlobalProvider = ({ children }) => {
     } catch (err) {
       console.error("Firebase B2C Delete Error:", err);
       toast.error("Failed to delete from database");
+    }
+  };
+
+  const updateB2CShipment = async (id, updatedShipment) => {
+    const oldShipment = b2cShipments.find(s => s.id === id);
+    if (!oldShipment) return;
+
+    // 1. Revert old stock
+    for (const p of oldShipment.products) {
+      const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+      await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+    }
+
+    // 2. Update Document
+    await updateDoc(doc(db, 'b2cShipments', String(id)), updatedShipment);
+
+    // 3. Apply new stock
+    for (const p of updatedShipment.products) {
+      const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+      await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
     }
   };
 
@@ -331,8 +373,8 @@ export const GlobalProvider = ({ children }) => {
     <GlobalContext.Provider value={{ 
       currentUser, logout, authLoading,
       stock, addSKU, updateSKU, deleteSKU,
-      b2bShipments, addB2BShipment, deleteB2BShipment,
-      b2cShipments, addB2CShipment, deleteB2CShipment,
+      b2bShipments, addB2BShipment, updateB2BShipment, deleteB2BShipment,
+      b2cShipments, addB2CShipment, updateB2CShipment, deleteB2CShipment,
       damageRecords, addDamageRecord, deleteDamageRecord,
       returnRecords, addReturnRecord, deleteReturnRecord,
       staff, addStaffMember, updateStaffMember, deleteStaffMember,

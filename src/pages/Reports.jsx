@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Card, Input, Select, Button, Table } from '../components/ui';
 import { Download, Filter, FileSpreadsheet, Package, ShoppingCart, AlertCircle, RotateCcw } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
-import { exportToCSV } from '../utils/exportUtils';
+import { exportToCSV, exportToExcel } from '../utils/exportUtils';
 
 const Reports = () => {
   const { stock, b2bShipments, b2cShipments, damageRecords, returnRecords, channels } = useGlobalState();
@@ -25,16 +25,20 @@ const Reports = () => {
   ];
 
   // B2C Pivot Logic: Group by SKU and Channel
-  const b2cPivotData = useMemo(() => {
+  const { b2cPivotData, activeChannels } = useMemo(() => {
+    // 1. Filter out 'Samples' channel and get initial list
+    const filteredChannels = channels.filter(c => c.name.toLowerCase() !== 'samples');
+
     const activeB2C = b2cShipments.filter(s => {
       const dateMatch = (!filter.startDate || s.date >= filter.startDate) && 
                         (!filter.endDate || s.date <= filter.endDate);
-      return dateMatch;
+      const isNotSample = s.channel?.toLowerCase() !== 'samples';
+      return dateMatch && isNotSample;
     });
 
     const results = stock.map(p => {
       const channelCounts = {};
-      channels.forEach(c => {
+      filteredChannels.forEach(c => {
         channelCounts[c.name] = 0;
       });
       
@@ -44,8 +48,10 @@ const Reports = () => {
         if (item) {
           const qty = Number(item.quantity) || 0;
           const channelName = s.channel || 'Unknown';
-          channelCounts[channelName] = (channelCounts[channelName] || 0) + qty;
-          rowTotal += qty;
+          if (filteredChannels.some(c => c.name === channelName)) {
+            channelCounts[channelName] = (channelCounts[channelName] || 0) + qty;
+            rowTotal += qty;
+          }
         }
       });
 
@@ -58,12 +64,19 @@ const Reports = () => {
       };
     });
 
-    // Only show products that have sales in selected period OR if specifically filtered
-    return results.filter(row => {
+    // 2. Identify channels which actually have sales in this filtered set
+    const channelsWithSales = filteredChannels.filter(c => 
+      results.some(row => row.channels[c.name] > 0)
+    );
+
+    // 3. Filter products that have sales in selected period OR if specifically filtered
+    const filteredResults = results.filter(row => {
       const hasSales = row.total > 0;
       const skuMatch = filter.sku === 'All SKUs' || row.name === filter.sku;
       return hasSales && skuMatch;
     }).sort((a, b) => b.total - a.total);
+
+    return { b2cPivotData: filteredResults, activeChannels: channelsWithSales };
   }, [stock, b2cShipments, channels, filter.startDate, filter.endDate, filter.sku]);
 
   // Combined shipments for the shipments report
@@ -152,7 +165,7 @@ const Reports = () => {
         SKUs: s.products.map(p => `${p.name} (${p.quantity})`).join('; '),
         TotalUnits: s.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)
       }));
-      fileName = `shipments_report_${new Date().toISOString().split('T')[0]}.csv`;
+      fileName = `shipments_report_${new Date().toISOString().split('T')[0]}.xls`;
     } else if (activeTab === 'b2cPivot') {
       dataToExport = b2cPivotData.map(row => {
         const rowData = {
@@ -160,13 +173,13 @@ const Reports = () => {
           SKU: row.sku,
           Product: row.name
         };
-        channels.forEach(c => {
+        activeChannels.forEach(c => {
           rowData[c.name.toUpperCase()] = row.channels[c.name] || 0;
         });
         rowData.TOTAL = row.total;
         return rowData;
       });
-      fileName = `b2c_sales_summary_${new Date().toISOString().split('T')[0]}.csv`;
+      fileName = `b2c_sales_summary_${new Date().toISOString().split('T')[0]}.xls`;
     } else if (activeTab === 'products') {
       dataToExport = productStats.map(p => ({
         SKUName: p.name,
@@ -177,7 +190,7 @@ const Reports = () => {
         CurrentStock: p.currentStock,
         Status: p.status
       }));
-      fileName = `sku_report_${new Date().toISOString().split('T')[0]}.csv`;
+      fileName = `sku_report_${new Date().toISOString().split('T')[0]}.xls`;
     } else if (activeTab === 'damage') {
       dataToExport = filteredDamages.map(d => ({
         Date: d.date,
@@ -185,7 +198,7 @@ const Reports = () => {
         Quantity: d.quantity,
         Reason: d.reason || 'N/A'
       }));
-      fileName = `damage_report_${new Date().toISOString().split('T')[0]}.csv`;
+      fileName = `damage_report_${new Date().toISOString().split('T')[0]}.xls`;
     } else if (activeTab === 'returns') {
       dataToExport = filteredReturns.map(r => ({
         Date: r.date,
@@ -194,10 +207,15 @@ const Reports = () => {
         Quantity: r.quantity,
         Reason: r.reason || 'N/A'
       }));
-      fileName = `returns_report_${new Date().toISOString().split('T')[0]}.csv`;
+      fileName = `returns_report_${new Date().toISOString().split('T')[0]}.xls`;
     }
 
-    exportToCSV(dataToExport, fileName);
+    if (activeTab === 'b2cPivot') {
+      fileName = `b2c_sales_summary_${new Date().toISOString().split('T')[0]}.xls`;
+      exportToExcel(dataToExport, fileName, 'Sales Summary');
+    } else {
+      exportToExcel(dataToExport, fileName);
+    }
   };
 
   const skuOptions = ['All SKUs', ...stock.map(p => p.name)];
@@ -274,7 +292,7 @@ const Reports = () => {
                     <th className="py-3 px-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200 sticky left-0 bg-slate-50 z-10">Category</th>
                     <th className="py-3 px-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200 sticky left-[120px] bg-slate-50 z-10">SKU</th>
                     <th className="py-3 px-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200">Product</th>
-                    {channels.map(c => (
+                    {activeChannels.map(c => (
                       <th key={c.id} className="py-3 px-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200 min-w-[100px]">
                         {c.name}
                       </th>
@@ -285,7 +303,7 @@ const Reports = () => {
                 <tbody className="divide-y divide-slate-100">
                   {b2cPivotData.length === 0 ? (
                     <tr>
-                      <td colSpan={channels.length + 4} className="py-12 text-center text-slate-400">No sales records found for this period.</td>
+                      <td colSpan={activeChannels.length + 4} className="py-12 text-center text-slate-400">No sales records found for this period.</td>
                     </tr>
                   ) : (
                     b2cPivotData.map((row, idx) => (
@@ -293,7 +311,7 @@ const Reports = () => {
                         <td className="py-3 px-4 text-sm text-slate-600 border-r border-slate-100 bg-emerald-50/20 sticky left-0 z-1 min-w-[100px]">{row.category}</td>
                         <td className="py-3 px-4 text-sm font-mono text-indigo-600 border-r border-slate-100 bg-rose-50/20 sticky left-[120px] z-1 min-w-[100px]">{row.sku || '-'}</td>
                         <td className="py-3 px-4 text-sm text-slate-800 border-r border-slate-100 min-w-[250px] bg-blue-50/10 leading-relaxed">{row.name}</td>
-                        {channels.map(c => (
+                        {activeChannels.map(c => (
                           <td key={c.id} className={`py-3 px-4 text-center text-sm border-r border-slate-100 ${row.channels[c.name] > 0 ? 'font-bold text-slate-900 bg-emerald-50/30' : 'text-slate-300'}`}>
                             {row.channels[c.name]}
                           </td>
