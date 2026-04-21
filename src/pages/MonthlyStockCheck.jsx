@@ -232,7 +232,7 @@ const MonthlyStockCheck = () => {
                   
                   const expected = calculateExpected(
                     mData.opening, 
-                    (Number(mData.in) || 0) + movements.purchased, 
+                    (Number(mData.in) || 0) + (movements.purchased || 0), 
                     movements.returned, 
                     movements.out, 
                     movements.damage
@@ -248,12 +248,29 @@ const MonthlyStockCheck = () => {
                     else rowBg = "bg-emerald-50/40 hover:bg-emerald-50/60";
                   }
 
+                  const currentMonthNum = Number(selectedMonth.split('-')[1]);
+                  const isROPFirstHalf = currentMonthNum <= 6;
+                  const activeROP = isROPFirstHalf ? (item.ropJanJun || 0) : (item.ropJulDec || 0);
+                  const isLowStock = expected < activeROP;
+
                   return (
-                    <tr key={item.id} className={`transition-colors duration-200 ${rowBg}`}>
+                    <tr key={item.id} className={`transition-colors duration-200 ${rowBg} ${isLowStock ? 'ring-1 ring-inset ring-rose-200' : ''}`}>
                       <td className="py-4 px-4 text-sm border-r border-slate-100 leading-tight">
                         <div className="flex flex-col">
-                          <span className="text-[10px] font-mono font-bold text-indigo-600 uppercase tracking-tighter">{item.sku || '-'}</span>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-mono font-bold text-indigo-600 uppercase tracking-tighter">{item.sku || '-'}</span>
+                            {isLowStock && (
+                              <span className="px-1.5 py-0.5 bg-rose-600 text-white text-[8px] font-black rounded flex items-center gap-0.5 animate-pulse shadow-sm shadow-rose-200">
+                                <AlertTriangle size={8} /> ROP ALERT
+                              </span>
+                            )}
+                          </div>
                           <span className="font-semibold text-slate-900">{item.name}</span>
+                          {isLowStock && (
+                            <span className="text-[10px] text-rose-500 font-bold mt-0.5 italic">
+                              Target: {activeROP} (Short: {activeROP - expected})
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="py-3 px-1 text-center">

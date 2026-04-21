@@ -14,6 +14,7 @@ import Channels from './pages/Channels';
 import Couriers from './pages/Couriers';
 import Returns from './pages/Returns';
 import PurchaseManagement from './pages/PurchaseManagement';
+import ReorderPoint from './pages/ReorderPoint';
 import Login from './pages/Login';
 import { GlobalProvider, useGlobalState } from './context/GlobalContext';
 
@@ -60,6 +61,7 @@ function App() {
             <Route path="b2c" element={<B2CShipments />} />
             <Route path="damage" element={<DamageTracking />} />
             <Route path="stock" element={<MonthlyStockCheck />} />
+            <Route path="rop" element={<ReorderPoint />} />
             <Route path="reports" element={<Reports />} />
           </Route>
         </Routes>

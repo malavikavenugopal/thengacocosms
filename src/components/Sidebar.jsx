@@ -16,6 +16,7 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
     { name: 'B2C Shipments', path: '/b2c', icon: <Truck size={20} /> },
     { name: 'Returns Management', path: '/returns', icon: <RotateCcw size={20} /> },
     { name: 'Damage Tracking', path: '/damage', icon: <AlertTriangle size={20} /> },
+    { name: 'Reorder Points', path: '/rop', icon: <Package size={20} /> },
     { name: 'Monthly Stock Check', path: '/stock', icon: <ClipboardList size={20} /> },
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
   ];
