@@ -1,21 +1,35 @@
 import React, { useState } from 'react';
 import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
-import { Plus, Trash2, Save, ShoppingCart, Edit2, X } from 'lucide-react';
+import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
+import Swal from 'sweetalert2';
+import { isRecordEditable } from '../utils/dateUtils';
 
 const B2CShipments = () => {
-  const [products, setProducts] = useState([{ id: Date.now(), name: '', quantity: '' }]);
-  const { stock, staff, channels, b2cShipments: shipments, addB2CShipment, updateB2CShipment, deleteB2CShipment } = useGlobalState();
+  const { stock, staff, channels, b2cShipments: shipments, addB2CShipment, updateB2CShipment, deleteB2CShipment, drafts, updateDraft, clearDraft } = useGlobalState();
   
-  const [formData, setFormData] = useState({
-    whoParceled: '',
-    channel: '',
-    date: new Date().toISOString().split('T')[0]
+  const [formData, setFormData] = useState(() => {
+    return drafts.b2c?.formData || {
+      whoParceled: '',
+      channel: '',
+      date: new Date().toISOString().split('T')[0]
+    };
+  });
+
+  const [products, setProducts] = useState(() => {
+    return drafts.b2c?.products || [{ id: Date.now(), name: '', quantity: '' }];
   });
 
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
+
+  // Sync draft
+  React.useEffect(() => {
+    if (!isEditing) {
+      updateDraft('b2c', { formData, products });
+    }
+  }, [formData, products, isEditing]);
 
   const handleAddProduct = () => setProducts([...products, { id: Date.now() + products.length, name: '', quantity: '' }]);
   const handleRemoveProduct = (id) => setProducts(products.filter((p) => p.id !== id));
@@ -49,6 +63,7 @@ const B2CShipments = () => {
     } else {
       addB2CShipment(shipmentData);
       toast.success('B2C Order recorded!');
+      clearDraft('b2c');
     }
 
     handleCancel();
@@ -74,10 +89,20 @@ const B2CShipments = () => {
   };
 
   const handleDelete = (id) => {
-    if (window.confirm('Delete this record and restore stock?')) {
-      deleteB2CShipment(id);
-      toast.error('Order deleted & Stock restored.');
-    }
+    Swal.fire({
+      title: 'Delete this order?',
+      text: "This will restore the deducted stock back to your inventory.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#cbd5e1',
+      confirmButtonText: 'Yes, delete it!'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        deleteB2CShipment(id);
+        toast.error('Order deleted & Stock restored.');
+      }
+    });
   };
 
   return (
@@ -259,20 +284,29 @@ const B2CShipments = () => {
                 </td>
                 <td className="py-4 px-6 text-sm text-center">
                   <div className="flex items-center justify-center gap-2">
-                    <button 
-                      onClick={() => handleEdit(s)}
-                      className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100"
-                      title="Edit Record"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(s.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
-                      title="Delete Record & Restore Stock"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    {isRecordEditable(s.date) ? (
+                      <>
+                        <button 
+                          onClick={() => handleEdit(s)}
+                          className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100"
+                          title="Edit Record"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(s.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                          title="Delete Record & Restore Stock"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </>
+                    ) : (
+                      <span className="p-1.5 text-slate-300 flex items-center gap-1 cursor-not-allowed" title="Records older than 5 days cannot be edited">
+                        <Lock size={16} />
+                        <span className="text-[10px] uppercase font-bold tracking-tighter">Locked</span>
+                      </span>
+                    )}
                   </div>
                 </td>
               </tr>

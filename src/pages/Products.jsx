@@ -5,6 +5,7 @@ import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
 import { exportToCSV } from '../utils/exportUtils';
 import { Download } from 'lucide-react';
+import Swal from 'sweetalert2';
 
 
 const Products = () => {
@@ -117,14 +118,24 @@ const Products = () => {
   };
 
   const handleDeleteProduct = async (id) => {
-    if (window.confirm('Delete this product? It will remove all inventory records for it.')) {
-      try {
-        await deleteSKU(id);
-        toast.error('Product deleted.');
-      } catch (err) {
-        toast.error('Error deleting SKU');
+    Swal.fire({
+      title: 'Delete this product?',
+      text: "This will remove all associated inventory records permanently!",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#cbd5e1',
+      confirmButtonText: 'Yes, delete it!'
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          await deleteSKU(id);
+          toast.error('Product deleted.');
+        } catch (err) {
+          toast.error('Error deleting SKU');
+        }
       }
-    }
+    });
   };
 
   const [searchTerm, setSearchTerm] = useState('');

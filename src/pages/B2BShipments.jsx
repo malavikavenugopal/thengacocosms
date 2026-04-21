@@ -1,24 +1,38 @@
 import React, { useState } from 'react';
 import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
-import { Plus, Trash2, Save, Package, ShoppingCart, Edit2, X } from 'lucide-react';
+import { Plus, Trash2, Save, Package, ShoppingCart, Edit2, X, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
+import Swal from 'sweetalert2';
 
 import { useGlobalState } from '../context/GlobalContext';
+import { isRecordEditable } from '../utils/dateUtils';
 
 const B2BShipments = () => {
-  const [products, setProducts] = useState([{ id: Date.now(), name: '', quantity: '' }]);
-  const { stock, staff, couriers, b2bShipments: shipments, addB2BShipment, updateB2BShipment, deleteB2BShipment } = useGlobalState();
+  const { stock, staff, couriers, b2bShipments: shipments, addB2BShipment, updateB2BShipment, deleteB2BShipment, drafts, updateDraft, clearDraft } = useGlobalState();
   
-  const [formData, setFormData] = useState({
-    whoParceled: '',
-    clientName: '',
-    courierName: '',
-    boxes: '',
-    date: new Date().toISOString().split('T')[0]
+  const [formData, setFormData] = useState(() => {
+    return drafts.b2b?.formData || {
+      whoParceled: '',
+      clientName: '',
+      courierName: '',
+      boxes: '',
+      date: new Date().toISOString().split('T')[0]
+    };
+  });
+
+  const [products, setProducts] = useState(() => {
+    return drafts.b2b?.products || [{ id: Date.now(), name: '', quantity: '' }];
   });
 
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
+
+  // Sync draft
+  React.useEffect(() => {
+    if (!isEditing) {
+      updateDraft('b2b', { formData, products });
+    }
+  }, [formData, products, isEditing]);
 
   const handleAddProduct = () => setProducts([...products, { id: Date.now() + products.length, name: '', quantity: '' }]);
   const handleRemoveProduct = (id) => setProducts(products.filter((p) => p.id !== id));
@@ -51,6 +65,7 @@ const B2BShipments = () => {
     } else {
       addB2BShipment(shipmentData);
       toast.success('B2B Shipment recorded!');
+      clearDraft('b2b');
     }
 
     handleCancel();
@@ -78,10 +93,20 @@ const B2BShipments = () => {
   };
 
   const handleDelete = (id) => {
-    if (window.confirm('Delete this shipment and restore stock?')) {
-      deleteB2BShipment(id);
-      toast.error('Shipment deleted & Stock restored.');
-    }
+    Swal.fire({
+      title: 'Delete this shipment?',
+      text: "This will restore the deducted stock back to your inventory.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#e11d48',
+      cancelButtonColor: '#cbd5e1',
+      confirmButtonText: 'Yes, delete it!'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        deleteB2BShipment(id);
+        toast.error('Shipment deleted & Stock restored.');
+      }
+    });
   };
 
   return (
@@ -163,10 +188,10 @@ const B2BShipments = () => {
                       <div className="md:col-span-7">
                         <SearchableSelect 
                           label={products[0].id === product.id ? "Select Product / SKU" : undefined}
-                          options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)}
-                          value={selectedSKU ? `[${selectedSKU.sku || 'N/A'}] ${selectedSKU.name} (Pack: ${selectedSKU.packSize || 1})` : ''}
+                          options={stock.filter(s => !s.isComposite).map(s => `${s.name} (Pack: ${s.packSize || 1})`)}
+                          value={selectedSKU ? `${selectedSKU.name} (Pack: ${selectedSKU.packSize || 1})` : ''}
                           onChange={(val) => {
-                            const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
+                            const selectedName = stock.find(s => !s.isComposite && `${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
                             updateProduct(product.id, 'name', selectedName || '');
                           }}
                         />
@@ -272,20 +297,29 @@ const B2BShipments = () => {
                 </td>
                 <td className="py-4 px-6 text-sm text-center">
                   <div className="flex items-center justify-center gap-2">
-                    <button 
-                      onClick={() => handleEdit(s)}
-                      className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100"
-                      title="Edit Record"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(s.id)}
-                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
-                      title="Delete Record & Restore Stock"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    {isRecordEditable(s.date) ? (
+                      <>
+                        <button 
+                          onClick={() => handleEdit(s)}
+                          className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100"
+                          title="Edit Record"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(s.id)}
+                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                          title="Delete Record & Restore Stock"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </>
+                    ) : (
+                      <span className="p-1.5 text-slate-300 flex items-center gap-1 cursor-not-allowed" title="Records older than 5 days cannot be edited">
+                        <Lock size={16} />
+                        <span className="text-[10px] uppercase font-bold tracking-tighter">Locked</span>
+                      </span>
+                    )}
                   </div>
                 </td>
               </tr>

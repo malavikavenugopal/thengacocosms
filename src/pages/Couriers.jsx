@@ -3,6 +3,7 @@ import { Card, Input, Button, Table } from '../components/ui';
 import { Plus, Trash2, Truck, Edit2, Check, X } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
+import Swal from 'sweetalert2';
 
 const Couriers = () => {
   const { couriers, addCourier, updateCourier, deleteCourier } = useGlobalState();
@@ -57,14 +58,24 @@ const Couriers = () => {
   };
 
   const handleDeleteCourier = async (id) => {
-    if (window.confirm('Delete this courier?')) {
-      try {
-        await deleteCourier(id);
-        toast.error('Courier removed.');
-      } catch (err) {
-        toast.error('Error deleting courier');
+    Swal.fire({
+      title: 'Remove Courier Partner?',
+      text: "This partner will no longer appear in the shipment options.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#4f46e5',
+      cancelButtonColor: '#cbd5e1',
+      confirmButtonText: 'Yes, delete it'
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          await deleteCourier(id);
+          toast.error('Courier removed.');
+        } catch (err) {
+          toast.error('Error deleting courier');
+        }
       }
-    }
+    });
   };
 
   return (

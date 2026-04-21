@@ -3,6 +3,7 @@ import { Card, Input, Button, Table } from '../components/ui';
 import { Plus, Trash2, Users, Edit2, Check, X } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
+import Swal from 'sweetalert2';
 
 const Staff = () => {
   const { staff, addStaffMember, updateStaffMember, deleteStaffMember } = useGlobalState();
@@ -57,14 +58,24 @@ const Staff = () => {
   };
 
   const handleDeleteStaff = async (id) => {
-    if (window.confirm('Delete this person?')) {
-      try {
-        await deleteStaffMember(id);
-        toast.error('Staff removed.');
-      } catch (err) {
-        toast.error('Error deleting staff');
+    Swal.fire({
+      title: 'Remove Staff Member?',
+      text: "This person will no longer appear in the 'Parceled By' list.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#4f46e5',
+      cancelButtonColor: '#cbd5e1',
+      confirmButtonText: 'Yes, delete it'
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          await deleteStaffMember(id);
+          toast.error('Staff removed.');
+        } catch (err) {
+          toast.error('Error deleting staff');
+        }
       }
-    }
+    });
   };
 
   return (

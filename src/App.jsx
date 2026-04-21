@@ -13,6 +13,7 @@ import Staff from './pages/Staff';
 import Channels from './pages/Channels';
 import Couriers from './pages/Couriers';
 import Returns from './pages/Returns';
+import PurchaseManagement from './pages/PurchaseManagement';
 import Login from './pages/Login';
 import { GlobalProvider, useGlobalState } from './context/GlobalContext';
 
@@ -50,6 +51,7 @@ function App() {
           }>
             <Route index element={<Dashboard />} />
             <Route path="products" element={<Products />} />
+            <Route path="purchases" element={<PurchaseManagement />} />
             <Route path="staff" element={<Staff />} />
             <Route path="channels" element={<Channels />} />
             <Route path="couriers" element={<Couriers />} />

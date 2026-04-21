@@ -23,13 +23,44 @@ export const GlobalProvider = ({ children }) => {
   const [b2cShipments, setB2cShipments] = useState([]);
   const [damageRecords, setDamageRecords] = useState([]);
   const [returnRecords, setReturnRecords] = useState([]);
+  const [purchaseRecords, setPurchaseRecords] = useState([]);
   const [staff, setStaff] = useState([]);
   const [channels, setChannels] = useState([]);
   const [couriers, setCouriers] = useState([]);
+  const [qcRecords, setQcRecords] = useState([]);
   const [monthlyStockData, setMonthlyStockData] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
+  
+  // Form Drafts for Persistence
+  const [drafts, setDrafts] = useState(() => {
+    const saved = localStorage.getItem('thenga_form_drafts');
+    try {
+      return saved ? JSON.parse(saved) : {
+        b2b: null,
+        b2c: null,
+        purchase: null,
+        return: null,
+        damage: null,
+        qc: null
+      };
+    } catch (e) {
+      return { b2b: null, b2c: null, purchase: null, return: null, damage: null, qc: null };
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('thenga_form_drafts', JSON.stringify(drafts));
+  }, [drafts]);
+
+  const updateDraft = (module, data) => {
+    setDrafts(prev => ({ ...prev, [module]: data }));
+  };
+
+  const clearDraft = (module) => {
+    setDrafts(prev => ({ ...prev, [module]: null }));
+  };
 
   // Auth Listener
   useEffect(() => {
@@ -83,6 +114,14 @@ export const GlobalProvider = ({ children }) => {
     const unsubReturns = onSnapshot(query(collection(db, 'returnRecords'), orderBy('date', 'desc')), (snapshot) => {
       setReturnRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
+    
+    const unsubPurchases = onSnapshot(query(collection(db, 'purchaseRecords'), orderBy('date', 'desc')), (snapshot) => {
+      setPurchaseRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
+
+    const unsubQC = onSnapshot(query(collection(db, 'qcRecords'), orderBy('date', 'desc')), (snapshot) => {
+      setQcRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
 
     const unsubStaff = onSnapshot(collection(db, 'staff'), (snapshot) => {
       setStaff(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
@@ -103,8 +142,8 @@ export const GlobalProvider = ({ children }) => {
 
     return () => {
       unsubStock(); unsubB2B(); unsubB2C(); unsubDamage(); 
-      unsubReturns(); unsubStaff(); unsubChannels(); unsubCouriers();
-      unsubMonthly();
+      unsubReturns(); unsubQC(); unsubStaff(); unsubChannels(); unsubCouriers();
+      unsubMonthly(); unsubPurchases();
     };
   }, [currentUser]);
 
@@ -239,14 +278,43 @@ export const GlobalProvider = ({ children }) => {
     }
   };
 
-  const addDamageRecord = async (record) => {
+  const addDamageRecord = async (record, shouldAdjust) => {
     // Inject packSize from Master Data
     const masterSKU = stock.find(s => s.name === record.productName);
-    const finalizedRecord = { ...record, packSize: masterSKU?.packSize || 1 };
+    const finalizedRecord = { 
+      ...record, 
+      packSize: masterSKU?.packSize || 1,
+      deducted: shouldAdjust 
+    };
     
     await addDoc(collection(db, 'damageRecords'), finalizedRecord);
-    const totalUnits = (Number(record.quantity) || 0) * (masterSKU?.packSize || 1);
-    await updateFirestoreStock(record.productName, totalUnits, 'add', 'damage');
+    
+    if (shouldAdjust) {
+      const totalUnits = (Number(record.quantity) || 0) * (masterSKU?.packSize || 1);
+      await updateFirestoreStock(record.productName, totalUnits, 'add', 'damage');
+    }
+  };
+
+  const updateDamageRecord = async (id, updatedRecord, shouldAdjust) => {
+    const oldRecord = damageRecords.find(r => r.id === id);
+    if (!oldRecord) return;
+
+    // 1. Revert old stock if it was deducted
+    if (oldRecord.deducted) {
+      const oldUnits = (Number(oldRecord.quantity) || 0) * (Number(oldRecord.packSize) || 1);
+      await updateFirestoreStock(oldRecord.productName, oldUnits, 'sub', 'damage');
+    }
+
+    // 2. Update doc
+    const masterSKU = stock.find(s => s.name === updatedRecord.productName);
+    const finalized = { ...updatedRecord, packSize: masterSKU?.packSize || 1, deducted: shouldAdjust };
+    await updateDoc(doc(db, 'damageRecords', String(id)), finalized);
+
+    // 3. Apply new stock if requested
+    if (shouldAdjust) {
+      const newUnits = (Number(updatedRecord.quantity) || 0) * (masterSKU?.packSize || 1);
+      await updateFirestoreStock(updatedRecord.productName, newUnits, 'add', 'damage');
+    }
   };
 
   const deleteDamageRecord = async (id) => {
@@ -256,26 +324,59 @@ export const GlobalProvider = ({ children }) => {
     if (record) {
       try {
         await deleteDoc(doc(db, 'damageRecords', docId));
-        const totalUnits = (Number(record.quantity) || 0) * (Number(record.packSize) || 1);
-        await updateFirestoreStock(record.productName, totalUnits, 'sub', 'damage');
+        if (record.deducted) {
+          const totalUnits = (Number(record.quantity) || 0) * (Number(record.packSize) || 1);
+          await updateFirestoreStock(record.productName, totalUnits, 'sub', 'damage');
+        }
       } catch (err) {
         console.error("Firebase Damage Delete Error:", err);
       }
     }
   };
 
-  const addReturnRecord = async (record) => {
+  const addReturnRecord = async (record, shouldAdjust) => {
     // Inject packSize from Master Data
     const masterSKU = stock.find(s => s.name === record.productName);
-    const finalizedRecord = { ...record, packSize: masterSKU?.packSize || 1 };
+    const finalizedRecord = { 
+      ...record, 
+      packSize: masterSKU?.packSize || 1,
+      deducted: shouldAdjust // Reusing 'deducted' field name for consistency
+    };
 
     await addDoc(collection(db, 'returnRecords'), finalizedRecord);
-    const totalUnits = (Number(record.quantity) || 0) * (masterSKU?.packSize || 1);
     
-    // LOGIC: ONLY add to stock if it is REUSABLE (SELLABLE). 
-    // If damaged/waste, we keep the history but it stays OUT of inventory.
-    if (record.isReusable) {
+    // LOGIC: ONLY add to stock if it is REUSABLE (SELLABLE) AND user confirmed adjustment.
+    if (shouldAdjust && record.isReusable) {
+      const totalUnits = (Number(record.quantity) || 0) * (masterSKU?.packSize || 1);
       await updateFirestoreStock(record.productName, totalUnits, 'add', 'returned');
+    }
+  };
+
+  const updateReturnRecord = async (id, updatedRecord, shouldAdjust) => {
+    const oldRecord = returnRecords.find(r => r.id === id);
+    if (!oldRecord) return;
+
+    // 1. Revert old stock
+    if (oldRecord.deducted && oldRecord.isReusable) {
+      const oldUnits = (Number(oldRecord.quantity) || 0) * (Number(oldRecord.packSize) || 1);
+      await updateFirestoreStock(oldRecord.productName, oldUnits, 'sub', 'returned');
+    }
+
+    // 2. Update doc
+    const masterSKU = stock.find(s => s.name === updatedRecord.productName);
+    const finalized = { 
+      ...updatedRecord, 
+      packSize: masterSKU?.packSize || 1, 
+      deducted: shouldAdjust,
+      isReusable: updatedRecord.condition === 'Good (Reuse)',
+      isDamaged: updatedRecord.condition === 'Damaged (Waste)'
+    };
+    await updateDoc(doc(db, 'returnRecords', String(id)), finalized);
+
+    // 3. Apply new stock
+    if (shouldAdjust && finalized.isReusable) {
+      const newUnits = (Number(updatedRecord.quantity) || 0) * (masterSKU?.packSize || 1);
+      await updateFirestoreStock(updatedRecord.productName, newUnits, 'add', 'returned');
     }
   };
 
@@ -286,13 +387,115 @@ export const GlobalProvider = ({ children }) => {
     if (record) {
       try {
         await deleteDoc(doc(db, 'returnRecords', docId));
-        const totalUnits = (Number(record.quantity) || 0) * (Number(record.packSize) || 1);
-        
-        if (record.isReusable) {
+        if (record.deducted && record.isReusable) {
+          const totalUnits = (Number(record.quantity) || 0) * (Number(record.packSize) || 1);
           await updateFirestoreStock(record.productName, totalUnits, 'sub', 'returned');
         }
       } catch (err) {
         console.error("Firebase Return Delete Error:", err);
+      }
+    }
+  };
+
+  const addPurchaseRecord = async (record) => {
+    const masterSKU = stock.find(s => s.name === record.productName);
+    const finalizedRecord = { ...record, packSize: masterSKU?.packSize || 1 };
+    
+    await addDoc(collection(db, 'purchaseRecords'), finalizedRecord);
+    const totalUnits = (Number(record.quantity) || 0) * (masterSKU?.packSize || 1);
+    await updateFirestoreStock(record.productName, totalUnits, 'add', 'in');
+  };
+
+  const updatePurchaseRecord = async (id, updatedRecord) => {
+    const oldRecord = purchaseRecords.find(r => r.id === id);
+    if (!oldRecord) return;
+
+    // 1. Revert old
+    const oldUnits = (Number(oldRecord.quantity) || 0) * (Number(oldRecord.packSize) || 1);
+    await updateFirestoreStock(oldRecord.productName, oldUnits, 'sub', 'in');
+
+    // 2. Update
+    const masterSKU = stock.find(s => s.name === updatedRecord.productName);
+    const finalized = { ...updatedRecord, packSize: masterSKU?.packSize || 1 };
+    await updateDoc(doc(db, 'purchaseRecords', String(id)), finalized);
+
+    // 3. Apply new
+    const newUnits = (Number(updatedRecord.quantity) || 0) * (masterSKU?.packSize || 1);
+    await updateFirestoreStock(updatedRecord.productName, newUnits, 'add', 'in');
+  };
+
+  const deletePurchaseRecord = async (id) => {
+    if (!id) return;
+    const docId = String(id);
+    const record = purchaseRecords.find(r => r.id === docId);
+    if (record) {
+      try {
+        await deleteDoc(doc(db, 'purchaseRecords', docId));
+        const totalUnits = (Number(record.quantity) || 0) * (Number(record.packSize) || 1);
+        await updateFirestoreStock(record.productName, totalUnits, 'sub', 'in');
+      } catch (err) {
+        console.error("Purchase Delete Error:", err);
+      }
+    }
+  };
+
+  const addQCRecord = async (record, shouldDeduct) => {
+    const masterSKU = stock.find(s => s.name === record.productName);
+    const finalizedRecord = { 
+      ...record, 
+      packSize: masterSKU?.packSize || 1,
+      deducted: shouldDeduct 
+    };
+    
+    await addDoc(collection(db, 'qcRecords'), finalizedRecord);
+    
+    // Deduct damaged items from stock if any and confirmed
+    const damagedQty = Number(record.damaged) || 0;
+    if (shouldDeduct && damagedQty > 0) {
+      const totalUnits = damagedQty * (masterSKU?.packSize || 1);
+      await updateFirestoreStock(record.productName, totalUnits, 'add', 'damage');
+    }
+  };
+
+  const updateQCRecord = async (id, updatedRecord, shouldDeduct) => {
+    const oldRecord = qcRecords.find(r => r.id === id);
+    if (!oldRecord) return;
+
+    // 1. Revert old
+    const oldDamaged = Number(oldRecord.damaged) || 0;
+    if (oldRecord.deducted && oldDamaged > 0) {
+      const oldUnits = oldDamaged * (Number(oldRecord.packSize) || 1);
+      await updateFirestoreStock(oldRecord.productName, oldUnits, 'sub', 'damage');
+    }
+
+    // 2. Update
+    const masterSKU = stock.find(s => s.name === updatedRecord.productName);
+    const finalized = { ...updatedRecord, packSize: masterSKU?.packSize || 1, deducted: shouldDeduct };
+    await updateDoc(doc(db, 'qcRecords', String(id)), finalized);
+
+    // 3. Apply new
+    const newDamaged = Number(updatedRecord.damaged) || 0;
+    if (shouldDeduct && newDamaged > 0) {
+      const newUnits = newDamaged * (masterSKU?.packSize || 1);
+      await updateFirestoreStock(updatedRecord.productName, newUnits, 'add', 'damage');
+    }
+  };
+
+  const deleteQCRecord = async (id) => {
+    if (!id) return;
+    const docId = String(id);
+    const record = qcRecords.find(r => r.id === docId);
+    if (record) {
+      try {
+        await deleteDoc(doc(db, 'qcRecords', docId));
+        // Restore stock if there was damage AND it was deducted
+        const damagedQty = Number(record.damaged) || 0;
+        if (record.deducted && damagedQty > 0) {
+          const totalUnits = damagedQty * (Number(record.packSize) || 1);
+          await updateFirestoreStock(record.productName, totalUnits, 'sub', 'damage');
+        }
+      } catch (err) {
+        console.error("QC Delete Error:", err);
       }
     }
   };
@@ -381,11 +584,14 @@ export const GlobalProvider = ({ children }) => {
       stock, addSKU, updateSKU, deleteSKU,
       b2bShipments, addB2BShipment, updateB2BShipment, deleteB2BShipment,
       b2cShipments, addB2CShipment, updateB2CShipment, deleteB2CShipment,
-      damageRecords, addDamageRecord, deleteDamageRecord,
-      returnRecords, addReturnRecord, deleteReturnRecord,
+      damageRecords, addDamageRecord, updateDamageRecord, deleteDamageRecord,
+      returnRecords, addReturnRecord, updateReturnRecord, deleteReturnRecord,
+      purchaseRecords, addPurchaseRecord, updatePurchaseRecord, deletePurchaseRecord,
+      qcRecords, addQCRecord, updateQCRecord, deleteQCRecord,
       staff, addStaffMember, updateStaffMember, deleteStaffMember,
       channels, addChannel, updateChannel, deleteChannel,
       couriers, addCourier, updateCourier, deleteCourier,
+      drafts, updateDraft, clearDraft,
       monthlyStockData,
       saveMonthlyStock: async (month, productId, updates) => {
         const id = `${month}_${productId}`;

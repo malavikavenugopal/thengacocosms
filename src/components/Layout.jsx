@@ -13,6 +13,7 @@ const Layout = () => {
     switch(location.pathname) {
       case '/': return 'Dashboard Overview';
       case '/products': return 'SKU Master';
+      case '/purchases': return 'Purchase Management';
       case '/staff': return 'Staff Management';
       case '/channels': return 'Channel Management';
       case '/couriers': return 'Courier Management';

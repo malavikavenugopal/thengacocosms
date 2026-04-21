@@ -3,6 +3,7 @@ import { Card, Input, Button, Table } from '../components/ui';
 import { Plus, Trash2, Globe, Edit2, Check, X } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
+import Swal from 'sweetalert2';
 
 const Channels = () => {
   const { channels, addChannel, updateChannel, deleteChannel } = useGlobalState();
@@ -57,14 +58,24 @@ const Channels = () => {
   };
 
   const handleDeleteChannel = async (id) => {
-    if (window.confirm('Delete this channel?')) {
-      try {
-        await deleteChannel(id);
-        toast.error('Channel removed.');
-      } catch (err) {
-        toast.error('Error deleting channel');
+    Swal.fire({
+      title: 'Remove Sales Channel?',
+      text: "This channel will no longer appear in the B2C shipment options.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#4f46e5',
+      cancelButtonColor: '#cbd5e1',
+      confirmButtonText: 'Yes, delete it'
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        try {
+          await deleteChannel(id);
+          toast.error('Channel removed.');
+        } catch (err) {
+          toast.error('Error deleting channel');
+        }
       }
-    }
+    });
   };
 
   return (
