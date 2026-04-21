@@ -313,3 +313,366 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 };
+
+/**
+ * Specialized Formatted Export for ROP Planning
+ */
+export const exportFormattedROP = (products, type = 'ROP', fileName = 'ROP_Planning.xls') => {
+  if (!products || !products.length) return;
+
+  const title = 'REORDER POINT (ROP) PLANNING & SAFETY STOCK ANALYSIS';
+  const timestamp = new Date().toISOString().split('T')[0];
+  
+  const styles = `
+    <style>
+      table { border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
+      .header-main { 
+        background-color: #14532d; 
+        color: #ffffff; 
+        font-size: 18px; 
+        font-weight: bold; 
+        text-align: center; 
+        padding: 20px; 
+        border: 1px solid #064e3b;
+      }
+      .header-sub {
+        background-color: #f1f5f9;
+        color: #64748b;
+        font-size: 11px;
+        text-align: center;
+        font-style: italic;
+        padding: 5px;
+        border: 1px solid #cbd5e1;
+      }
+      .col-header {
+        background-color: #14532d;
+        color: #ffffff;
+        font-weight: bold;
+        padding: 10px;
+        border: 1px solid #166534;
+        text-align: center;
+        font-size: 11px;
+        text-transform: uppercase;
+      }
+      td { 
+        padding: 8px 6px; 
+        border: 1px solid #e2e8f0; 
+        font-size: 11px;
+        color: #1e293b;
+        text-align: center;
+      }
+      .product-name { text-align: left; font-weight: bold; }
+      .rop-active { background-color: #eef2ff; color: #4f46e5; font-weight: bold; }
+      .low-stock { color: #e11d48; font-weight: bold; background-color: #fff1f2; }
+      .healthy { color: #059669; font-weight: bold; }
+      .shortage-badge { background-color: #e11d48; color: #ffffff; font-weight: bold; }
+    </style>
+  `;
+
+  let tableHtml = `<table>`;
+  
+  // Row 1: Title
+  tableHtml += `
+    <tr>
+      <th colspan="21" class="header-main">${title}</th>
+    </tr>
+  `;
+
+  // Row 2: Metadata
+  tableHtml += `
+    <tr>
+      <th colspan="21" class="header-sub">Generated: ${timestamp}</th>
+    </tr>
+  `;
+
+  // Row 3: Headers
+  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const headers = [
+    'Product / SKU', 
+    ...months,
+    'LT', 'SS', 'ROP 1 (J-J)', 'ROP 2 (J-D)', 
+    'Current Stock', 'Status', 'Shortage'
+  ];
+  
+  tableHtml += `<tr>`;
+  headers.forEach(h => {
+    tableHtml += `<th class="col-header">${h}</th>`;
+  });
+  tableHtml += `</tr>`;
+
+  // Body: passed products already have required calculated fields from the component
+  products.forEach(p => {
+    tableHtml += `<tr>`;
+    tableHtml += `<td class="product-name">${p.name} (${p.sku || 'N/A'})</td>`;
+    
+    // Monthly columns
+    p.monthly.forEach(m => {
+      tableHtml += `<td>${m > 0 ? m : '-'}</td>`;
+    });
+
+    // Strategy columns
+    tableHtml += `<td>${p.leadTime || 0}</td>`;
+    tableHtml += `<td>${p.safetyStock || 0}</td>`;
+    tableHtml += `<td class="${p.isFirstHalf ? 'rop-active' : ''}">${p.ropJanJun || 0}</td>`;
+    tableHtml += `<td class="${!p.isFirstHalf ? 'rop-active' : ''}">${p.ropJulDec || 0}</td>`;
+    
+    // Status columns
+    tableHtml += `<td class="${p.isLow ? 'low-stock' : 'healthy'}">${p.totalStock}</td>`;
+    tableHtml += `<td class="${p.isLow ? 'low-stock' : 'healthy'}">${p.isLow ? 'ORDER NOW' : 'HEALTHY'}</td>`;
+    tableHtml += `<td class="${p.shortageAmt > 0 ? 'shortage-badge' : ''}">${p.shortageAmt > 0 ? `+${p.shortageAmt}` : '-'}</td>`;
+    
+    tableHtml += `</tr>`;
+  });
+
+  tableHtml += `</table>`;
+
+  const excelFile = `
+    <html>
+    <head><meta charset="UTF-8">${styles}</head>
+    <body>${tableHtml}</body>
+    </html>
+  `;
+
+  const blob = new Blob([excelFile], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+/**
+ * Specialized Formatted Export for Monthly Stock Check
+ */
+export const exportFormattedStockCheck = (data, month, fileName = 'Stock_Check.xls') => {
+  if (!data || !data.length) return;
+
+  const title = `MONTHLY INVENTORY RECONCILIATION — ${month.toUpperCase()}`;
+  const timestamp = new Date().toISOString().split('T')[0];
+  
+  const styles = `
+    <style>
+      table { border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
+      .header-main { 
+        background-color: #14532d; 
+        color: #ffffff; 
+        font-size: 18px; 
+        font-weight: bold; 
+        text-align: center; 
+        padding: 20px; 
+        border: 1px solid #064e3b;
+      }
+      .header-sub {
+        background-color: #f1f5f9;
+        color: #64748b;
+        font-size: 11px;
+        text-align: center;
+        font-style: italic;
+        padding: 5px;
+        border: 1px solid #cbd5e1;
+      }
+      .col-header {
+        background-color: #14532d;
+        color: #ffffff;
+        font-weight: bold;
+        padding: 10px;
+        border: 1px solid #166534;
+        text-align: center;
+        font-size: 11px;
+        text-transform: uppercase;
+      }
+      td { 
+        padding: 8px 6px; 
+        border: 1px solid #e2e8f0; 
+        font-size: 11px;
+        color: #1e293b;
+        text-align: center;
+      }
+      .product-name { text-align: left; font-weight: bold; }
+      .diff-pos { background-color: #fef3c7; color: #92400e; font-weight: bold; }
+      .diff-neg { background-color: #fee2e2; color: #b91c1c; font-weight: bold; }
+      .diff-match { background-color: #ecfdf5; color: #065f46; font-weight: bold; }
+      .num-bold { font-weight: bold; }
+      .expected-col { background-color: #f8fafc; color: #1e293b; font-weight: bold; }
+    </style>
+  `;
+
+  let tableHtml = `<table>`;
+  
+  // Row 1: Title
+  tableHtml += `
+    <tr>
+      <th colspan="11" class="header-main">${title}</th>
+    </tr>
+  `;
+
+  // Row 2: Metadata
+  tableHtml += `
+    <tr>
+      <th colspan="11" class="header-sub">Generated: ${timestamp}</th>
+    </tr>
+  `;
+
+  // Row 3: Headers
+  const headers = [
+    'SKU Code', 'SKU Name', 'Month', 'Opening', 'Stock In', 'Returns', 'Dispatch', 'Damage', 'Expected', 'Physical', 'Difference'
+  ];
+  
+  tableHtml += `<tr>`;
+  headers.forEach(h => {
+    tableHtml += `<th class="col-header">${h}</th>`;
+  });
+  tableHtml += `</tr>`;
+
+  // Body
+  data.forEach(row => {
+    const diff = Number(row.Difference) || 0;
+    let diffClass = 'diff-match';
+    if (diff < 0) diffClass = 'diff-neg';
+    else if (diff > 0) diffClass = 'diff-pos';
+
+    tableHtml += `<tr>`;
+    tableHtml += `<td>${row.SKU_Code || '-'}</td>`;
+    tableHtml += `<td class="product-name">${row.SKU_Name}</td>`;
+    tableHtml += `<td>${row.Month}</td>`;
+    tableHtml += `<td>${row.Opening || 0}</td>`;
+    tableHtml += `<td>${row.Production || 0}</td>`;
+    tableHtml += `<td>${row['Returned Items'] || 0}</td>`;
+    tableHtml += `<td>${row.Dispatch || 0}</td>`;
+    tableHtml += `<td>${row.Damage || 0}</td>`;
+    tableHtml += `<td class="expected-col">${row.Expected || 0}</td>`;
+    tableHtml += `<td class="num-bold">${row.Physical || 0}</td>`;
+    tableHtml += `<td class="${diffClass}">${diff > 0 ? `+${diff}` : diff}</td>`;
+    tableHtml += `</tr>`;
+  });
+
+  tableHtml += `</table>`;
+
+  const excelFile = `
+    <html>
+    <head><meta charset="UTF-8">${styles}</head>
+    <body>${tableHtml}</body>
+    </html>
+  `;
+
+  const blob = new Blob([excelFile], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+/**
+ * Generic Formatted Export for all other reports
+ */
+export const exportFormattedGeneric = (data, titleSuffix = 'REPORT', fileName = 'Report.xls') => {
+  if (!data || !data.length) return;
+
+  const title = titleSuffix.toUpperCase();
+  const timestamp = new Date().toISOString().split('T')[0];
+  const headers = Object.keys(data[0]);
+  
+  const styles = `
+    <style>
+      table { border-collapse: collapse; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
+      .header-main { 
+        background-color: #14532d; 
+        color: #ffffff; 
+        font-size: 18px; 
+        font-weight: bold; 
+        text-align: center; 
+        padding: 20px; 
+        border: 1px solid #064e3b;
+      }
+      .header-sub {
+        background-color: #f1f5f9;
+        color: #64748b;
+        font-size: 11px;
+        text-align: center;
+        font-style: italic;
+        padding: 5px;
+        border: 1px solid #cbd5e1;
+      }
+      .col-header {
+        background-color: #14532d;
+        color: #ffffff;
+        font-weight: bold;
+        padding: 10px;
+        border: 1px solid #166534;
+        text-align: center;
+        font-size: 11px;
+        text-transform: uppercase;
+      }
+      td { 
+        padding: 10px 8px; 
+        border: 1px solid #e2e8f0; 
+        font-size: 11px;
+        color: #101827;
+        text-align: center;
+      }
+      .text-left { text-align: left; }
+      .num-bold { font-weight: bold; }
+    </style>
+  `;
+
+  let tableHtml = `<table>`;
+  
+  // Row 1: Title
+  tableHtml += `
+    <tr>
+      <th colspan="${headers.length}" class="header-main">${title}</th>
+    </tr>
+  `;
+
+  // Row 2: Metadata
+  tableHtml += `
+    <tr>
+      <th colspan="${headers.length}" class="header-sub">Generated: ${timestamp}</th>
+    </tr>
+  `;
+
+  // Row 3: Headers
+  tableHtml += `<tr>`;
+  headers.forEach(h => {
+    tableHtml += `<th class="col-header">${h.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim()}</th>`;
+  });
+  tableHtml += `</tr>`;
+
+  // Body
+  data.forEach(row => {
+    tableHtml += `<tr>`;
+    headers.forEach(h => {
+      const val = row[h];
+      const isNum = typeof val === 'number';
+      const isLarge = isNum && val > 0;
+      tableHtml += `<td class="${!isNum ? 'text-left' : ''} ${isLarge ? 'num-bold' : ''}">${val !== undefined ? val : '-'}</td>`;
+    });
+    tableHtml += `</tr>`;
+  });
+
+  tableHtml += `</table>`;
+
+  const excelFile = `
+    <html>
+    <head><meta charset="UTF-8">${styles}</head>
+    <body>${tableHtml}</body>
+    </html>
+  `;
+
+  const blob = new Blob([excelFile], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};

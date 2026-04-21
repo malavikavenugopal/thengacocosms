@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Card, Button } from '../components/ui';
 import { Search, DownloadCloud, CheckCircle2, Calendar, ArrowRightLeft, Eye, Info, X, MapPin, Truck, AlertTriangle, RotateCcw, ShoppingCart } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
-import { exportToCSV } from '../utils/exportUtils';
+import { exportFormattedStockCheck } from '../utils/exportUtils';
 import toast from 'react-hot-toast';
 
 const MonthlyStockCheck = () => {
@@ -155,7 +155,7 @@ const MonthlyStockCheck = () => {
         };
       });
     
-    exportToCSV(dataToExport, `stock_check_${selectedMonth}.csv`);
+    exportFormattedStockCheck(dataToExport, selectedMonth, `Stock_Check_${selectedMonth}.xls`);
   };
 
   return (
@@ -189,13 +189,13 @@ const MonthlyStockCheck = () => {
           </div>
 
           <div className="flex gap-2 w-full sm:w-auto">
-            <Button onClick={handleCarryForward} variant="secondary" className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 flex-1 sm:flex-none" title="Carry forward last month's closing as this month's opening">
+            <Button onClick={handleCarryForward} variant="secondary" className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 shadow-sm flex-1 sm:flex-none" title="Carry forward last month's closing as this month's opening">
               <ArrowRightLeft size={18} /> Carry Forward
             </Button>
-            <Button onClick={handleExport} variant="secondary" className="text-slate-600 flex-1 sm:flex-none">
+            <Button onClick={handleExport} variant="success" className="shadow-lg shadow-emerald-50 flex-1 sm:flex-none">
               <DownloadCloud size={18} /> Export
             </Button>
-            <Button onClick={handleFinalize} variant="primary" className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-emerald-500/30 flex-1 sm:flex-none">
+            <Button onClick={handleFinalize} variant="primary" className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-lg shadow-emerald-100 flex-1 sm:flex-none">
               <CheckCircle2 size={18} /> Finalize
             </Button>
           </div>

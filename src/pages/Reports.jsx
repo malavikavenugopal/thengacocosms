@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Card, Input, Select, Button, Table } from '../components/ui';
 import { Download, Filter, FileSpreadsheet, Package, ShoppingCart, AlertCircle, RotateCcw } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
-import { exportToCSV, exportToExcel } from '../utils/exportUtils';
+import { exportFormattedGeneric } from '../utils/exportUtils';
 
 const Reports = () => {
   const { stock, b2bShipments, b2cShipments, damageRecords, returnRecords, channels } = useGlobalState();
@@ -186,6 +186,7 @@ const Reports = () => {
 
   const handleExport = () => {
     let dataToExport = [];
+    let title = '';
     let fileName = '';
 
     if (activeTab === 'shipments') {
@@ -193,9 +194,10 @@ const Reports = () => {
         Date: s.date,
         Type: s.type,
         Channel: s.type === 'B2B' ? s.whoParceled : s.channel,
-        SKUs: s.products.map(p => `${p.name} (${p.quantity})`).join('; '),
+        Products: s.products.map(p => `${p.name} (${p.quantity})`).join(', '),
         TotalUnits: s.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)
       }));
+      title = 'DISPATCH LOG — SHIPMENTS';
       fileName = `shipments_report_${new Date().toISOString().split('T')[0]}.xls`;
     } else if (activeTab === 'b2cPivot') {
       dataToExport = b2cPivotData.map(row => {
@@ -210,13 +212,15 @@ const Reports = () => {
         rowData.TOTAL = row.total;
         return rowData;
       });
+      title = 'B2C SALES SUMMARY — PIVOT';
       fileName = `b2c_sales_summary_${new Date().toISOString().split('T')[0]}.xls`;
     } else if (activeTab === 'b2bPivot') {
       dataToExport = b2bPivotData.map(row => ({
         SKU: row.sku,
         Product: row.name,
-        Quantity: row.total
+        TotalUnits: row.total
       }));
+      title = 'B2B SALES SUMMARY';
       fileName = `b2b_sales_summary_${new Date().toISOString().split('T')[0]}.xls`;
     } else if (activeTab === 'products') {
       dataToExport = productStats.map(p => ({
@@ -228,6 +232,7 @@ const Reports = () => {
         CurrentStock: p.currentStock,
         Status: p.status
       }));
+      title = 'SKU MASTER HEALTH REPORT';
       fileName = `sku_report_${new Date().toISOString().split('T')[0]}.xls`;
     } else if (activeTab === 'damage') {
       dataToExport = filteredDamages.map(d => ({
@@ -236,6 +241,7 @@ const Reports = () => {
         Quantity: d.quantity,
         Reason: d.reason || 'N/A'
       }));
+      title = 'DAMAGE LOG';
       fileName = `damage_report_${new Date().toISOString().split('T')[0]}.xls`;
     } else if (activeTab === 'returns') {
       dataToExport = filteredReturns.map(r => ({
@@ -245,15 +251,11 @@ const Reports = () => {
         Quantity: r.quantity,
         Reason: r.reason || 'N/A'
       }));
+      title = 'RETURNS LOG';
       fileName = `returns_report_${new Date().toISOString().split('T')[0]}.xls`;
     }
 
-    if (activeTab === 'b2cPivot') {
-      fileName = `b2c_sales_summary_${new Date().toISOString().split('T')[0]}.xls`;
-      exportToExcel(dataToExport, fileName, 'Sales Summary');
-    } else {
-      exportToExcel(dataToExport, fileName);
-    }
+    exportFormattedGeneric(dataToExport, title, fileName);
   };
 
   const skuOptions = ['All SKUs', ...stock.map(p => p.name)];
@@ -266,7 +268,7 @@ const Reports = () => {
           <h2 className="text-2xl font-bold tracking-tight text-slate-900">Reports</h2>
           <p className="text-sm text-slate-500">Generate and export operations analytics</p>
         </div>
-        <Button onClick={handleExport} className="shrink-0 flex items-center gap-2">
+        <Button onClick={handleExport} variant="success" className="shrink-0 flex items-center gap-2 shadow-lg shadow-emerald-50">
           <Download size={16} /> Export {tabs.find(t => t.id === activeTab)?.label}
         </Button>
       </div>
@@ -490,7 +492,7 @@ const Reports = () => {
             <p className="text-sm text-indigo-700 mt-1">Export raw data to Excel for custom pivot tables and charts.</p>
           </div>
         </div>
-        <Button variant="primary" className="shrink-0 w-full sm:w-auto" onClick={handleExport}>
+        <Button variant="success" className="shrink-0 w-full sm:w-auto shadow-lg shadow-emerald-50" onClick={handleExport}>
           Download All Raw Data
         </Button>
       </div>

@@ -1,7 +1,8 @@
 import * as React from 'react';
 import { Card, Input, Table, Button } from '../components/ui';
-import { AlertCircle, AlertTriangle, CheckCircle, Package, Search, Settings2, BarChart3, TrendingDown, Info } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle, Package, Search, Settings2, BarChart3, TrendingDown, Info, Download } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
+import { exportFormattedROP } from '../utils/exportUtils';
 
 const ReorderPoint = () => {
     const { stock = [], b2bShipments = [], b2cShipments = [], updateSKU } = useGlobalState();
@@ -56,6 +57,27 @@ const ReorderPoint = () => {
         updateSKU(id, { [field]: Number(value) || 0 });
     };
 
+    const handleExport = () => {
+        const dataToExport = products.map(p => {
+            const activeROP = isFirstHalf ? (p.ropJanJun || 0) : (p.ropJulDec || 0);
+            const totalStock = (Number(p.in) || 0) + (Number(p.returned) || 0) - (Number(p.out) || 0) - (Number(p.damage) || 0);
+            const isLow = totalStock < activeROP;
+            const shortageAmt = isLow ? activeROP - totalStock : 0;
+            const monthly = getMonthlyConsumption(p.name);
+
+            return {
+                ...p,
+                monthly,
+                totalStock,
+                isLow,
+                shortageAmt,
+                isFirstHalf
+            };
+        });
+
+        exportFormattedROP(dataToExport, 'ROP', `ROP_Planning_${new Date().toISOString().split('T')[0]}.xls`);
+    };
+
     // Calculate metrics
     const stats = React.useMemo(() => {
         const critical = products.filter(p => {
@@ -78,12 +100,20 @@ const ReorderPoint = () => {
                     <p className="text-sm text-slate-500">Manage safety stocks, lead times, and replenishment alerts</p>
                 </div>
                 <div className="flex gap-3">
+                    <Button 
+                        variant="success"
+                        onClick={handleExport}
+                        className="flex items-center gap-2 shadow-lg shadow-emerald-100"
+                    >
+                        <Download size={18} />
+                        Download Report
+                    </Button>
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                         <input
                             type="text"
                             placeholder="Search products..."
-                            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-64 shadow-sm transition-all"
+                            className="pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none w-48 shadow-sm transition-all"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
