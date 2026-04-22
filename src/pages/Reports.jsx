@@ -45,13 +45,32 @@ const Reports = () => {
       
       let rowTotal = 0;
       activeB2C.forEach(s => {
-        const item = s.products.find(prod => prod.name === p.name);
-        if (item) {
-          const qty = Number(item.quantity) || 0;
+        let qtyForThisProduct = 0;
+        (s.products || []).forEach(sp => {
+           if (sp.name === p.name) {
+             let ps = Number(sp.packSize) || 1;
+             if (ps === 1) {
+               const match = sp.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+               if (match && match[1]) ps = Number(match[1]);
+             }
+             qtyForThisProduct += (Number(sp.quantity) || 0) * ps;
+           } else {
+             // Check if sp is a bundle containing p
+             const bundle = stock.find(item => item.name === sp.name);
+             if (bundle?.isComposite && bundle.components) {
+               const comp = bundle.components.find(c => c.name === p.name);
+               if (comp) {
+                 qtyForThisProduct += (Number(sp.quantity) || 0) * (Number(comp.quantity) || 1);
+               }
+             }
+           }
+        });
+
+        if (qtyForThisProduct > 0) {
           const channelName = s.channel || 'Unknown';
           if (filteredChannels.some(c => c.name === channelName)) {
-            channelCounts[channelName] = (channelCounts[channelName] || 0) + qty;
-            rowTotal += qty;
+            channelCounts[channelName] = (channelCounts[channelName] || 0) + qtyForThisProduct;
+            rowTotal += qtyForThisProduct;
           }
         }
       });
@@ -89,9 +108,26 @@ const Reports = () => {
                         (!filter.endDate || s.date <= filter.endDate);
       if (!dateMatch) return;
 
-      s.products.forEach(p => {
-        const qty = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
-        totals[p.name] = (totals[p.name] || 0) + qty;
+      (s.products || []).forEach(p => {
+        // Direct match
+        let ps = Number(p.packSize) || 1;
+        if (ps === 1) {
+          const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+          if (match && match[1]) ps = Number(match[1]);
+        }
+        const shipmentQty = (Number(p.quantity) || 0) * ps;
+
+        // Try to find the SKU in stock
+        const masterSKU = stock.find(item => item.name === p.name);
+        if (masterSKU?.isComposite && masterSKU.components) {
+          // If it's a bundle, add to its components instead
+          masterSKU.components.forEach(comp => {
+            totals[comp.name] = (totals[comp.name] || 0) + (shipmentQty * (Number(comp.quantity) || 1));
+          });
+        } else {
+          // Normal product
+          totals[p.name] = (totals[p.name] || 0) + shipmentQty;
+        }
       });
     });
 
@@ -123,7 +159,7 @@ const Reports = () => {
       const dateMatch = (!filter.startDate || s.date >= filter.startDate) && 
                         (!filter.endDate || s.date <= filter.endDate);
       const skuMatch = filter.sku === 'All SKUs' || 
-                           s.products.some(p => p.name === filter.sku);
+                           (s.products || []).some(p => p.name === filter.sku);
       const channelMatch = filter.channel === 'All Channels' || 
                            (s.type === 'B2B' && filter.channel === 'B2B Shipments') ||
                            (s.type === 'B2C' && filter.channel === 'B2C Shipments') ||
@@ -154,13 +190,52 @@ const Reports = () => {
   const productStats = useMemo(() => {
     return stock.filter(p => !p.isComposite).map(p => {
       const b2bQty = b2bShipments.reduce((sum, s) => {
-        const item = s.products.find(prod => prod.name === p.name);
-        return sum + (item ? Number(item.quantity) : 0);
+        let direct = 0;
+        (s.products || []).forEach(sp => {
+          if (sp.name === p.name) {
+            let ps = Number(sp.packSize) || 1;
+            if (ps === 1) {
+              const match = sp.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+              if (match && match[1]) ps = Number(match[1]);
+            }
+            direct += (Number(sp.quantity) || 0) * ps;
+          } else {
+            // Check if sp is a bundle containing p
+            const bundle = stock.find(item => item.name === sp.name);
+            if (bundle?.isComposite && bundle.components) {
+              const comp = bundle.components.find(c => c.name === p.name);
+              if (comp) {
+                // Bundle quantity * component quantity per bundle
+                direct += (Number(sp.quantity) || 0) * (Number(comp.quantity) || 1);
+              }
+            }
+          }
+        });
+        return sum + direct;
       }, 0);
       
       const b2cQty = b2cShipments.reduce((sum, s) => {
-        const item = s.products.find(prod => prod.name === p.name);
-        return sum + (item ? Number(item.quantity) : 0);
+        let direct = 0;
+        (s.products || []).forEach(sp => {
+          if (sp.name === p.name) {
+            let ps = Number(sp.packSize) || 1;
+            if (ps === 1) {
+              const match = sp.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+              if (match && match[1]) ps = Number(match[1]);
+            }
+            direct += (Number(sp.quantity) || 0) * ps;
+          } else {
+            // Check if sp is a bundle containing p
+            const bundle = stock.find(item => item.name === sp.name);
+            if (bundle?.isComposite && bundle.components) {
+              const comp = bundle.components.find(c => c.name === p.name);
+              if (comp) {
+                direct += (Number(sp.quantity) || 0) * (Number(comp.quantity) || 1);
+              }
+            }
+          }
+        });
+        return sum + direct;
       }, 0);
 
       const returnsQty = returnRecords.reduce((sum, r) => {
@@ -194,8 +269,15 @@ const Reports = () => {
         Date: s.date,
         Type: s.type,
         Channel: s.type === 'B2B' ? s.whoParceled : s.channel,
-        Products: s.products.map(p => `${p.name} (${p.quantity})`).join(', '),
-        TotalUnits: s.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)
+        Products: (s.products || []).map(p => `${p.name} (${p.quantity})`).join(', '),
+        TotalUnits: s.products.reduce((sum, p) => {
+          let ps = Number(p.packSize) || 1;
+          if (ps === 1) {
+            const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+            if (match && match[1]) ps = Number(match[1]);
+          }
+          return sum + (Number(p.quantity) * ps);
+        }, 0)
       }));
       title = 'DISPATCH LOG — SHIPMENTS';
       fileName = `shipments_report_${new Date().toISOString().split('T')[0]}.xls`;
@@ -408,10 +490,17 @@ const Reports = () => {
                       {s.type === 'B2B' ? s.whoParceled : s.channel}
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 leading-relaxed">
-                      {s.products.map(p => `${p.name} (${p.quantity})`).join(', ')}
+                      {(s.products || []).map(p => `${p.name} (${p.quantity})`).join(', ')}
                     </td>
                     <td className="py-4 px-6 text-sm font-bold text-slate-800">
-                      {s.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0)}
+                      {s.products.reduce((sum, p) => {
+                        let ps = Number(p.packSize) || 1;
+                        if (ps === 1) {
+                          const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                          if (match && match[1]) ps = Number(match[1]);
+                        }
+                        return sum + (Number(p.quantity) * ps);
+                      }, 0)}
                     </td>
                   </tr>
                 ))

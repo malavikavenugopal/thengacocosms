@@ -28,19 +28,51 @@ const MonthlyStockCheck = () => {
   const getMovementsForMonth = (monthStr) => {
     const sums = {};
     stock.forEach(item => {
-      if (!item.isComposite) sums[item.name] = { out: 0, returned: 0, damage: 0, purchased: 0 };
+      if (!item.isComposite) sums[item.name] = { out: 0, returned: 0, damage: 0, purchased: 0, rejected: 0 };
     });
 
     const isTargetMonth = (dateStr) => dateStr && dateStr.startsWith(monthStr);
 
     // B2B
     b2bShipments.filter(s => isTargetMonth(s.date)).forEach(s => {
-      s.products.forEach(p => { if (sums[p.name]) sums[p.name].out += (Number(p.quantity) || 0) * (Number(p.packSize) || 1); });
+      s.products.forEach(p => { 
+        if (sums[p.name]) {
+          sums[p.name].out += (Number(p.quantity) || 0) * (Number(p.packSize) || 1); 
+        } else {
+          // Check if p is a bundle and update components
+          const bundle = stock.find(item => item.name === p.name);
+          if (bundle?.isComposite && bundle.components) {
+            bundle.components.forEach(comp => {
+              if (sums[comp.name]) {
+                const bundleQty = Number(p.quantity) || 0;
+                const compQtyPerBundle = Number(comp.quantity) || 1;
+                sums[comp.name].out += bundleQty * compQtyPerBundle;
+              }
+            });
+          }
+        }
+      });
     });
 
     // B2C
     b2cShipments.filter(s => isTargetMonth(s.date)).forEach(s => {
-      s.products.forEach(p => { if (sums[p.name]) sums[p.name].out += (Number(p.quantity) || 0) * (Number(p.packSize) || 1); });
+      s.products.forEach(p => { 
+        if (sums[p.name]) {
+          sums[p.name].out += (Number(p.quantity) || 0) * (Number(p.packSize) || 1); 
+        } else {
+          // Check if p is a bundle and update components
+          const bundle = stock.find(item => item.name === p.name);
+          if (bundle?.isComposite && bundle.components) {
+            bundle.components.forEach(comp => {
+              if (sums[comp.name]) {
+                const bundleQty = Number(p.quantity) || 0;
+                const compQtyPerBundle = Number(comp.quantity) || 1;
+                sums[comp.name].out += bundleQty * compQtyPerBundle;
+              }
+            });
+          }
+        }
+      });
     });
 
     // Manual Damage
@@ -48,9 +80,12 @@ const MonthlyStockCheck = () => {
       if (sums[r.productName]) sums[r.productName].damage += (Number(r.quantity) || 0) * (Number(r.packSize) || 1);
     });
 
-    // QC Damage
+    // QC Damage & Rejection
     qcRecords.filter(r => isTargetMonth(r.date) && r.deducted).forEach(r => {
-      if (sums[r.productName]) sums[r.productName].damage += (Number(r.damaged) || 0) * (Number(r.packSize) || 1);
+      if (sums[r.productName]) {
+        sums[r.productName].damage += (Number(r.damaged) || 0) * (Number(r.packSize) || 1);
+        sums[r.productName].rejected += (Number(r.rejected) || 0) * (Number(r.packSize) || 1);
+      }
     });
 
     // Returns
@@ -70,8 +105,8 @@ const MonthlyStockCheck = () => {
     return getMovementsForMonth(selectedMonth);
   }, [selectedMonth, b2bShipments, b2cShipments, damageRecords, returnRecords, qcRecords, purchaseRecords, stock]);
 
-  const calculateExpected = (opening, production, returned, out, damage) => 
-    Number(opening || 0) + Number(production || 0) + Number(returned || 0) - Number(out || 0) - Number(damage || 0);
+  const calculateExpected = (opening, production, returned, out, damage, rejected) => 
+    Number(opening || 0) + Number(production || 0) + Number(returned || 0) - Number(out || 0) - Number(damage || 0) - Number(rejected || 0);
 
   const handleFinalize = () => {
     toast.success(`Inventory state for ${selectedMonth} finalized!`);
@@ -109,7 +144,8 @@ const MonthlyStockCheck = () => {
           (Number(item.in) || 0) + movements.purchased,
           movements.returned,
           movements.out,
-          movements.damage
+          movements.damage,
+          movements.rejected
         );
 
         // Save it as the Opening balance of the current selected month
@@ -129,14 +165,15 @@ const MonthlyStockCheck = () => {
       .filter(item => !item.isComposite)
       .map(item => {
         const mData = monthlyStockData.find(d => d.month === selectedMonth && d.productId === item.id) || {};
-        const movements = monthlyMovements[item.name] || { out: 0, returned: 0, damage: 0, purchased: 0 };
+        const movements = monthlyMovements[item.name] || { out: 0, returned: 0, damage: 0, purchased: 0, rejected: 0 };
         
         const expected = calculateExpected(
           mData.opening, 
           (Number(mData.in) || 0) + movements.purchased, 
           movements.returned, 
           movements.out, 
-          movements.damage
+          movements.damage,
+          movements.rejected
         );
         const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : 0;
         
@@ -149,6 +186,7 @@ const MonthlyStockCheck = () => {
           'Returned Items': movements.returned,
           Dispatch: movements.out,
           Damage: movements.damage,
+          Rejected: movements.rejected,
           Expected: expected,
           Physical: physical,
           Difference: physical - expected
@@ -213,6 +251,7 @@ const MonthlyStockCheck = () => {
                 <th className="py-4 px-2 text-center text-emerald-600">Returns</th>
                 <th className="py-4 px-2 text-center text-amber-600">Out</th>
                 <th className="py-4 px-2 text-center text-red-600">Damage</th>
+                <th className="py-4 px-2 text-center text-rose-400">Rejected</th>
                 <th className="py-4 px-2 text-center bg-slate-100/50">Expected</th>
                 <th className="py-4 px-2 text-center bg-indigo-50/50">Physical</th>
                 <th className="py-4 px-4 text-center">Diff</th>
@@ -228,14 +267,15 @@ const MonthlyStockCheck = () => {
                 )
                 .map((item) => {
                   const mData = monthlyStockData.find(d => d.month === selectedMonth && d.productId === item.id) || {};
-                  const movements = monthlyMovements[item.name] || { out: 0, returned: 0, damage: 0 };
+                  const movements = monthlyMovements[item.name] || { out: 0, returned: 0, damage: 0, rejected: 0 };
                   
                   const expected = calculateExpected(
                     mData.opening, 
                     (Number(mData.in) || 0) + (movements.purchased || 0), 
                     movements.returned, 
                     movements.out, 
-                    movements.damage
+                    movements.damage,
+                    movements.rejected
                   );
                   
                   const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : null;
@@ -313,6 +353,9 @@ const MonthlyStockCheck = () => {
                       <td className="py-4 px-2 text-sm text-center text-red-600 font-bold">
                         {movements.damage || 0}
                       </td>
+                      <td className="py-4 px-2 text-sm text-center text-rose-400 font-medium">
+                        {movements.rejected || 0}
+                      </td>
                       <td className="py-4 px-2 text-sm text-center font-bold bg-slate-50/50 border-x border-slate-100">
                         {expected}
                       </td>
@@ -360,7 +403,7 @@ const MonthlyStockCheck = () => {
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-md bg-red-500 shadow-sm transition-all"></div> Missing SKU</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-md bg-yellow-400 shadow-sm transition-all"></div> Excess Stock</div>
         <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-md bg-green-500 shadow-sm transition-all"></div> Perfect Match</div>
-        <div className="ml-auto text-[10px] text-slate-400 italic font-medium">* Formula: Expected = Opening + Stock In + Returns - Out - Damage</div>
+        <div className="ml-auto text-[10px] text-slate-400 italic font-medium">* Formula: Expected = Opening + Stock In + Returns - Out - Damage - Rejected</div>
       </div>
 
       {/* Details Modal */}

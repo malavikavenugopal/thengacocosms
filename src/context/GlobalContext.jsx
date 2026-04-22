@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db, auth } from '../firebase';
+import { db, auth, storage } from '../firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { ref, uploadBytes, getDownloadURL, getBlob } from 'firebase/storage';
 import { 
   collection, 
   onSnapshot, 
@@ -27,6 +28,7 @@ export const GlobalProvider = ({ children }) => {
   const [staff, setStaff] = useState([]);
   const [channels, setChannels] = useState([]);
   const [couriers, setCouriers] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [qcRecords, setQcRecords] = useState([]);
   const [monthlyStockData, setMonthlyStockData] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
@@ -137,13 +139,17 @@ export const GlobalProvider = ({ children }) => {
 
     const unsubMonthly = onSnapshot(collection(db, 'monthlyStockData'), (snapshot) => {
       setMonthlyStockData(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
+
+    const unsubVendors = onSnapshot(collection(db, 'vendors'), (snapshot) => {
+      setVendors(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       setLoading(false);
     });
 
     return () => {
       unsubStock(); unsubB2B(); unsubB2C(); unsubDamage(); 
       unsubReturns(); unsubQC(); unsubStaff(); unsubChannels(); unsubCouriers();
-      unsubMonthly(); unsubPurchases();
+      unsubMonthly(); unsubPurchases(); unsubVendors();
     };
   }, [currentUser]);
 
@@ -449,10 +455,10 @@ export const GlobalProvider = ({ children }) => {
     
     await addDoc(collection(db, 'qcRecords'), finalizedRecord);
     
-    // Deduct damaged items from stock if any and confirmed
-    const damagedQty = Number(record.damaged) || 0;
-    if (shouldDeduct && damagedQty > 0) {
-      const totalUnits = damagedQty * (masterSKU?.packSize || 1);
+    // Deduct BOTH rejected and damaged items from stock if any and confirmed
+    const issueQty = (Number(record.rejected) || 0) + (Number(record.damaged) || 0);
+    if (shouldDeduct && issueQty > 0) {
+      const totalUnits = issueQty * (masterSKU?.packSize || 1);
       await updateFirestoreStock(record.productName, totalUnits, 'add', 'damage');
     }
   };
@@ -461,10 +467,10 @@ export const GlobalProvider = ({ children }) => {
     const oldRecord = qcRecords.find(r => r.id === id);
     if (!oldRecord) return;
 
-    // 1. Revert old
-    const oldDamaged = Number(oldRecord.damaged) || 0;
-    if (oldRecord.deducted && oldDamaged > 0) {
-      const oldUnits = oldDamaged * (Number(oldRecord.packSize) || 1);
+    // 1. Revert old (Rejected + Damaged)
+    const oldIssues = (Number(oldRecord.rejected) || 0) + (Number(oldRecord.damaged) || 0);
+    if (oldRecord.deducted && oldIssues > 0) {
+      const oldUnits = oldIssues * (Number(oldRecord.packSize) || 1);
       await updateFirestoreStock(oldRecord.productName, oldUnits, 'sub', 'damage');
     }
 
@@ -473,10 +479,10 @@ export const GlobalProvider = ({ children }) => {
     const finalized = { ...updatedRecord, packSize: masterSKU?.packSize || 1, deducted: shouldDeduct };
     await updateDoc(doc(db, 'qcRecords', String(id)), finalized);
 
-    // 3. Apply new
-    const newDamaged = Number(updatedRecord.damaged) || 0;
-    if (shouldDeduct && newDamaged > 0) {
-      const newUnits = newDamaged * (masterSKU?.packSize || 1);
+    // 3. Apply new (Rejected + Damaged)
+    const newIssues = (Number(updatedRecord.rejected) || 0) + (Number(updatedRecord.damaged) || 0);
+    if (shouldDeduct && newIssues > 0) {
+      const newUnits = newIssues * (masterSKU?.packSize || 1);
       await updateFirestoreStock(updatedRecord.productName, newUnits, 'add', 'damage');
     }
   };
@@ -488,10 +494,10 @@ export const GlobalProvider = ({ children }) => {
     if (record) {
       try {
         await deleteDoc(doc(db, 'qcRecords', docId));
-        // Restore stock if there was damage AND it was deducted
-        const damagedQty = Number(record.damaged) || 0;
-        if (record.deducted && damagedQty > 0) {
-          const totalUnits = damagedQty * (Number(record.packSize) || 1);
+        // Restore stock if there was rejection/damage AND it was deducted
+        const issueQty = (Number(record.rejected) || 0) + (Number(record.damaged) || 0);
+        if (record.deducted && issueQty > 0) {
+          const totalUnits = issueQty * (Number(record.packSize) || 1);
           await updateFirestoreStock(record.productName, totalUnits, 'sub', 'damage');
         }
       } catch (err) {
@@ -529,6 +535,16 @@ export const GlobalProvider = ({ children }) => {
   };
   const deleteCourier = async (id) => {
     await deleteDoc(doc(db, 'couriers', id));
+  };
+
+  const addVendor = async (data) => {
+    await addDoc(collection(db, 'vendors'), data);
+  };
+  const updateVendor = async (id, data) => {
+    await updateDoc(doc(db, 'vendors', id), data);
+  };
+  const deleteVendor = async (id) => {
+    await deleteDoc(doc(db, 'vendors', id));
   };
 
   // SKU Management
@@ -591,6 +607,7 @@ export const GlobalProvider = ({ children }) => {
       staff, addStaffMember, updateStaffMember, deleteStaffMember,
       channels, addChannel, updateChannel, deleteChannel,
       couriers, addCourier, updateCourier, deleteCourier,
+      vendors, addVendor, updateVendor, deleteVendor,
       drafts, updateDraft, clearDraft,
       monthlyStockData,
       saveMonthlyStock: async (month, productId, updates) => {
@@ -600,6 +617,41 @@ export const GlobalProvider = ({ children }) => {
           month,
           productId
         }, { merge: true });
+      },
+      uploadQCImages: async (files) => {
+        const urls = [];
+        for (const file of files) {
+          if (!file) continue;
+          const storageRef = ref(storage, `qc/${Date.now()}_${file.name}`);
+          await uploadBytes(storageRef, file);
+          const url = await getDownloadURL(storageRef);
+          urls.push(url);
+        }
+        return urls;
+      },
+      getQCImageBase64: async (url) => {
+        try {
+          console.log("CORS Proxy: Trying corsproxy.io for", url);
+          if (url.startsWith('data:')) return url;
+          
+          // Try corsproxy.io which is often more reliable
+          const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+          const response = await fetch(proxyUrl);
+          
+          if (!response.ok) throw new Error("Proxy response not OK");
+          const blob = await response.blob();
+          
+          return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        } catch (err) {
+          console.warn("CORS Proxy Failed. Falling back to direct URL link.", err);
+          // If we can't get base64, we return the URL so the PDF generator might still try doc.addImage(url)
+          return url;
+        }
       }
     }}>
       {children}

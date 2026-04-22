@@ -26,7 +26,7 @@ export const Select = ({ label, options, className = '', ...props }) => (
         {...props}
       >
         <option value="" className="text-slate-400">Select an option</option>
-        {options.map((opt, i) => (
+        {(options || []).map((opt, i) => (
           <option key={i} value={opt}>{opt}</option>
         ))}
       </select>
@@ -42,7 +42,7 @@ export const SearchableSelect = ({ label, options, value, onChange, placeholder 
   const [searchTerm, setSearchTerm] = useState('');
   const wrapperRef = useRef(null);
 
-  const filteredOptions = options.filter(opt => 
+  const filteredOptions = (options || []).filter(opt => 
     opt.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -119,7 +119,7 @@ export const Table = ({ headers, children }) => (
     <table className="w-full text-left border-collapse">
       <thead className="bg-slate-50 border-b border-slate-200 shadow-sm sticky top-0 z-10">
         <tr>
-          {headers.map((header, i) => (
+          {(headers || []).map((header, i) => (
             <th key={i} className="py-4 px-6 font-semibold text-xs text-slate-500 uppercase tracking-wider backdrop-blur-sm">
               {header}
             </th>

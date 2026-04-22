@@ -89,10 +89,20 @@ const B2CShipments = () => {
     // Inject packSize from Master Data for each product before saving
     const finalizedProducts = products.map(p => {
       const masterSKU = stock.find(s => s.name === p.name);
+      let packSize = masterSKU?.packSize || 1;
+      
+      // Smart detection: If packSize is 1 but name contains "Set of X", use X
+      if (packSize === 1) {
+        const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+        if (match && match[1]) {
+          packSize = Number(match[1]);
+        }
+      }
+
       return {
         name: p.name,
         quantity: p.quantity,
-        packSize: masterSKU?.packSize || 1
+        packSize: packSize
       };
     });
 
@@ -207,7 +217,16 @@ const B2CShipments = () => {
             <div className="space-y-4">
               {products.map((product) => {
                 const selectedSKU = stock.find(s => s.name === product.name);
-                const packSize = selectedSKU?.packSize || 1;
+                let packSize = selectedSKU?.packSize || 1;
+                
+                // Smart detection for UI
+                if (packSize === 1 && product.name) {
+                  const match = product.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                  if (match && match[1]) {
+                    packSize = Number(match[1]);
+                  }
+                }
+
                 const totalDeduction = (Number(product.quantity) || 0) * packSize;
                 
                 return (
@@ -255,7 +274,16 @@ const B2CShipments = () => {
                     {selectedSKU && (
                       <div className="mt-2 flex items-center gap-3">
                          <span className="text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded font-bold uppercase tracking-wider">SKU Code: {selectedSKU.sku}</span>
-                         <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold uppercase tracking-wider">Default Pack Size: {selectedSKU.packSize || 1}</span>
+                         <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold uppercase tracking-wider">
+                           Pack Size: {(() => {
+                             let ps = selectedSKU.packSize || 1;
+                             if (ps === 1) {
+                               const match = selectedSKU.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                               if (match && match[1]) return match[1] + " (Auto)";
+                             }
+                             return ps;
+                           })()}
+                         </span>
                          <span className="text-[10px] px-2 py-0.5 bg-slate-200 text-slate-600 rounded font-medium italic">{selectedSKU.category}</span>
                       </div>
                     )}
@@ -362,20 +390,36 @@ const B2CShipments = () => {
                 <td className="py-4 px-6 text-sm text-slate-600 whitespace-nowrap">{s.whoParceled}</td>
                 <td className="py-4 px-6 text-sm text-slate-500">
                   <div className="flex flex-col gap-1">
-                    {s.products.map((p, idx) => {
+                    {(s.products || []).map((p, idx) => {
                       const masterSKU = stock.find(item => item.name === p.name);
                       return (
                         <div key={idx} className="flex items-center gap-1.5">
                           <span className="text-[10px] font-mono font-bold text-emerald-600 bg-emerald-50 px-1 rounded">{masterSKU?.sku || 'N/A'}</span>
                           <span className="font-semibold text-slate-900">{p.name}</span>
-                          <span className="text-xs text-slate-400">({p.quantity} × {p.packSize || 1})</span>
+                          <span className="text-xs text-slate-400">
+                            ({p.quantity} × {(() => {
+                               let ps = p.packSize || 1;
+                               if (ps === 1) {
+                                 const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                                 if (match && match[1]) ps = Number(match[1]);
+                               }
+                               return ps;
+                             })()})
+                          </span>
                         </div>
                       );
                     })}
                   </div>
                 </td>
                 <td className="py-4 px-6 text-sm text-indigo-600 font-bold">
-                  {s.products.reduce((acc, curr) => acc + (Number(curr.quantity) * (Number(curr.packSize) || 1)), 0)} units
+                  {s.products.reduce((acc, curr) => {
+                    let ps = Number(curr.packSize) || 1;
+                    if (ps === 1) {
+                      const match = curr.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                      if (match && match[1]) ps = Number(match[1]);
+                    }
+                    return acc + (Number(curr.quantity) * ps);
+                  }, 0)} units
                 </td>
                 <td className="py-4 px-6 text-sm text-center">
                   <div className="flex items-center justify-center gap-2">
@@ -420,7 +464,7 @@ const B2CShipments = () => {
         <div className="overflow-x-auto">
           <Table headers={['SKU Code', 'Product Name', 'Total Orders', 'Total Units Sold']}>
             {Object.entries(
-              filteredShipments.flatMap(s => s.products).reduce((acc, curr) => {
+              filteredShipments.flatMap(s => s.products || []).reduce((acc, curr) => {
                 if (!acc[curr.name]) acc[curr.name] = { qty: 0, units: 0 };
                 acc[curr.name].qty += Number(curr.quantity) || 0;
                 acc[curr.name].units += (Number(curr.quantity) || 0) * (Number(curr.packSize) || 1);

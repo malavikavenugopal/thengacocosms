@@ -5,7 +5,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 import { useGlobalState } from '../context/GlobalContext';
 
 const Dashboard = () => {
-  const { b2bShipments, b2cShipments, damageRecords, returnRecords } = useGlobalState();
+  const { stock, b2bShipments, b2cShipments, damageRecords, returnRecords } = useGlobalState();
   const [timeFilter, setTimeFilter] = useState('All Time');
 
   // Filter Data by Date
@@ -31,11 +31,27 @@ const Dashboard = () => {
 
   // Calculate totals
   const totalB2B = filteredB2B.reduce((acc, shipment) => 
-    acc + shipment.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0), 0
+    acc + (shipment.products || []).reduce((sum, p) => {
+      let q = (Number(p.quantity) || 0);
+      let ps = (Number(p.packSize) || 1);
+      const master = stock.find(s => s.name === p.name);
+      if (master?.isComposite && master.components) {
+        return sum + master.components.reduce((cSum, c) => cSum + (q * (Number(c.quantity) || 1)), 0);
+      }
+      return sum + (q * ps);
+    }, 0), 0
   );
 
   const totalB2C = filteredB2C.reduce((acc, shipment) => 
-    acc + shipment.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0), 0
+    acc + (shipment.products || []).reduce((sum, p) => {
+      let q = (Number(p.quantity) || 0);
+      let ps = (Number(p.packSize) || 1);
+      const master = stock.find(s => s.name === p.name);
+      if (master?.isComposite && master.components) {
+        return sum + master.components.reduce((cSum, c) => cSum + (q * (Number(c.quantity) || 1)), 0);
+      }
+      return sum + (q * ps);
+    }, 0), 0
   );
 
   const totalDamaged = filteredDamage.reduce((acc, record) => 
@@ -61,7 +77,14 @@ const Dashboard = () => {
     filteredB2C.forEach(s => {
       if (!s.date) return;
       const monthIdx = new Date(s.date).getMonth();
-      const qty = s.products.reduce((sum, p) => sum + (Number(p.quantity) || 0), 0);
+      const qty = (s.products || []).reduce((sum, p) => {
+        const q = (Number(p.quantity) || 0);
+        const master = stock.find(item => item.name === p.name);
+        if (master?.isComposite && master.components) {
+          return sum + master.components.reduce((cSum, c) => cSum + (q * (Number(c.quantity) || 1)), 0);
+        }
+        return sum + (q * (Number(p.packSize) || 1));
+      }, 0);
       aggregated[monthIdx].B2C += qty;
     });
 
