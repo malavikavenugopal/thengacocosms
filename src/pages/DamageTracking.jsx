@@ -815,8 +815,9 @@ const DamageTracking = () => {
                                  const pdfFile = new File([pdfBlob], `QC_Report_${r.productName.replace(/\s+/g, '_')}.pdf`, { type: 'application/pdf' });
 
                                  // 2. Try Native Share (Mobile)
-                                 if (navigator.share && navigator.canShare) {
+                                 if (navigator.share) {
                                    try {
+                                     // Create the list of files to share
                                      const shareFiles = [pdfFile];
                                      
                                      // Also add images to the share if they exist
@@ -831,10 +832,22 @@ const DamageTracking = () => {
                                        }
                                        toast.dismiss();
                                      }
+
+                                     const shareData = {
+                                       files: shareFiles,
+                                       title: `QC Report: ${r.productName}`,
+                                       text: `Hi,, Please find the official QC Inspection Report attached.`
+                                     };
                                      
-                                     if (navigator.canShare({ files: shareFiles })) {
+                                     // Try sharing all files (Report + Photos)
+                                     if (navigator.canShare && navigator.canShare(shareData)) {
+                                       await navigator.share(shareData);
+                                       return;
+                                     } 
+                                     // Fallback: Try sharing ONLY the PDF Report if multi-file share is rejected
+                                     else if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
                                        await navigator.share({
-                                         files: shareFiles,
+                                         files: [pdfFile],
                                          title: `QC Report: ${r.productName}`,
                                          text: `Hi,, Please find the official QC Inspection Report attached.`
                                        });
