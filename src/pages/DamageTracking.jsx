@@ -4,7 +4,7 @@ import { AlertTriangle, Plus, Trash2, Save, ClipboardCheck, History, CheckCircle
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useGlobalState } from '../context/GlobalContext';
-import { generateVisualReport } from '../utils/visualReportUtils';
+import { generateVisualReport, shareVisualReport } from '../utils/visualReportUtils';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import { isRecordEditable } from '../utils/dateUtils';
@@ -805,47 +805,52 @@ const DamageTracking = () => {
                             )}
                             <button 
                               onClick={async () => {
-                                 // 1. Generate the PDF Report blob
-                                 toast.loading("Generating report...");
-                                 const doc = await generatePDFReport(r.vendorName, r.date, [r], r.images, true);
-                                 toast.dismiss();
+                                  // 1. Generate the Image Report
+                                  toast.loading("Generating image report...");
+                                  try {
+                                    const title = `QC Report: ${r.productName}`;
+                                    const imageFile = await shareVisualReport([r], 'QC', title);
+                                    toast.dismiss();
 
-                                 if (!doc) {
-                                   toast.error("Failed to generate report for sharing.");
-                                   return;
-                                 }
+                                    if (!imageFile) {
+                                      toast.error("Failed to generate report.");
+                                      return;
+                                    }
 
-                                 const pdfBlob = doc.output('blob');
-                                 const pdfFile = new File([pdfBlob], `QC_Report_${r.productName.replace(/\s+/g, '_')}.pdf`, { type: 'application/pdf' });
+                                    // 2. Share via Native API (Mobile - Supports Android/iOS)
+                                    // We only send the file to make it "automatic" in WhatsApp
+                                    if (navigator.share) {
+                                      try {
+                                        await navigator.share({
+                                          files: [imageFile]
+                                        });
+                                        return; // Success on Mobile
+                                      } catch (e) { 
+                                        console.log("Native share failed", e); 
+                                      }
+                                    }
 
-                                 // 2. Try Native Share (Mobile)
-                                 if (navigator.share) {
-                                   try {
-                                     // ONLY send the PDF file to ensure it's treated as a "Report"
-                                     const shareFiles = [pdfFile];
-                                     
-                                     const shareData = {
-                                       files: shareFiles,
-                                       title: `QC Report: ${r.productName}`,
-                                       text: `Hi, Please find the official QC Inspection Report attached.`
-                                     };
-                                     
-                                     // Try directly sharing the file
-                                     await navigator.share(shareData);
-                                     return; // If successful, stop here
-                                   } catch (shareErr) {
-                                     console.log("Native share failed, falling back to link...", shareErr);
-                                     // If it's a "NOT_ALLOWED" or similar error, let it fall through to the link fallback
-                                   }
-                                 }
+                                    // 3. Desktop Fallback: Copy to Clipboard + Open WhatsApp
+                                    // NOTE: Automatic file sending on desktop is blocked by browser security.
+                                    // Clipboard Paste (Ctrl+V) is the fastest possible method.
+                                    try {
+                                      const data = [new ClipboardItem({ [imageFile.type]: imageFile })];
+                                      await navigator.clipboard.write(data);
+                                      toast.success("Image copied! Just Paste (Ctrl+V) in WhatsApp.");
+                                    } catch (clipboardErr) {
+                                      const link = document.createElement('a');
+                                      link.href = URL.createObjectURL(imageFile);
+                                      link.download = imageFile.name;
+                                      link.click();
+                                      toast.success("Report downloaded. Attach it in WhatsApp.");
+                                    }
 
-                                 // 3. Fallback to WhatsApp Link for Desktop or Unsupported Browsers
-                                 const vendor = vendors.find(v => v.name === r.vendorName);
-                                 const contact = vendor?.whatsappName || "";
-                                 const phone = contact.replace(/\D/g, "");
-                                 const msg = `Hi, Please find the official QC Inspection Report attached.\n\nView here: ${r.images?.[0] || 'See attached document'}`;
-                                 const whatsappUrl = `https://wa.me/${phone ? phone : ""}?text=${encodeURIComponent(msg)}`;
-                                 window.open(whatsappUrl, "_blank");
+                                    // Open WhatsApp Web or App
+                                    window.open(`https://web.whatsapp.com/`, "_blank");
+                                  } catch (err) {
+                                    toast.dismiss();
+                                    toast.error("Error sharing report.");
+                                  }
                                }}
                               className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg border border-transparent hover:border-emerald-200 transition-all shadow-sm"
                               title="Share QC via WhatsApp (Images + Text)"
