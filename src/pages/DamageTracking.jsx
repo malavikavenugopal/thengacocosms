@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { Card, Input, Button, Table, SearchableSelect } from '../components/ui';
-import { AlertTriangle, Plus, Trash2, Save, ClipboardCheck, History, CheckCircle2, XCircle, Info, Lock, Edit2, X, Camera, Image as ImageIcon, Download, FileText, Upload, MessageCircle, Mail, Search } from 'lucide-react';
+import { AlertTriangle, Plus, Trash2, Save, ClipboardCheck, History, CheckCircle2, XCircle, Info, Lock, Edit2, X, Camera, Image as ImageIcon, Download, FileText, Upload, MessageCircle, Mail, Search, Eye } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useGlobalState } from '../context/GlobalContext';
+import { generateVisualReport } from '../utils/visualReportUtils';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import { isRecordEditable } from '../utils/dateUtils';
@@ -52,6 +53,9 @@ const DamageTracking = () => {
     toast.success("Email sent to all accounts!");
   };
   const [activeTab, setActiveTab] = useState('qc'); 
+  const [isExporting, setIsExporting] = useState(false);
+  const [isGeneratingQCVisual, setIsGeneratingQCVisual] = useState(false);
+  const [isGeneratingDamageVisual, setIsGeneratingDamageVisual] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [historySearch, setHistorySearch] = useState('');
@@ -93,22 +97,16 @@ const DamageTracking = () => {
     const doc = new jsPDF();
     const isSummary = products.length > 1;
     
-    // Header
-    try {
-      doc.addImage("/logo.jpg", "JPEG", 15, 12, 18, 18);
-    } catch (e) {
-      console.error("Logo failed to load", e);
-    }
-
+    // Header (No images for stability)
     doc.setFont("times", "bold");
     doc.setFontSize(28);
     doc.setTextColor(5, 150, 105); // Emerald Green
-    doc.text("ThengaCoco", 38, 22);
+    doc.text("ThengaCoco", 15, 22);
     
     doc.setFont("helvetica", "normal");
     doc.setFontSize(14);
     doc.setTextColor(100);
-    doc.text("Quality Assurance & Inspection Report", 38, 30);
+    doc.text("Quality Assurance & Inspection Report", 15, 30);
     
     doc.setFontSize(10);
     doc.text(`Date: ${new Date().toLocaleDateString()}`, 195, 20, { align: 'right' });
@@ -145,108 +143,8 @@ const DamageTracking = () => {
       headStyles: { fillColor: [5, 150, 105] }
     });
 
-    // Add Images if they exist (ONLY for WhatsApp/Share, not for standard downloads as per user request)
-    if (isShare && finalImages && finalImages.length > 0) {
-      console.log("PDF DEBUG: Images found:", finalImages);
-      toast.loading("Preparing " + finalImages.length + " inspection photos...");
-      doc.addPage();
-      doc.setFont("times", "bold");
-      doc.setFontSize(18);
-      doc.text("Inspection Gallery", 15, 20);
-      doc.line(15, 25, 195, 25);
-
-      let x = 15;
-      let y = 35;
-      for (let i = 0; i < finalImages.length; i++) {
-        const imgUrl = finalImages[i];
-        if (!imgUrl || typeof imgUrl !== 'string') {
-          console.warn(`PDF DEBUG: skipping image ${i+1} - invalid URL type:`, typeof imgUrl);
-          continue;
-        }
-
-        try {
-          console.log(`PDF DEBUG: Processing #${i+1}: ${imgUrl}`);
-          const base64 = await getQCImageBase64(imgUrl);
-          
-          if (base64 && base64.startsWith('data:')) {
-            console.log(`PDF DEBUG: Image #${i+1} Base64 ready`);
-            const format = imgUrl.toLowerCase().includes('.png') ? 'PNG' : 'JPEG';
-            doc.addImage(base64, format, x, y, 85, 60, undefined, 'FAST');
-          } else {
-            console.warn(`PDF DEBUG: Image #${i+1} failed conversion, using link fallback`);
-            doc.setDrawColor(5, 150, 105);
-            doc.rect(x, y, 85, 60);
-            doc.setFontSize(10);
-            doc.setTextColor(5, 150, 105);
-            doc.text("Photo Link (Click View)", x + 10, y + 25);
-            doc.textWithLink("View Inspection Photo", x + 10, y + 35, { url: imgUrl });
-          }
-          
-          if ((i + 1) % 2 === 0) {
-            x = 15;
-            y += 70;
-          } else {
-            x = 110;
-          }
-
-          if (y > 240 && i < finalImages.length - 1) {
-            doc.addPage();
-            y = 20;
-            x = 15;
-          }
-        } catch (err) {
-          console.error(`PDF DEBUG: Error on image #${i+1}:`, err);
-        }
-      }
-      toast.dismiss();
-    } else {
-      console.log("PDF DEBUG: No images to process.");
-    }
-    
     if (isShare) return doc;
     doc.save(isSummary ? `QC_History_Summary_${new Date().toISOString().split('T')[0]}.pdf` : `QC_Report_${vendorName}_${date}.pdf`);
-  };
-
-  const generateDamagePDFReport = (records) => {
-    if (!records || records.length === 0) {
-      toast.error("No records to export.");
-      return;
-    }
-    const doc = new jsPDF();
-    
-    doc.setFontSize(22);
-    doc.setTextColor(225, 29, 72); // Rose-600
-    doc.text("Damage History Report", 105, 20, { align: 'center' });
-    
-    doc.setFontSize(10);
-    doc.setTextColor(150);
-    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 105, 28, { align: 'center' });
-
-    doc.setFontSize(12);
-    doc.setTextColor(60);
-    doc.text(`Total Log Entries: ${records.length}`, 20, 38);
-    if (historySearch) {
-       doc.text(`Search Term: "${historySearch}"`, 20, 45);
-    }
-
-    const tableData = records.map((r, i) => [
-      i + 1,
-      r.date,
-      r.productName,
-      r.quantity,
-      r.deducted ? 'Yes' : 'No',
-      r.reason
-    ]);
-
-    autoTable(doc, {
-       startY: 55,
-       head: [['#', 'Date', 'Product Name', 'Qty', 'Deducted', 'Reason']],
-       body: tableData,
-       theme: 'grid',
-       headStyles: { fillColor: [190, 18, 60] } // Rose-700
-    });
-
-    doc.save(`Damage_History_Report_${new Date().toISOString().split('T')[0]}.pdf`);
   };
   
   // Damage Form State
@@ -449,6 +347,68 @@ const DamageTracking = () => {
       reason: r.reason
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleViewQC = (r) => {
+    Swal.fire({
+      title: `<span style="color: #065f46">QC Inspection Details</span>`,
+      html: `
+        <div style="text-align: left; font-family: 'Inter', sans-serif; padding: 10px;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; background: #f8fafc; padding: 15px; rounded: 12px; border: 1px solid #e2e8f0;">
+            <div>
+              <p style="margin: 0; font-size: 10px; font-weight: bold; color: #94a3b8; text-transform: uppercase;">Vendor</p>
+              <p style="margin: 0; font-size: 14px; font-weight: bold; color: #1e293b;">${r.vendorName || 'N/A'}</p>
+            </div>
+            <div>
+              <p style="margin: 0; font-size: 10px; font-weight: bold; color: #94a3b8; text-transform: uppercase;">Date</p>
+              <p style="margin: 0; font-size: 14px; font-weight: bold; color: #1e293b;">${r.date}</p>
+            </div>
+          </div>
+          
+          <div style="margin-bottom: 20px;">
+             <p style="margin: 0 0 8px 0; font-size: 10px; font-weight: bold; color: #94a3b8; text-transform: uppercase;">Product Details</p>
+             <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
+                <p style="margin: 0; font-size: 15px; font-weight: bold; color: #065f46;">${r.productName}</p>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; text-align: center;">
+                  <div style="background: #f1f5f9; padding: 8px; border-radius: 6px;">
+                    <p style="margin: 0; font-size: 18px; font-weight: 900; color: #1e293b;">${r.checked}</p>
+                    <p style="margin: 0; font-size: 9px; color: #64748b; text-transform: uppercase;">Checked</p>
+                  </div>
+                  <div style="background: #ecfdf5; padding: 8px; border-radius: 6px;">
+                    <p style="margin: 0; font-size: 18px; font-weight: 900; color: #059669;">${r.good}</p>
+                    <p style="margin: 0; font-size: 9px; color: #059669; text-transform: uppercase;">Good</p>
+                  </div>
+                  <div style="background: #fff1f2; padding: 8px; border-radius: 6px;">
+                    <p style="margin: 0; font-size: 18px; font-weight: 900; color: #e11d48;">${r.damaged || 0}</p>
+                    <p style="margin: 0; font-size: 9px; color: #e11d48; text-transform: uppercase;">Damaged</p>
+                  </div>
+                  <div style="background: #fef2f2; padding: 8px; border-radius: 6px;">
+                    <p style="margin: 0; font-size: 18px; font-weight: 900; color: #b91c1c;">${r.rejected || 0}</p>
+                    <p style="margin: 0; font-size: 9px; color: #b91c1c; text-transform: uppercase;">Rejected</p>
+                  </div>
+                </div>
+             </div>
+          </div>
+
+          ${r.images && r.images.length > 0 ? `
+            <div>
+              <p style="margin: 0 0 8px 0; font-size: 10px; font-weight: bold; color: #94a3b8; text-transform: uppercase;">Inspection Photos (${r.images.length})</p>
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                ${r.images.map(url => `
+                  <div style="aspect-ratio: 1; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0;">
+                    <img src="${url}" style="width: 100%; height: 100%; object-fit: cover; cursor: pointer" onclick="window.open('${url}', '_blank')"/>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+        </div>
+      `,
+      width: '500px',
+      showConfirmButton: true,
+      confirmButtonText: 'Close',
+      confirmButtonColor: '#065f46'
+    });
   };
 
   const handleEditQC = (r) => {
@@ -739,20 +699,31 @@ const DamageTracking = () => {
                 </select>
                 <Button 
                    onClick={async () => {
-                     const filtered = qcRecords.filter(r => {
-                       const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) || 
-                                             (r.vendorName && r.vendorName.toLowerCase().includes(historySearch.toLowerCase()));
-                       const matchesVendor = vendorFilter === 'All Vendors' || r.vendorName === vendorFilter;
-                       const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
-                       return matchesSearch && matchesVendor && matchesDate;
-                     });
-                     await generatePDFReport(vendorFilter, 'Multiple', filtered);
+                     setIsGeneratingQCVisual(true);
+                     try {
+                        const filtered = qcRecords.filter(r => {
+                          const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) || 
+                                                (r.vendorName && r.vendorName.toLowerCase().includes(historySearch.toLowerCase()));
+                          const matchesVendor = vendorFilter === 'All Vendors' || r.vendorName === vendorFilter;
+                          const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
+                          return matchesSearch && matchesVendor && matchesDate;
+                        });
+                        const title = vendorFilter === 'All Vendors' ? "All Vendors QC History" : `${vendorFilter} QC History`;
+                        await generateVisualReport(filtered, 'QC', title, { startDate, endDate });
+                        toast.success('Visual report generated!');
+                     } catch (err) {
+                        console.error(err);
+                        toast.error('Failed to generate visual report');
+                     } finally {
+                        setIsGeneratingQCVisual(false);
+                     }
                    }}
                    variant="success" 
                    size="sm"
+                   loading={isGeneratingQCVisual}
                    className="text-[10px] h-8 px-2 bg-indigo-600 hover:bg-indigo-700 border-none shadow-md"
                 >
-                   <Download size={14} /> Report
+                   <Download size={14} className="mr-1" /> Visual Report
                 </Button>
               </div>
             </div>
@@ -923,6 +894,13 @@ const DamageTracking = () => {
                          {isRecordEditable(r.date) ? (
                             <div className="flex items-center justify-center gap-1.5">
                               <button 
+                                onClick={() => handleViewQC(r)}
+                                className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-all"
+                                title="View Details"
+                              >
+                                <Eye size={18} />
+                              </button>
+                              <button 
                                 onClick={() => handleEditQC(r)}
                                 className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
                                 title="Edit Record"
@@ -1056,19 +1034,32 @@ const DamageTracking = () => {
                 />
               </div>
               <Button 
-                onClick={() => {
-                   const filtered = damageRecords.filter(r => {
-                     const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase());
-                     const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
-                     return matchesSearch && matchesDate;
-                   });
-                   generateDamagePDFReport(filtered);
+                onClick={async () => {
+                   setIsGeneratingDamageVisual(true);
+                   try {
+                      const filtered = damageRecords.filter(r => {
+                        const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase());
+                        const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
+                        return matchesSearch && matchesDate;
+                      });
+                      const title = startDate || endDate 
+                        ? `Damage Log (${startDate || 'Start'} to ${endDate || 'End'})`
+                        : "Full Damage History Log";
+                      await generateVisualReport(filtered, 'Damage', title, { startDate, endDate });
+                      toast.success('Visual report generated!');
+                   } catch (err) {
+                      console.error(err);
+                      toast.error('Failed to generate visual report');
+                   } finally {
+                      setIsGeneratingDamageVisual(false);
+                   }
                 }}
                 variant="success" 
                 size="sm"
+                loading={isGeneratingDamageVisual}
                 className="text-[10px] h-8 px-2 bg-rose-600 hover:bg-rose-700 border-none shadow-md"
               >
-                 <Download size={14} /> Report
+                 <Download size={14} className="mr-1" /> Visual Report
               </Button>
             </div>
 

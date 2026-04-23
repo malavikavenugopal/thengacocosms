@@ -7,6 +7,7 @@ import Swal from 'sweetalert2';
 
 import { useGlobalState } from '../context/GlobalContext';
 import { exportFormattedShipments } from '../utils/exportUtils';
+import { generateVisualReport } from '../utils/visualReportUtils';
 import { isRecordEditable } from '../utils/dateUtils';
 
 const B2BShipments = () => {
@@ -30,6 +31,7 @@ const B2BShipments = () => {
   const [editingId, setEditingId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isGeneratingVisual, setIsGeneratingVisual] = useState(false);
 
   // Filters
   const [filterStartDate, setFilterStartDate] = useState('');
@@ -86,6 +88,22 @@ const B2BShipments = () => {
       toast.success('Exporting B2B Shipments...');
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleVisualReport = async () => {
+    setIsGeneratingVisual(true);
+    try {
+      const title = filterStartDate || filterEndDate 
+        ? `B2B Shipment Report`
+        : "B2B Shipment Report";
+      await generateVisualReport(filteredShipments, 'B2B', title, { startDate: filterStartDate, endDate: filterEndDate });
+      toast.success('Report generated successfully!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to generate visual report');
+    } finally {
+      setIsGeneratingVisual(false);
     }
   };
 
@@ -268,10 +286,10 @@ const B2BShipments = () => {
                       <div className="md:col-span-7">
                         <SearchableSelect 
                           label={products[0].id === product.id ? "Select Product / SKU" : undefined}
-                          options={stock.filter(s => !s.isComposite).map(s => `${s.name} (Pack: ${s.packSize || 1})`)}
-                          value={selectedSKU ? `${selectedSKU.name} (Pack: ${selectedSKU.packSize || 1})` : ''}
+                          options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)}
+                          value={selectedSKU ? `[${selectedSKU.sku || 'N/A'}] ${selectedSKU.name} (Pack: ${selectedSKU.packSize || 1})` : ''}
                           onChange={(val) => {
-                            const selectedName = stock.find(s => !s.isComposite && `${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
+                            const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
                             updateProduct(product.id, 'name', selectedName || '');
                           }}
                         />
@@ -388,9 +406,14 @@ const B2BShipments = () => {
                </button>
              )}
           </div>
-          <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100" loading={isExporting}>
-            <Download size={16} className="mr-2" /> Export to Excel
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleVisualReport} variant="secondary" className="bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100" loading={isGeneratingVisual}>
+              <Package size={16} className="mr-2" /> Visual Report
+            </Button>
+            <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100" loading={isExporting}>
+              <Download size={16} className="mr-2" /> Export to Excel
+            </Button>
+          </div>
         </div>
         
         <Table headers={['Date', 'Client', 'Courier', 'Parceled By', 'Total Units', 'SKUs', 'Action']}>

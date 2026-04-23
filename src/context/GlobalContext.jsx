@@ -637,25 +637,44 @@ export const GlobalProvider = ({ children }) => {
       },
       getQCImageBase64: async (url) => {
         try {
-          console.log("CORS Proxy: Trying corsproxy.io for", url);
+          if (!url) return null;
           if (url.startsWith('data:')) return url;
           
-          // Try corsproxy.io which is often more reliable
+          console.log("CORS Proxy: Trying primary proxy for", url);
+          
+          // Primary Proxy: corsproxy.io
           const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-          const response = await fetch(proxyUrl);
+          try {
+            const response = await fetch(proxyUrl);
+            if (response.ok) {
+              const blob = await response.blob();
+              return await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+            }
+          } catch (e) {
+            console.warn("Primary proxy failed, trying secondary...");
+          }
+
+          // Secondary Proxy: allorigins.win (different structure)
+          const secondaryProxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+          const response2 = await fetch(secondaryProxy);
+          if (response2.ok) {
+            const blob = await response2.blob();
+            return await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(reader.result);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          }
           
-          if (!response.ok) throw new Error("Proxy response not OK");
-          const blob = await response.blob();
-          
-          return await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
+          throw new Error("All proxies failed");
         } catch (err) {
           console.warn("CORS Proxy Failed. Falling back to direct URL link.", err);
-          // If we can't get base64, we return the URL so the PDF generator might still try doc.addImage(url)
           return url;
         }
       }

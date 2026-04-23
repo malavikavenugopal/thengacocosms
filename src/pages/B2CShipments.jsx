@@ -5,6 +5,7 @@ import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import { exportFormattedShipments } from '../utils/exportUtils';
+import { generateVisualReport } from '../utils/visualReportUtils';
 import { isRecordEditable } from '../utils/dateUtils';
 
 const B2CShipments = () => {
@@ -26,6 +27,7 @@ const B2CShipments = () => {
   const [editingId, setEditingId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isGeneratingVisual, setIsGeneratingVisual] = useState(false);
 
   // Filters
   const [filterStartDate, setFilterStartDate] = useState('');
@@ -81,6 +83,22 @@ const B2CShipments = () => {
       toast.success('Exporting B2C Sales...');
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleVisualReport = async () => {
+    setIsGeneratingVisual(true);
+    try {
+      const title = filterStartDate || filterEndDate 
+        ? `B2C Sales Summary`
+        : "B2C Sales Summary";
+      await generateVisualReport(filteredShipments, 'B2C', title, { startDate: filterStartDate, endDate: filterEndDate });
+      toast.success('Report generated successfully!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to generate visual report');
+    } finally {
+      setIsGeneratingVisual(false);
     }
   };
 
@@ -371,9 +389,14 @@ const B2CShipments = () => {
                </button>
              )}
           </div>
-          <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100" loading={isExporting}>
-            <Download size={16} className="mr-2" /> Export to Excel
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleVisualReport} variant="secondary" className="bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100" loading={isGeneratingVisual}>
+              <Package size={16} className="mr-2" /> Visual Report
+            </Button>
+            <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100" loading={isExporting}>
+              <Download size={16} className="mr-2" /> Export to Excel
+            </Button>
+          </div>
         </div>
 
         <Table headers={['Date', 'Channel', 'Parceled By', 'Products (Qty x Pack)', 'Total Units', 'Action']}>
