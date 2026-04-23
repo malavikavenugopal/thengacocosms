@@ -30,7 +30,7 @@ const DamageTracking = () => {
         images.map(url => `<br/><img src="${url}" alt="QC Photo" style="max-width: 400px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;" />`).join('')
       : '';
 
-    const recipients = ["malavikavenu914@gmail.com", "maria@thengacoco.com", "sudha.thenga@gmail.com", "sumitha@thengacoco.com" ];
+    const recipients = ["malavikavenu914@gmail.com", "nandanalakshmi21@gmail.com"]
     
     // Loop through each recipient to ensure everyone definitely receives it
     recipients.forEach(email => {
@@ -836,20 +836,23 @@ const DamageTracking = () => {
                                     const phone = (vendor?.whatsappName || "").replace(/\D/g, "");
 
                                     if (isMobile) {
-                                      // Mobile Fallback: Open WhatsApp App directly via wa.me
+                                      // Mobile Fallback: Try to open the WhatsApp contact list
                                       const link = document.createElement('a');
                                       link.href = URL.createObjectURL(imageFile);
                                       link.download = imageFile.name;
                                       link.click();
                                       
-                                      const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent("Please see the attached QC Report image.")}`;
+                                      // If phone exists, go to that contact. Otherwise, go to generic send.
+                                      const whatsappUrl = phone 
+                                        ? `https://wa.me/${phone}?text=${encodeURIComponent("Please see the attached QC Report image.")}`
+                                        : `https://api.whatsapp.com/send?text=${encodeURIComponent("Please see the attached QC Report image.")}`;
                                       window.open(whatsappUrl, "_blank");
                                     } else {
                                       // Desktop: Copy to Clipboard + Open WhatsApp Web
                                       try {
                                         const data = [new ClipboardItem({ [imageFile.type]: imageFile })];
                                         await navigator.clipboard.write(data);
-                                        toast.success("Image copied! Just Paste (Ctrl+V) in WhatsApp.");
+                                        toast.success("Image copied! Select any chat in WhatsApp and Paste (Ctrl+V).");
                                       } catch (clipboardErr) {
                                         const link = document.createElement('a');
                                         link.href = URL.createObjectURL(imageFile);
