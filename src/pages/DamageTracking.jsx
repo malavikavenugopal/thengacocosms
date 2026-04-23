@@ -848,11 +848,11 @@ const DamageTracking = () => {
                                         : `https://api.whatsapp.com/send?text=${encodeURIComponent("Please see the attached QC Report image.")}`;
                                       window.open(whatsappUrl, "_blank");
                                     } else {
-                                      // Desktop: Copy to Clipboard + Open WhatsApp Web
+                                      // Desktop: Copy to Clipboard + Open WhatsApp Contact Picker
                                       try {
                                         const data = [new ClipboardItem({ [imageFile.type]: imageFile })];
                                         await navigator.clipboard.write(data);
-                                        toast.success("Image copied! Select any chat in WhatsApp and Paste (Ctrl+V).");
+                                        toast.success("Image copied! Choose a contact and Paste (Ctrl+V).");
                                       } catch (clipboardErr) {
                                         const link = document.createElement('a');
                                         link.href = URL.createObjectURL(imageFile);
@@ -860,7 +860,9 @@ const DamageTracking = () => {
                                         link.click();
                                         toast.success("Report downloaded. Attach it in WhatsApp.");
                                       }
-                                      window.open(`https://web.whatsapp.com/`, "_blank");
+                                      
+                                      // Using /send with text forces the contact selection screen on WhatsApp Web
+                                      window.open(`https://web.whatsapp.com/send?text=${encodeURIComponent("Please see the attached QC Report.")}`, "_blank");
                                     }
                                   } catch (err) {
                                     toast.dismiss();

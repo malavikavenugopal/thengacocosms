@@ -95,6 +95,12 @@ const downloadAsPDF = (shipments, type, title, fileName, dateRange) => {
 };
 
 const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
+  // Pre-fetch all images as base64 to bypass CORS issues
+  const shipmentsWithBase64 = await Promise.all(shipments.map(async s => {
+    const base64Images = s.images ? await Promise.all(s.images.map(img => getProxyImageBase64(img))) : [];
+    return { ...s, base64Images };
+  }));
+
   const container = document.createElement('div');
   container.id = 'report-capture-container';
   container.style.position = 'fixed';
@@ -107,10 +113,10 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
   container.style.fontFamily = '"Times New Roman", Times, serif';
   
   const themes = {
-    B2B: { color: '#065f46' },
-    B2C: { color: '#065f46' },
-    Damage: { color: '#065f46' },
-    QC: { color: '#065f46' }
+    B2B: { color: '#312e81' }, // Indigo
+    B2C: { color: '#065f46' }, // Emerald
+    Damage: { color: '#9f1239' }, // Rose
+    QC: { color: '#134e4a' }     // Teal/DarkGreen
   };
   const theme = themes[type] || themes.B2B;
 
@@ -132,7 +138,7 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
     
     <div style="border-bottom: 2px solid ${theme.color}; margin-bottom: 30px;"></div>
 
-    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
       <thead>
         <tr style="background-color: ${theme.color}; color: white; text-align: left;">
           <th style="padding: 10px; border: 1px solid #ddd;">Date</th>
@@ -145,7 +151,7 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
         </tr>
       </thead>
       <tbody>
-        ${shipments.map((s, idx) => `
+        ${shipmentsWithBase64.map((s, idx) => `
           <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
             <td style="padding: 10px; border: 1px solid #ddd; white-space: nowrap;">${s.date}</td>
             <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">
@@ -168,6 +174,19 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
       </tbody>
     </table>
     
+    ${type === 'QC' && shipmentsWithBase64.some(s => s.base64Images?.length > 0) ? `
+      <div style="margin-top: 30px;">
+        <h3 style="color: ${theme.color}; font-size: 14px; font-weight: bold; text-transform: uppercase; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">Photo Evidence</h3>
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+          ${shipmentsWithBase64.flatMap(s => s.base64Images || []).map(dataUrl => `
+            <div style="aspect-ratio: 1.2; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0;">
+              <img src="${dataUrl}" style="width: 100%; height: 100%; object-fit: cover;"/>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''}
+
     <div style="margin-top: 40px; text-align: center; color: #94a3b8; font-size: 10px; border-top: 1px solid #eee; padding-top: 15px;">
       © ThengaCoco - Internal Inventory Report
     </div>
@@ -176,6 +195,18 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
   document.body.appendChild(container);
   
   try {
+    // Wait for all images to load
+    const imgs = container.querySelectorAll('img');
+    const loadPromises = Array.from(imgs).map(img => {
+      if (img.complete) return Promise.resolve();
+      return new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      });
+    });
+    await Promise.all(loadPromises);
+    await new Promise(resolve => setTimeout(resolve, 400));
+
     const canvas = await html2canvas(container, {
       scale: 2,
       backgroundColor: '#ffffff',
@@ -253,12 +284,19 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
   container.style.position = 'fixed';
   container.style.left = '-9999px';
   container.style.top = '0';
-  container.style.width = '794px';
+  container.style.width = '794px'; // A4 Width
+  container.style.minHeight = '1123px'; // A4 Height
   container.style.backgroundColor = '#ffffff';
   container.style.padding = '50px';
   container.style.fontFamily = '"Times New Roman", Times, serif';
   
-  const themeColor = '#065f46';
+  const themes = {
+    B2B: { color: '#312e81' }, // Indigo
+    B2C: { color: '#065f46' }, // Emerald
+    Damage: { color: '#9f1239' }, // Rose
+    QC: { color: '#134e4a' }     // Teal/DarkGreen
+  };
+  const themeColor = themes[type]?.color || '#065f46';
   const dateFrom = dateRange.startDate ? `<span style="margin-right: 15px;"><b>From:</b> ${dateRange.startDate}</span>` : '';
   const dateTo = dateRange.endDate ? `<span><b>To:</b> ${dateRange.endDate}</span>` : '';
 
@@ -266,18 +304,18 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
     <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 10px;">
       <img src="/logo.jpg" style="height: 60px; width: 60px; object-fit: contain;" alt="Logo" onerror="this.style.display='none'"/>
       <div style="text-align: left;">
-        <h1 style="color: ${themeColor}; margin: 0; font-size: 16px; text-transform: uppercase; font-weight: bold;">ThengaCoco</h1>
-        <h2 style="color: #334155; margin: 2px 0; font-size: 14px; font-weight: bold;">${title}</h2>
-        <div style="color: #64748b; font-size: 12px; margin-top: 4px;">
+        <h1 style="color: ${themeColor}; margin: 0; font-size: 18px; text-transform: uppercase; font-weight: bold;">ThengaCoco</h1>
+        <h2 style="color: #334155; margin: 2px 0; font-size: 16px; font-weight: bold;">${title}</h2>
+        <div style="color: #64748b; font-size: 14px; margin-top: 4px;">
           ${dateFrom} ${dateTo}
         </div>
-        <div style="color: #94a3b8; font-size: 10px; margin-top: 2px;">Generated: ${new Date().toLocaleString()}</div>
+        <div style="color: #94a3b8; font-size: 12px; margin-top: 2px;">Generated: ${new Date().toLocaleString()}</div>
       </div>
     </div>
     
     <div style="border-bottom: 2px solid ${themeColor}; margin-bottom: 30px;"></div>
 
-    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
       <thead>
         <tr style="background-color: ${themeColor}; color: white; text-align: left;">
           <th style="padding: 10px; border: 1px solid #ddd;">Date</th>
