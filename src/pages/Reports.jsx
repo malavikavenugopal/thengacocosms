@@ -15,6 +15,7 @@ const Reports = () => {
     sku: 'All SKUs',
     channel: 'All Channels'
   });
+  const [isExporting, setIsExporting] = useState(false);
 
   const tabs = [
     { id: 'shipments', label: 'Shipment Report' },
@@ -259,85 +260,90 @@ const Reports = () => {
     }).sort((a, b) => b.totalDispatched - a.totalDispatched);
   }, [stock, b2bShipments, b2cShipments, returnRecords]);
 
-  const handleExport = () => {
-    let dataToExport = [];
-    let title = '';
-    let fileName = '';
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      let dataToExport = [];
+      let title = '';
+      let fileName = '';
 
-    if (activeTab === 'shipments') {
-      dataToExport = filteredShipments.map(s => ({
-        Date: s.date,
-        Type: s.type,
-        Channel: s.type === 'B2B' ? s.whoParceled : s.channel,
-        Products: (s.products || []).map(p => `${p.name} (${p.quantity})`).join(', '),
-        TotalUnits: s.products.reduce((sum, p) => {
-          let ps = Number(p.packSize) || 1;
-          if (ps === 1) {
-            const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-            if (match && match[1]) ps = Number(match[1]);
-          }
-          return sum + (Number(p.quantity) * ps);
-        }, 0)
-      }));
-      title = 'DISPATCH LOG — SHIPMENTS';
-      fileName = `shipments_report_${new Date().toISOString().split('T')[0]}.xls`;
-    } else if (activeTab === 'b2cPivot') {
-      dataToExport = b2cPivotData.map(row => {
-        const rowData = {
-          Category: row.category,
-          SKU: row.sku,
-          Product: row.name
-        };
-        activeChannels.forEach(c => {
-          rowData[c.name.toUpperCase()] = row.channels[c.name] || 0;
+      if (activeTab === 'shipments') {
+        dataToExport = filteredShipments.map(s => ({
+          Date: s.date,
+          Type: s.type,
+          Channel: s.type === 'B2B' ? s.whoParceled : s.channel,
+          Products: (s.products || []).map(p => `${p.name} (${p.quantity})`).join(', '),
+          TotalUnits: s.products.reduce((sum, p) => {
+            let ps = Number(p.packSize) || 1;
+            if (ps === 1) {
+              const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+              if (match && match[1]) ps = Number(match[1]);
+            }
+            return sum + (Number(p.quantity) * ps);
+          }, 0)
+        }));
+        title = 'DISPATCH LOG — SHIPMENTS';
+        fileName = `shipments_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      } else if (activeTab === 'b2cPivot') {
+        dataToExport = b2cPivotData.map(row => {
+          const rowData = {
+            Category: row.category,
+            SKU: row.sku,
+            Product: row.name
+          };
+          activeChannels.forEach(c => {
+            rowData[c.name.toUpperCase()] = row.channels[c.name] || 0;
+          });
+          rowData.TOTAL = row.total;
+          return rowData;
         });
-        rowData.TOTAL = row.total;
-        return rowData;
-      });
-      title = 'B2C SALES SUMMARY — PIVOT';
-      fileName = `b2c_sales_summary_${new Date().toISOString().split('T')[0]}.xls`;
-    } else if (activeTab === 'b2bPivot') {
-      dataToExport = b2bPivotData.map(row => ({
-        SKU: row.sku,
-        Product: row.name,
-        TotalUnits: row.total
-      }));
-      title = 'B2B SALES SUMMARY';
-      fileName = `b2b_sales_summary_${new Date().toISOString().split('T')[0]}.xls`;
-    } else if (activeTab === 'products') {
-      dataToExport = productStats.map(p => ({
-        SKUName: p.name,
-        TotalDispatched: p.totalDispatched,
-        B2BUnits: p.b2bQty,
-        B2CUnits: p.b2cQty,
-        ReturnUnits: p.returnsQty,
-        CurrentStock: p.currentStock,
-        Status: p.status
-      }));
-      title = 'SKU MASTER HEALTH REPORT';
-      fileName = `sku_report_${new Date().toISOString().split('T')[0]}.xls`;
-    } else if (activeTab === 'damage') {
-      dataToExport = filteredDamages.map(d => ({
-        Date: d.date,
-        SKU: d.productName,
-        Quantity: d.quantity,
-        Reason: d.reason || 'N/A'
-      }));
-      title = 'DAMAGE LOG';
-      fileName = `damage_report_${new Date().toISOString().split('T')[0]}.xls`;
-    } else if (activeTab === 'returns') {
-      dataToExport = filteredReturns.map(r => ({
-        Date: r.date,
-        Channel: r.channel,
-        SKU: r.productName,
-        Quantity: r.quantity,
-        Reason: r.reason || 'N/A'
-      }));
-      title = 'RETURNS LOG';
-      fileName = `returns_report_${new Date().toISOString().split('T')[0]}.xls`;
-    }
+        title = 'B2C SALES SUMMARY — PIVOT';
+        fileName = `b2c_sales_summary_${new Date().toISOString().split('T')[0]}.xlsx`;
+      } else if (activeTab === 'b2bPivot') {
+        dataToExport = b2bPivotData.map(row => ({
+          SKU: row.sku,
+          Product: row.name,
+          TotalUnits: row.total
+        }));
+        title = 'B2B SALES SUMMARY';
+        fileName = `b2b_sales_summary_${new Date().toISOString().split('T')[0]}.xlsx`;
+      } else if (activeTab === 'products') {
+        dataToExport = productStats.map(p => ({
+          SKUName: p.name,
+          TotalDispatched: p.totalDispatched,
+          B2BUnits: p.b2bQty,
+          B2CUnits: p.b2cQty,
+          ReturnUnits: p.returnsQty,
+          CurrentStock: p.currentStock,
+          Status: p.status
+        }));
+        title = 'SKU MASTER HEALTH REPORT';
+        fileName = `sku_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      } else if (activeTab === 'damage') {
+        dataToExport = filteredDamages.map(d => ({
+          Date: d.date,
+          SKU: d.productName,
+          Quantity: d.quantity,
+          Reason: d.reason || 'N/A'
+        }));
+        title = 'DAMAGE LOG';
+        fileName = `damage_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      } else if (activeTab === 'returns') {
+        dataToExport = filteredReturns.map(r => ({
+          Date: r.date,
+          Channel: r.channel,
+          SKU: r.productName,
+          Quantity: r.quantity,
+          Reason: r.reason || 'N/A'
+        }));
+        title = 'RETURNS LOG';
+        fileName = `returns_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      }
 
-    exportFormattedGeneric(dataToExport, title, fileName);
+      exportFormattedGeneric(dataToExport, title, fileName);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const skuOptions = ['All SKUs', ...stock.map(p => p.name)];
@@ -350,7 +356,7 @@ const Reports = () => {
           <h2 className="text-2xl font-bold tracking-tight text-slate-900">Reports</h2>
           <p className="text-sm text-slate-500">Generate and export operations analytics</p>
         </div>
-        <Button onClick={handleExport} variant="success" className="shrink-0 flex items-center gap-2 shadow-lg shadow-emerald-50">
+        <Button onClick={handleExport} variant="success" className="shrink-0 flex items-center gap-2 shadow-lg shadow-emerald-50" loading={isExporting}>
           <Download size={16} /> Export {tabs.find(t => t.id === activeTab)?.label}
         </Button>
       </div>
@@ -581,7 +587,7 @@ const Reports = () => {
             <p className="text-sm text-indigo-700 mt-1">Export raw data to Excel for custom pivot tables and charts.</p>
           </div>
         </div>
-        <Button variant="success" className="shrink-0 w-full sm:w-auto shadow-lg shadow-emerald-50" onClick={handleExport}>
+        <Button variant="success" className="shrink-0 w-full sm:w-auto shadow-lg shadow-emerald-50" onClick={handleExport} loading={isExporting}>
           Download All Raw Data
         </Button>
       </div>

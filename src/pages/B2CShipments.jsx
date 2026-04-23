@@ -24,6 +24,8 @@ const B2CShipments = () => {
 
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Filters
   const [filterStartDate, setFilterStartDate] = useState('');
@@ -68,12 +70,18 @@ const B2CShipments = () => {
     });
   }, [shipments, filterStartDate, filterEndDate, searchTerm, stock]);
 
-  const exportToExcel = () => {
-    exportFormattedShipments(
-      filteredShipments, 
-      'B2C', 
-      `B2C_Sales_${new Date().toISOString().split('T')[0]}.xls`
-    );
+  const exportToExcel = async () => {
+    setIsExporting(true);
+    try {
+      exportFormattedShipments(
+        filteredShipments, 
+        'B2C', 
+        `B2C_Sales_${new Date().toISOString().split('T')[0]}.xlsx`
+      );
+      toast.success('Exporting B2C Sales...');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleAddProduct = () => setProducts([...products, { id: Date.now() + products.length, name: '', quantity: '' }]);
@@ -83,45 +91,53 @@ const B2CShipments = () => {
     setProducts(products.map(p => p.id === id ? { ...p, [field]: value } : p));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
     
-    // Inject packSize from Master Data for each product before saving
-    const finalizedProducts = products.map(p => {
-      const masterSKU = stock.find(s => s.name === p.name);
-      let packSize = masterSKU?.packSize || 1;
-      
-      // Smart detection: If packSize is 1 but name contains "Set of X", use X
-      if (packSize === 1) {
-        const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-        if (match && match[1]) {
-          packSize = Number(match[1]);
+    try {
+      // Inject packSize from Master Data for each product before saving
+      const finalizedProducts = products.map(p => {
+        const masterSKU = stock.find(s => s.name === p.name);
+        let packSize = masterSKU?.packSize || 1;
+        
+        // Smart detection: If packSize is 1 but name contains "Set of X", use X
+        if (packSize === 1) {
+          const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+          if (match && match[1]) {
+            packSize = Number(match[1]);
+          }
         }
+
+        return {
+          name: p.name,
+          quantity: p.quantity,
+          packSize: packSize
+        };
+      });
+
+      const shipmentData = {
+        ...formData,
+        products: finalizedProducts,
+        timestamp: Date.now()
+      };
+
+      if (isEditing) {
+        await updateB2CShipment(editingId, shipmentData);
+        toast.success('B2C Order updated!');
+      } else {
+        await addB2CShipment(shipmentData);
+        toast.success('B2C Order recorded!');
+        clearDraft('b2c');
       }
 
-      return {
-        name: p.name,
-        quantity: p.quantity,
-        packSize: packSize
-      };
-    });
-
-    const shipmentData = {
-      ...formData,
-      products: finalizedProducts,
-      timestamp: Date.now()
-    };
-
-    if (isEditing) {
-      updateB2CShipment(editingId, shipmentData);
-      toast.success('B2C Order updated!');
-    } else {
-      addB2CShipment(shipmentData);
-      toast.success('B2C Order recorded!');
-      clearDraft('b2c');
+      handleCancel();
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to save B2C order');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    handleCancel();
   };
 
   const handleEdit = (s) => {
@@ -299,7 +315,7 @@ const B2CShipments = () => {
                 Cancel
               </Button>
             )}
-            <Button type="submit" className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white shadow-xl shadow-slate-200">
+            <Button type="submit" className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white shadow-xl shadow-slate-200" loading={isSubmitting}>
               <Save size={18} className="mr-2" /> {isEditing ? 'Update B2C Order' : 'Record B2C Order'}
             </Button>
           </div>
@@ -355,7 +371,7 @@ const B2CShipments = () => {
                </button>
              )}
           </div>
-          <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100">
+          <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100" loading={isExporting}>
             <Download size={16} className="mr-2" /> Export to Excel
           </Button>
         </div>

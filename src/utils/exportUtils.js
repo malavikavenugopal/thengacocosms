@@ -1,10 +1,12 @@
+import * as XLSX from 'xlsx';
+
 /**
  * Utility to export data to Excel with Styles
  * @param {Array} data - Array of objects to export
  * @param {string} fileName - Name of the file to download
  * @param {string} sheetName - Optional sheet name
  */
-export const exportToExcel = (data, fileName = 'export.xls', sheetName = 'Sheet1') => {
+export const exportToExcel = (data, fileName = 'export.xlsx', sheetName = 'Sheet1') => {
   if (!data || !data.length) return;
 
   const headers = Object.keys(data[0]);
@@ -84,15 +86,10 @@ export const exportToExcel = (data, fileName = 'export.xls', sheetName = 'Sheet1
     </html>
   `;
 
-  const blob = new Blob([excelFile], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName.replace('.csv', '.xls');
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const table = document.createElement('table');
+  table.innerHTML = tableHtml;
+  const wb = XLSX.utils.table_to_book(table);
+  XLSX.writeFile(wb, fileName);
 };
 
 export const exportToCSV = (data, fileName = 'export.csv') => {
@@ -133,7 +130,7 @@ export const exportToCSV = (data, fileName = 'export.csv') => {
 /**
  * Specialized Formatted Export for B2B/B2C dispatch logs
  */
-export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Log.xls') => {
+export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Log.xlsx') => {
   if (!shipments || !shipments.length) return;
 
   const title = type === 'B2B' ? 'B2B SHIPMENTS — DISPATCH LOG' : 'B2C SALES — DISPATCH LOG';
@@ -312,21 +309,16 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
     </html>
   `;
 
-  const blob = new Blob([excelFile], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName.replace('.csv', '.xls');
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const table = document.createElement('table');
+  table.innerHTML = tableHtml;
+  const wb = XLSX.utils.table_to_book(table);
+  XLSX.writeFile(wb, fileName);
 };
 
 /**
  * Specialized Formatted Export for ROP Planning
  */
-export const exportFormattedROP = (products, type = 'ROP', fileName = 'ROP_Planning.xls') => {
+export const exportFormattedROP = (products, type = 'ROP', fileName = 'ROP_Planning.xlsx') => {
   if (!products || !products.length) return;
 
   const title = 'REORDER POINT (ROP) PLANNING & SAFETY STOCK ANALYSIS';
@@ -442,21 +434,16 @@ export const exportFormattedROP = (products, type = 'ROP', fileName = 'ROP_Plann
     </html>
   `;
 
-  const blob = new Blob([excelFile], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const table = document.createElement('table');
+  table.innerHTML = tableHtml;
+  const wb = XLSX.utils.table_to_book(table);
+  XLSX.writeFile(wb, fileName);
 };
 
 /**
  * Specialized Formatted Export for Monthly Stock Check
  */
-export const exportFormattedStockCheck = (data, month, fileName = 'Stock_Check.xls') => {
+export const exportFormattedStockCheck = (data, month, fileName = 'Stock_Check.xlsx') => {
   if (!data || !data.length) return;
 
   const title = `MONTHLY INVENTORY RECONCILIATION — ${month.toUpperCase()}`;
@@ -567,21 +554,16 @@ export const exportFormattedStockCheck = (data, month, fileName = 'Stock_Check.x
     </html>
   `;
 
-  const blob = new Blob([excelFile], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const table = document.createElement('table');
+  table.innerHTML = tableHtml;
+  const wb = XLSX.utils.table_to_book(table);
+  XLSX.writeFile(wb, fileName);
 };
 
 /**
  * Generic Formatted Export for all other reports
  */
-export const exportFormattedGeneric = (data, titleSuffix = 'REPORT', fileName = 'Report.xls') => {
+export const exportFormattedGeneric = (data, titleSuffix = 'REPORT', fileName = 'Report.xlsx') => {
   if (!data || !data.length) return;
 
   const title = titleSuffix.toUpperCase();
@@ -675,13 +657,8 @@ export const exportFormattedGeneric = (data, titleSuffix = 'REPORT', fileName = 
     </html>
   `;
 
-  const blob = new Blob([excelFile], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = fileName;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  const table = document.createElement('table');
+  table.innerHTML = tableHtml;
+  const wb = XLSX.utils.table_to_book(table);
+  XLSX.writeFile(wb, fileName);
 };

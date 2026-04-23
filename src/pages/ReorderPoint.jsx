@@ -8,6 +8,7 @@ const ReorderPoint = () => {
     const { stock = [], b2bShipments = [], b2cShipments = [], updateSKU } = useGlobalState();
     const [searchTerm, setSearchTerm] = React.useState('');
     const [editMode, setEditMode] = React.useState(false);
+    const [isExporting, setIsExporting] = React.useState(false);
 
     const monthsShort = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
     const currentMonthNum = new Date().getMonth(); // 0-11
@@ -57,25 +58,30 @@ const ReorderPoint = () => {
         updateSKU(id, { [field]: Number(value) || 0 });
     };
 
-    const handleExport = () => {
-        const dataToExport = products.map(p => {
-            const activeROP = isFirstHalf ? (p.ropJanJun || 0) : (p.ropJulDec || 0);
-            const totalStock = (Number(p.in) || 0) + (Number(p.returned) || 0) - (Number(p.out) || 0) - (Number(p.damage) || 0);
-            const isLow = totalStock < activeROP;
-            const shortageAmt = isLow ? activeROP - totalStock : 0;
-            const monthly = getMonthlyConsumption(p.name);
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            const dataToExport = products.map(p => {
+                const activeROP = isFirstHalf ? (p.ropJanJun || 0) : (p.ropJulDec || 0);
+                const totalStock = (Number(p.in) || 0) + (Number(p.returned) || 0) - (Number(p.out) || 0) - (Number(p.damage) || 0);
+                const isLow = totalStock < activeROP;
+                const shortageAmt = isLow ? activeROP - totalStock : 0;
+                const monthly = getMonthlyConsumption(p.name);
 
-            return {
-                ...p,
-                monthly,
-                totalStock,
-                isLow,
-                shortageAmt,
-                isFirstHalf
-            };
-        });
+                return {
+                    ...p,
+                    monthly,
+                    totalStock,
+                    isLow,
+                    shortageAmt,
+                    isFirstHalf
+                };
+            });
 
-        exportFormattedROP(dataToExport, 'ROP', `ROP_Planning_${new Date().toISOString().split('T')[0]}.xls`);
+            exportFormattedROP(dataToExport, 'ROP', `ROP_Planning_${new Date().toISOString().split('T')[0]}.xlsx`);
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     // Calculate metrics
@@ -104,6 +110,7 @@ const ReorderPoint = () => {
                         variant="success"
                         onClick={handleExport}
                         className="flex items-center gap-2 shadow-lg shadow-emerald-100"
+                        loading={isExporting}
                     >
                         <Download size={18} />
                         Download Report

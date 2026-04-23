@@ -24,6 +24,9 @@ const MonthlyStockCheck = () => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
+  const [isFinalizing, setIsFinalizing] = useState(false);
+  const [isCarryingForward, setIsCarryingForward] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   const getMovementsForMonth = (monthStr) => {
     const sums = {};
@@ -108,8 +111,15 @@ const MonthlyStockCheck = () => {
   const calculateExpected = (opening, production, returned, out, damage, rejected) => 
     Number(opening || 0) + Number(production || 0) + Number(returned || 0) - Number(out || 0) - Number(damage || 0) - Number(rejected || 0);
 
-  const handleFinalize = () => {
-    toast.success(`Inventory state for ${selectedMonth} finalized!`);
+  const handleFinalize = async () => {
+    setIsFinalizing(true);
+    try {
+      // Logic for finalizing could go here (e.g. locking the month)
+      await new Promise(resolve => setTimeout(resolve, 800)); // Simulate async
+      toast.success(`Inventory state for ${selectedMonth} finalized!`);
+    } finally {
+      setIsFinalizing(false);
+    }
   };
 
   const handleCarryForward = async () => {
@@ -125,6 +135,7 @@ const MonthlyStockCheck = () => {
       return;
     }
 
+    setIsCarryingForward(true);
     const toastId = toast.loading(`Calculating and carrying forward Expected balances from ${prevMonthStr}...`);
     let count = 0;
 
@@ -157,43 +168,51 @@ const MonthlyStockCheck = () => {
       toast.success(`Carried forward ${count} expected balances!`, { id: toastId });
     } catch (err) {
       toast.error('Failed to carry forward data', { id: toastId });
+    } finally {
+      setIsCarryingForward(false);
     }
   };
   
-  const handleExport = () => {
-    const dataToExport = stock
-      .filter(item => !item.isComposite)
-      .map(item => {
-        const mData = monthlyStockData.find(d => d.month === selectedMonth && d.productId === item.id) || {};
-        const movements = monthlyMovements[item.name] || { out: 0, returned: 0, damage: 0, purchased: 0, rejected: 0 };
-        
-        const expected = calculateExpected(
-          mData.opening, 
-          (Number(mData.in) || 0) + movements.purchased, 
-          movements.returned, 
-          movements.out, 
-          movements.damage,
-          movements.rejected
-        );
-        const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : 0;
-        
-        return {
-          SKU_Code: item.sku,
-          SKU_Name: item.name,
-          Month: selectedMonth,
-          Opening: mData.opening || 0,
-          Production: (Number(mData.in) || 0) + movements.purchased, 
-          'Returned Items': movements.returned,
-          Dispatch: movements.out,
-          Damage: movements.damage,
-          Rejected: movements.rejected,
-          Expected: expected,
-          Physical: physical,
-          Difference: physical - expected
-        };
-      });
-    
-    exportFormattedStockCheck(dataToExport, selectedMonth, `Stock_Check_${selectedMonth}.xls`);
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const dataToExport = stock
+        .filter(item => !item.isComposite)
+        .map(item => {
+          const mData = monthlyStockData.find(d => d.month === selectedMonth && d.productId === item.id) || {};
+          const movements = monthlyMovements[item.name] || { out: 0, returned: 0, damage: 0, purchased: 0, rejected: 0 };
+          
+          const expected = calculateExpected(
+            mData.opening, 
+            (Number(mData.in) || 0) + movements.purchased, 
+            movements.returned, 
+            movements.out, 
+            movements.damage,
+            movements.rejected
+          );
+          const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : 0;
+          
+          return {
+            SKU_Code: item.sku,
+            SKU_Name: item.name,
+            Month: selectedMonth,
+            Opening: mData.opening || 0,
+            Production: (Number(mData.in) || 0) + movements.purchased, 
+            'Returned Items': movements.returned,
+            Dispatch: movements.out,
+            Damage: movements.damage,
+            Rejected: movements.rejected,
+            Expected: expected,
+            Physical: physical,
+            Difference: physical - expected
+          };
+        });
+      
+      exportFormattedStockCheck(dataToExport, selectedMonth, `Stock_Check_${selectedMonth}.xlsx`);
+      toast.success('Exporting Stock Check...');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
@@ -227,13 +246,13 @@ const MonthlyStockCheck = () => {
           </div>
 
           <div className="flex gap-2 w-full sm:w-auto">
-            <Button onClick={handleCarryForward} variant="secondary" className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 shadow-sm flex-1 sm:flex-none" title="Carry forward last month's closing as this month's opening">
+            <Button onClick={handleCarryForward} variant="secondary" className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 shadow-sm flex-1 sm:flex-none" title="Carry forward last month's closing as this month's opening" loading={isCarryingForward}>
               <ArrowRightLeft size={18} /> Carry Forward
             </Button>
-            <Button onClick={handleExport} variant="success" className="shadow-lg shadow-emerald-50 flex-1 sm:flex-none">
+            <Button onClick={handleExport} variant="success" className="shadow-lg shadow-emerald-50 flex-1 sm:flex-none" loading={isExporting}>
               <DownloadCloud size={18} /> Export
             </Button>
-            <Button onClick={handleFinalize} variant="primary" className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-lg shadow-emerald-100 flex-1 sm:flex-none">
+            <Button onClick={handleFinalize} variant="primary" className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 shadow-lg shadow-emerald-100 flex-1 sm:flex-none" loading={isFinalizing}>
               <CheckCircle2 size={18} /> Finalize
             </Button>
           </div>

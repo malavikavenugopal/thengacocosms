@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react';
 
 export const Card = ({ children, className = '', noPadding = false }) => (
   <div className={`bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 ${noPadding ? '' : 'p-6'} transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.05)] ${className}`}>
@@ -133,20 +133,22 @@ export const Table = ({ headers, children }) => (
   </div>
 );
 
-export const Button = ({ children, variant = 'primary', className = '', ...props }) => {
+export const Button = ({ children, variant = 'primary', className = '', loading = false, disabled = false, ...props }) => {
   const variants = {
-    primary: 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/30 active:bg-indigo-800 border-transparent',
-    secondary: 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-900 shadow-sm active:bg-slate-100',
-    danger: 'bg-red-500 text-white hover:bg-red-600 hover:shadow-lg hover:shadow-red-500/30 active:bg-red-700 border-transparent',
-    success: 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-500/30 active:bg-emerald-800 border-transparent',
-    ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-transparent'
+    primary: 'bg-indigo-600 text-white hover:bg-indigo-700 hover:shadow-lg hover:shadow-indigo-500/30 active:bg-indigo-800 border-transparent disabled:bg-indigo-400',
+    secondary: 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:text-slate-900 shadow-sm active:bg-slate-100 disabled:bg-slate-50 disabled:text-slate-400',
+    danger: 'bg-red-500 text-white hover:bg-red-600 hover:shadow-lg hover:shadow-red-500/30 active:bg-red-700 border-transparent disabled:bg-red-400',
+    success: 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-lg hover:shadow-emerald-500/30 active:bg-emerald-800 border-transparent disabled:bg-emerald-400',
+    ghost: 'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-transparent disabled:opacity-50'
   };
 
   return (
     <button
-      className={`px-5 py-2.5 rounded-xl font-semibold transition-all duration-200 text-sm flex items-center justify-center gap-2 border ${variants[variant]} ${className}`}
+      className={`px-5 py-2.5 rounded-xl font-semibold transition-all duration-200 text-sm flex items-center justify-center gap-2 border ${variants[variant]} ${className} ${loading || disabled ? 'cursor-not-allowed opacity-80' : ''}`}
+      disabled={loading || disabled}
       {...props}
     >
+      {loading && <Loader2 size={16} className="animate-spin" />}
       {children}
     </button>
   );

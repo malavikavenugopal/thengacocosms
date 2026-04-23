@@ -622,6 +622,12 @@ export const GlobalProvider = ({ children }) => {
         const urls = [];
         for (const file of files) {
           if (!file) continue;
+          // If it's already a URL (string), just keep it
+          if (typeof file === 'string') {
+            urls.push(file);
+            continue;
+          }
+          // If it's a new File/Blob object, upload it
           const storageRef = ref(storage, `qc/${Date.now()}_${file.name}`);
           await uploadBytes(storageRef, file);
           const url = await getDownloadURL(storageRef);

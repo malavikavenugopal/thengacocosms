@@ -109,31 +109,27 @@ const Login = () => {
               </div>
             </div>
 
-            <button
+            <Button
               type="submit"
-              disabled={isLoading || isSettingUp}
-              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-slate-200 hover:shadow-indigo-100 flex items-center justify-center gap-2 group disabled:opacity-70"
+              loading={isLoading}
+              disabled={isSettingUp}
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-4 rounded-2xl transition-all shadow-xl shadow-slate-200 hover:shadow-indigo-100 flex items-center justify-center gap-2 group h-auto"
             >
-              {isLoading ? (
-                <Loader2 className="animate-spin" size={20} />
-              ) : (
-                <>
-                  Sign In
-                  <LogIn size={18} className="group-hover:translate-x-1 transition-transform" />
-                </>
-              )}
-            </button>
+              Sign In <LogIn size={18} className="group-hover:translate-x-1 transition-transform" />
+            </Button>
           </form>
-
+ 
           <div className="mt-8 pt-6 border-t border-slate-50 text-center space-y-4">
-            <button
+            <Button
               onClick={handleSetup}
-              disabled={isLoading || isSettingUp}
-              className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-indigo-600 font-bold text-sm bg-indigo-50 hover:bg-indigo-100 transition-colors disabled:opacity-50"
+              loading={isSettingUp}
+              disabled={isLoading}
+              variant="secondary"
+              className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-indigo-600 font-bold text-sm bg-indigo-50 hover:bg-indigo-100 transition-colors h-auto"
             >
               <Sparkles size={16} />
-              {isSettingUp ? 'Setting Up...' : 'First time? Setup Admin Account'}
-            </button>
+              Setup Admin Account
+            </Button>
             <p className="text-xs text-slate-400 font-medium italic">"Cloud-synchronized stock management"</p>
           </div>
         </div>

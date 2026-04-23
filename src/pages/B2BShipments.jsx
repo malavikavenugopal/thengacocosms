@@ -3,7 +3,7 @@ import { Card, Input, Select, SearchableSelect, Button, Table } from '../compone
 import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Truck, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
-import * as XLSX from 'xlsx';
+
 
 import { useGlobalState } from '../context/GlobalContext';
 import { exportFormattedShipments } from '../utils/exportUtils';
@@ -28,6 +28,8 @@ const B2BShipments = () => {
 
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   // Filters
   const [filterStartDate, setFilterStartDate] = useState('');
@@ -73,12 +75,18 @@ const B2BShipments = () => {
     });
   }, [shipments, filterStartDate, filterEndDate, searchTerm, stock]);
 
-  const exportToExcel = () => {
-    exportFormattedShipments(
-      filteredShipments, 
-      'B2B', 
-      `B2B_Shipments_${new Date().toISOString().split('T')[0]}.xls`
-    );
+  const exportToExcel = async () => {
+    setIsExporting(true);
+    try {
+      exportFormattedShipments(
+        filteredShipments, 
+        'B2B', 
+        `B2B_Shipments_${new Date().toISOString().split('T')[0]}.xlsx`
+      );
+      toast.success('Exporting B2B Shipments...');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleAddProduct = () => setProducts([...products, { id: Date.now() + products.length, name: '', quantity: '' }]);
@@ -88,40 +96,48 @@ const B2BShipments = () => {
     setProducts(products.map(p => p.id === id ? { ...p, [field]: value } : p));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
     
-    const finalizedProducts = products.map(p => {
-      const masterSKU = stock.find(s => s.name === p.name);
-      return {
-        name: p.name,
-        quantity: p.quantity,
-        packSize: (() => {
-          let ps = masterSKU?.packSize || 1;
-          if (ps === 1) {
-            const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-            if (match && match[1]) ps = Number(match[1]);
-          }
-          return ps;
-        })()
+    try {
+      const finalizedProducts = products.map(p => {
+        const masterSKU = stock.find(s => s.name === p.name);
+        return {
+          name: p.name,
+          quantity: p.quantity,
+          packSize: (() => {
+            let ps = masterSKU?.packSize || 1;
+            if (ps === 1) {
+              const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+              if (match && match[1]) ps = Number(match[1]);
+            }
+            return ps;
+          })()
+        };
+      });
+
+      const shipmentData = {
+        ...formData,
+        products: finalizedProducts
       };
-    });
 
-    const shipmentData = {
-      ...formData,
-      products: finalizedProducts
-    };
+      if (isEditing) {
+        await updateB2BShipment(editingId, shipmentData);
+        toast.success('B2B Shipment updated!');
+      } else {
+        await addB2BShipment(shipmentData);
+        toast.success('B2B Shipment recorded!');
+        clearDraft('b2b');
+      }
 
-    if (isEditing) {
-      updateB2BShipment(editingId, shipmentData);
-      toast.success('B2B Shipment updated!');
-    } else {
-      addB2BShipment(shipmentData);
-      toast.success('B2B Shipment recorded!');
-      clearDraft('b2b');
+      handleCancel();
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to save B2B shipment');
+    } finally {
+      setIsSubmitting(false);
     }
-
-    handleCancel();
   };
 
   const handleEdit = (s) => {
@@ -316,7 +332,7 @@ const B2BShipments = () => {
                 Cancel
               </Button>
             )}
-            <Button type="submit">
+            <Button type="submit" loading={isSubmitting}>
               <Save size={16} className="mr-2" /> {isEditing ? 'Update Order' : 'Record Order'}
             </Button>
           </div>
@@ -372,7 +388,7 @@ const B2BShipments = () => {
                </button>
              )}
           </div>
-          <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100">
+          <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100" loading={isExporting}>
             <Download size={16} className="mr-2" /> Export to Excel
           </Button>
         </div>

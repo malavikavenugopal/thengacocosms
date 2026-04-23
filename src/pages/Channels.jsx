@@ -10,6 +10,8 @@ const Channels = () => {
   const [newChannelName, setNewChannelName] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleAddChannel = async (e) => {
     e.preventDefault();
@@ -20,12 +22,15 @@ const Channels = () => {
       return;
     }
 
+    setIsAdding(true);
     try {
       await addChannel(newChannelName.trim());
       setNewChannelName('');
       toast.success('Channel added!');
     } catch (err) {
       toast.error('Error adding channel');
+    } finally {
+      setIsAdding(false);
     }
   };
 
@@ -42,6 +47,7 @@ const Channels = () => {
       return;
     }
 
+    setIsSaving(true);
     try {
       await updateChannel(id, editValue.trim());
       setEditingId(null);
@@ -49,6 +55,8 @@ const Channels = () => {
       toast.success('Channel updated!');
     } catch (err) {
       toast.error('Error updating channel');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -104,7 +112,7 @@ const Channels = () => {
               onChange={(e) => setNewChannelName(e.target.value)}
               required
             />
-            <Button type="submit" className="w-full mt-2">
+            <Button type="submit" className="w-full mt-2" loading={isAdding}>
               Add Channel
             </Button>
           </form>
@@ -138,8 +146,8 @@ const Channels = () => {
                 <td className="py-4 px-6 text-sm whitespace-nowrap text-right">
                   {editingId === item.id ? (
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => saveEdit(item.id)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                        <Check size={18} />
+                      <button onClick={() => saveEdit(item.id)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg disabled:opacity-50" disabled={isSaving}>
+                        {isSaving ? <span className="animate-spin text-sm">...</span> : <Check size={18} />}
                       </button>
                       <button onClick={cancelEdit} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg">
                         <X size={18} />

@@ -22,6 +22,7 @@ const Returns = () => {
 
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Sync draft
   React.useEffect(() => {
@@ -30,7 +31,7 @@ const Returns = () => {
     }
   }, [formData, isEditing]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const newRecord = {
       ...formData,
@@ -50,24 +51,34 @@ const Returns = () => {
         confirmButtonText: 'Yes, Adjust Stock',
         cancelButtonText: 'Log Only'
       }).then(async (result) => {
-        if (isEditing) {
-          await updateReturnRecord(editingId, newRecord, result.isConfirmed);
-          toast.success('Return updated!');
-        } else {
-          addReturnRecord(newRecord, result.isConfirmed);
-          toast.success(result.isConfirmed ? 'Return logged & Stock adjusted!' : 'Return logged (History only).');
-          clearDraft('return');
+        setIsSubmitting(true);
+        try {
+          if (isEditing) {
+            await updateReturnRecord(editingId, newRecord, result.isConfirmed);
+            toast.success('Return updated!');
+          } else {
+            await addReturnRecord(newRecord, result.isConfirmed);
+            toast.success(result.isConfirmed ? 'Return logged & Stock adjusted!' : 'Return logged (History only).');
+            clearDraft('return');
+          }
+          handleCancel();
+        } finally {
+          setIsSubmitting(false);
         }
-        handleCancel();
       });
     } else {
-      if (isEditing) {
-        updateReturnRecord(editingId, newRecord, false);
-      } else {
-        addReturnRecord(newRecord, false);
+      setIsSubmitting(true);
+      try {
+        if (isEditing) {
+          await updateReturnRecord(editingId, newRecord, false);
+        } else {
+          await addReturnRecord(newRecord, false);
+        }
+        handleCancel();
+        toast.success(isEditing ? 'Return updated (No stock change).' : 'Return logged (Damaged items not restocked).');
+      } finally {
+        setIsSubmitting(false);
       }
-      handleCancel();
-      toast.success(isEditing ? 'Return updated (No stock change).' : 'Return logged (Damaged items not restocked).');
     }
   };
 
@@ -195,8 +206,8 @@ const Returns = () => {
             </div>
             <div className="flex gap-3">
               {isEditing && <Button type="button" variant="secondary" onClick={handleCancel}>Cancel</Button>}
-              <Button type="submit" className="px-8">
-                <Save size={18} /> {isEditing ? 'Update Log' : 'Log Return'}
+              <Button type="submit" className="px-8" loading={isSubmitting}>
+                <Save size={18} className="mr-2" /> {isEditing ? 'Update Log' : 'Log Return'}
               </Button>
             </div>
           </div>

@@ -14,6 +14,8 @@ const PurchaseManagement = () => {
   const [activeTab, setActiveTab] = useState('entry');
   const [newVendor, setNewVendor] = useState({ name: '', whatsappName: '' });
   const [editingVendor, setEditingVendor] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingVendor, setIsSavingVendor] = useState(false);
   
   const [formData, setFormData] = useState(() => {
     const defaultData = {
@@ -72,6 +74,7 @@ const PurchaseManagement = () => {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       if (isEditing) {
         const item = formData.items[0];
@@ -103,6 +106,8 @@ const PurchaseManagement = () => {
       handleCancel();
     } catch (err) {
       toast.error('Error saving purchase');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -285,8 +290,8 @@ const PurchaseManagement = () => {
               {isEditing && (
                 <Button type="button" variant="secondary" onClick={handleCancel}>Cancel Edit</Button>
               )}
-              <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700 shadow-xl shadow-indigo-200 px-8 py-3 h-auto">
-                <Save size={18} /> {isEditing ? 'Update Selection' : 'Save all Arrivals'}
+              <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700 shadow-xl shadow-indigo-200 px-8 py-3 h-auto" loading={isSubmitting}>
+                <Save size={18} className="mr-2" /> {isEditing ? 'Update Selection' : 'Save all Arrivals'}
               </Button>
             </div>
           </form>
@@ -430,18 +435,23 @@ const PurchaseManagement = () => {
                 className="flex-1"
               />
               <div className="flex items-end gap-2">
-                <Button onClick={() => {
+                <Button onClick={async () => {
                   if (!newVendor.name) return;
-                  if (editingVendor) {
-                    updateVendor(editingVendor.id, newVendor);
-                    setEditingVendor(null);
-                    toast.success('Vendor updated');
-                  } else {
-                    addVendor(newVendor);
-                    toast.success('Vendor registered');
+                  setIsSavingVendor(true);
+                  try {
+                    if (editingVendor) {
+                      await updateVendor(editingVendor.id, newVendor);
+                      setEditingVendor(null);
+                      toast.success('Vendor updated');
+                    } else {
+                      await addVendor(newVendor);
+                      toast.success('Vendor registered');
+                    }
+                    setNewVendor({ name: '', whatsappName: '' });
+                  } finally {
+                    setIsSavingVendor(false);
                   }
-                  setNewVendor({ name: '', whatsappName: '' });
-                }} className="h-11">
+                }} className="h-11" loading={isSavingVendor}>
                   {editingVendor ? 'Update' : 'Add Vendor'}
                 </Button>
                 {editingVendor && (

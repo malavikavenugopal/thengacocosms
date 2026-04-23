@@ -25,6 +25,10 @@ const Products = () => {
   const [filterType, setFilterType] = useState('all'); // all, solo, composite
   const [showBrokenOnly, setShowBrokenOnly] = useState(false);
   const [viewBundlesFor, setViewBundlesFor] = useState(null);
+  const [isAdding, setIsAdding] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isBulkUploading, setIsBulkUploading] = useState(false);
 
   const handleAddProduct = async (e) => {
     e.preventDefault();
@@ -39,6 +43,7 @@ const Products = () => {
     }
     
     // No restrictions on SKU uniqueness for bulk or manual as per request
+    setIsAdding(true);
     try {
       await addSKU({
         name: newProduct.name.trim(),
@@ -53,6 +58,8 @@ const Products = () => {
       toast.success('Product added successfully!');
     } catch (err) {
       toast.error('Error adding product');
+    } finally {
+      setIsAdding(false);
     }
   };
 
@@ -111,6 +118,7 @@ const Products = () => {
       }
     }
     
+    setIsSaving(true);
     try {
       await updateSKU(editingProduct.id, {
         name: editingProduct.name.trim(),
@@ -125,6 +133,8 @@ const Products = () => {
       toast.success('Product updated successfully!');
     } catch (err) {
       toast.error('Error updating product');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -160,76 +170,81 @@ const Products = () => {
     const file = e.target.files[0];
     if (!file) return;
 
+    setIsBulkUploading(true);
     const reader = new FileReader();
     reader.onload = async (event) => {
-      const text = event.target.result;
-      const lines = text.split('\n');
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-      
-      let addedCount = 0;
-      let errorCount = 0;
+      try {
+        const text = event.target.result;
+        const lines = text.split('\n');
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+        
+        let addedCount = 0;
+        let errorCount = 0;
 
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
 
-        const values = line.split(',').map(v => v.trim());
-        const row = {};
-        headers.forEach((h, idx) => row[h] = values[idx]);
+          const values = line.split(',').map(v => v.trim());
+          const row = {};
+          headers.forEach((h, idx) => row[h] = values[idx]);
 
-        try {
-          // Normalize column names to handle variations
-          const type = (row.type || row.producttype || 'solo').toLowerCase();
-          const isComposite = type === 'composite' || type === 'bundle';
-          const name = row.name || row.productname || row.itemname;
-          const sku = (row.sku || row.skucode || row.id || '').toUpperCase();
-          const category = row.category || row.group || 'Other';
-          const packSize = Number(row.packsize || row.pack) || 1;
-          const opening = Number(row.openingstock || row.opening || row.stock) || 0;
-          
-          let components = [];
-          if (isComposite && (row.components || row.parts)) {
-            const compStr = row.components || row.parts;
-            try {
-              components = compStr.split(';').map(part => {
-                if (!part.includes(':')) return null;
-                const [pName, pQty] = part.split(':');
-                return { name: pName.trim(), quantity: Number(pQty) || 1 };
-              }).filter(p => p && p.name);
-            } catch (e) {
-              console.warn(`Row ${i}: Error parsing components`, e);
-              components = [];
+          try {
+            // Normalize column names to handle variations
+            const type = (row.type || row.producttype || 'solo').toLowerCase();
+            const isComposite = type === 'composite' || type === 'bundle';
+            const name = row.name || row.productname || row.itemname;
+            const sku = (row.sku || row.skucode || row.id || '').toUpperCase();
+            const category = row.category || row.group || 'Other';
+            const packSize = Number(row.packsize || row.pack) || 1;
+            const opening = Number(row.openingstock || row.opening || row.stock) || 0;
+            
+            let components = [];
+            if (isComposite && (row.components || row.parts)) {
+              const compStr = row.components || row.parts;
+              try {
+                components = compStr.split(';').map(part => {
+                  if (!part.includes(':')) return null;
+                  const [pName, pQty] = part.split(':');
+                  return { name: pName.trim(), quantity: Number(pQty) || 1 };
+                }).filter(p => p && p.name);
+              } catch (e) {
+                console.warn(`Row ${i}: Error parsing components`, e);
+                components = [];
+              }
             }
-          }
 
-          if (!name) {
-            console.warn(`Row ${i}: Missing product name, skipping.`, row);
+            if (!name) {
+              console.warn(`Row ${i}: Missing product name, skipping.`, row);
+              errorCount++;
+              continue;
+            }
+
+            const productData = {
+              name,
+              sku: isComposite ? sku : '',
+              category,
+              packSize,
+              opening: isComposite ? 0 : opening,
+              isComposite,
+              components
+            };
+
+            console.log(`Row ${i}: Attempting to add`, productData);
+            await addSKU(productData);
+            addedCount++;
+          } catch (err) {
+            console.error(`Row ${i}: Failed to upload`, err);
             errorCount++;
-            continue;
           }
-
-          const productData = {
-            name,
-            sku: isComposite ? sku : '',
-            category,
-            packSize,
-            opening: isComposite ? 0 : opening,
-            isComposite,
-            components
-          };
-
-          console.log(`Row ${i}: Attempting to add`, productData);
-          await addSKU(productData);
-          addedCount++;
-        } catch (err) {
-          console.error(`Row ${i}: Failed to upload`, err);
-          errorCount++;
         }
-      }
 
-      console.log(`Bulk Upload Summary: ${addedCount} added, ${errorCount} failed.`);
-      toast.success(`Bulk Upload Complete! Added ${addedCount} products.`);
-      if (errorCount > 0) toast.error(`Failed to add ${errorCount} items. Check format.`);
+        console.log(`Bulk Upload Summary: ${addedCount} added, ${errorCount} failed.`);
+        toast.success(`Bulk Upload Complete! Added ${addedCount} products.`);
+        if (errorCount > 0) toast.error(`Failed to add ${errorCount} items. Check format.`);
+      } finally {
+        setIsBulkUploading(false);
+      }
     };
     reader.readAsText(file);
     e.target.value = null; // Reset input
@@ -250,19 +265,24 @@ const Products = () => {
     a.click();
   };
 
-  const handleExportSKUs = () => {
-    const dataToExport = stock.map(p => ({
-      Category: p.category || 'Other',
-      SKU: p.sku || '-',
-      Name: p.name,
-      Type: p.isComposite ? 'Composite' : 'Solo',
-      PackSize: p.packSize || 1,
-      OpeningStock: p.isComposite ? 0 : (p.opening || 0),
-      Components: p.isComposite ? p.components.map(c => `${c.name}:${c.quantity}`).join(';') : ''
-    }));
-    
-    exportToCSV(dataToExport, `sku_master_${new Date().toISOString().split('T')[0]}.csv`);
-    toast.success('SKU Master exported!');
+  const handleExportSKUs = async () => {
+    setIsExporting(true);
+    try {
+      const dataToExport = stock.map(p => ({
+        Category: p.category || 'Other',
+        SKU: p.sku || '-',
+        Name: p.name,
+        Type: p.isComposite ? 'Composite' : 'Solo',
+        PackSize: p.packSize || 1,
+        OpeningStock: p.isComposite ? 0 : (p.opening || 0),
+        Components: p.isComposite ? p.components.map(c => `${c.name}:${c.quantity}`).join(';') : ''
+      }));
+      
+      exportToCSV(dataToExport, `sku_master_${new Date().toISOString().split('T')[0]}.csv`);
+      toast.success('SKU Master exported!');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleExportByType = (type) => {
@@ -353,8 +373,9 @@ const Products = () => {
                 size="sm" 
                 onClick={() => document.getElementById('bulk-upload-input').click()}
                 className="text-indigo-600 border border-indigo-200 hover:bg-indigo-50"
+                loading={isBulkUploading}
               >
-                <Upload size={16} className="mr-2" /> Bulk Upload
+                <Upload size={16} className="mr-2" /> {isBulkUploading ? 'Uploading...' : 'Bulk Upload'}
               </Button>
            </div>
            <Button 
@@ -362,6 +383,7 @@ const Products = () => {
               size="sm" 
               onClick={handleExportSKUs}
               className="text-emerald-600 border border-emerald-200 hover:bg-emerald-50"
+              loading={isExporting}
             >
               <Download size={16} className="mr-2" /> Master
             </Button>
@@ -490,7 +512,7 @@ const Products = () => {
               </div>
             )}
 
-            <Button type="submit" className="w-full mt-2">
+            <Button type="submit" className="w-full mt-2" loading={isAdding}>
               Add SKU
             </Button>
           </form>
@@ -829,9 +851,9 @@ const Products = () => {
               )}
             </div>
 
-            <div className="p-6 bg-slate-50 flex gap-3 sticky bottom-0 border-t border-slate-100">
-              <Button variant="ghost" className="flex-1" onClick={cancelEdit}>Cancel</Button>
-              <Button className="flex-1" onClick={saveEdit}>Save Changes</Button>
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <Button variant="ghost" onClick={cancelEdit}>Cancel</Button>
+              <Button onClick={saveEdit} loading={isSaving}>Save Changes</Button>
             </div>
           </div>
         </div>

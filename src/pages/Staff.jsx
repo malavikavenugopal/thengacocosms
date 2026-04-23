@@ -10,6 +10,8 @@ const Staff = () => {
   const [newStaffName, setNewStaffName] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleAddStaff = async (e) => {
     e.preventDefault();
@@ -20,12 +22,15 @@ const Staff = () => {
       return;
     }
 
+    setIsAdding(true);
     try {
       await addStaffMember(newStaffName.trim());
       setNewStaffName('');
       toast.success('Staff added!');
     } catch (err) {
       toast.error('Error adding staff');
+    } finally {
+      setIsAdding(false);
     }
   };
 
@@ -42,6 +47,7 @@ const Staff = () => {
       return;
     }
 
+    setIsSaving(true);
     try {
       await updateStaffMember(id, editValue.trim());
       setEditingId(null);
@@ -49,6 +55,8 @@ const Staff = () => {
       toast.success('Updated successfully!');
     } catch (err) {
       toast.error('Error updating staff');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -104,7 +112,7 @@ const Staff = () => {
               onChange={(e) => setNewStaffName(e.target.value)}
               required
             />
-            <Button type="submit" className="w-full mt-2">
+            <Button type="submit" className="w-full mt-2" loading={isAdding}>
               Add Staff
             </Button>
           </form>
@@ -138,8 +146,8 @@ const Staff = () => {
                 <td className="py-4 px-6 text-sm whitespace-nowrap text-right">
                   {editingId === item.id ? (
                     <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => saveEdit(item.id)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg">
-                        <Check size={18} />
+                      <button onClick={() => saveEdit(item.id)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg disabled:opacity-50" disabled={isSaving}>
+                        {isSaving ? <span className="animate-spin text-xs">...</span> : <Check size={18} />}
                       </button>
                       <button onClick={cancelEdit} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg">
                         <X size={18} />

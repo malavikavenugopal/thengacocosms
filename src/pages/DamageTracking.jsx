@@ -57,7 +57,11 @@ const DamageTracking = () => {
   const [historySearch, setHistorySearch] = useState('');
   const [vendorFilter, setVendorFilter] = useState('All Vendors');
   const [selectedImages, setSelectedImages] = useState([]);
+  const [isSubmittingDamage, setIsSubmittingDamage] = useState(false);
+  const [isSubmittingQC, setIsSubmittingQC] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files);
@@ -141,8 +145,8 @@ const DamageTracking = () => {
       headStyles: { fillColor: [5, 150, 105] }
     });
 
-    // Add Images if they exist
-    if (finalImages && finalImages.length > 0) {
+    // Add Images if they exist (ONLY for WhatsApp/Share, not for standard downloads as per user request)
+    if (isShare && finalImages && finalImages.length > 0) {
       console.log("PDF DEBUG: Images found:", finalImages);
       toast.loading("Preparing " + finalImages.length + " inspection photos...");
       doc.addPage();
@@ -316,15 +320,23 @@ const DamageTracking = () => {
       confirmButtonText: 'Yes, Deduct',
       cancelButtonText: 'Log Entry Only'
     }).then(async (result) => {
-      if (isEditing) {
-        await updateDamageRecord(editingId, damageForm, result.isConfirmed);
-        toast.success('Damage record updated!');
-      } else {
-        addDamageRecord({ ...damageForm, id: Date.now() }, result.isConfirmed);
-        toast.success(result.isConfirmed ? 'Damage recorded & Stock deducted.' : 'Damage recorded (Log only).');
-        clearDraft('damage');
+      setIsSubmittingDamage(true);
+      try {
+        if (isEditing) {
+          await updateDamageRecord(editingId, damageForm, result.isConfirmed);
+          toast.success('Damage record updated!');
+        } else {
+          await addDamageRecord({ ...damageForm, id: Date.now() }, result.isConfirmed);
+          toast.success(result.isConfirmed ? 'Damage recorded & Stock deducted.' : 'Damage recorded (Log only).');
+          clearDraft('damage');
+        }
+        handleCancel();
+      } catch (error) {
+        console.error(error);
+        toast.error('Failed to save damage record');
+      } finally {
+        setIsSubmittingDamage(false);
       }
-      handleCancel();
     });
   };
 
@@ -342,6 +354,7 @@ const DamageTracking = () => {
 
     const processSubmission = async (shouldDeduct) => {
       try {
+        setIsSubmittingQC(true);
         setIsUploading(true);
         let imageUrls = [];
         if (selectedImages.length > 0) {
@@ -381,6 +394,7 @@ const DamageTracking = () => {
         }
       } finally {
         setIsUploading(false);
+        setIsSubmittingQC(false);
       }
     };
 
@@ -609,7 +623,6 @@ const DamageTracking = () => {
                       type="file" 
                       multiple 
                       accept="image/*" 
-                      capture="environment"
                       className="hidden" 
                       onChange={handleImageSelect}
                       disabled={selectedImages.length >= 4 || isUploading}
@@ -669,9 +682,9 @@ const DamageTracking = () => {
                  </div>
                  <div className="flex gap-3">
                   <Button type="button" variant="secondary" onClick={handleCancel}>Cancel</Button>
-                  <Button type="submit" disabled={isUploading}>
-                    {isUploading ? (
-                      <span className="flex items-center gap-2">Uploading images...</span>
+                  <Button type="submit" loading={isSubmittingQC}>
+                    {isSubmittingQC ? (
+                      <span className="flex items-center gap-2">{isUploading ? 'Uploading images...' : 'Saving Report...'}</span>
                     ) : (
                       editingId ? 'Update Report' : 'Save Report'
                     )}
@@ -699,6 +712,23 @@ const DamageTracking = () => {
                     onChange={(e) => setHistorySearch(e.target.value)}
                    />
                 </div>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="date" 
+                    className="px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    title="Start Date"
+                  />
+                  <span className="text-slate-400 text-xs">-</span>
+                  <input 
+                    type="date" 
+                    className="px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    title="End Date"
+                  />
+                </div>
                 <select 
                   className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer"
                   value={vendorFilter}
@@ -713,7 +743,8 @@ const DamageTracking = () => {
                        const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) || 
                                              (r.vendorName && r.vendorName.toLowerCase().includes(historySearch.toLowerCase()));
                        const matchesVendor = vendorFilter === 'All Vendors' || r.vendorName === vendorFilter;
-                       return matchesSearch && matchesVendor;
+                       const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
+                       return matchesSearch && matchesVendor && matchesDate;
                      });
                      await generatePDFReport(vendorFilter, 'Multiple', filtered);
                    }}
@@ -733,7 +764,8 @@ const DamageTracking = () => {
                     const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) || 
                                           (r.vendorName && r.vendorName.toLowerCase().includes(historySearch.toLowerCase()));
                     const matchesVendor = vendorFilter === 'All Vendors' || r.vendorName === vendorFilter;
-                    return matchesSearch && matchesVendor;
+                    const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
+                    return matchesSearch && matchesVendor && matchesDate;
                   })
                   .length === 0 ? (
                   <tr><td colSpan="6" className="py-12 text-center text-slate-400 font-medium">No records matching your search.</td></tr>
@@ -743,7 +775,8 @@ const DamageTracking = () => {
                       const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) || 
                                             (r.vendorName && r.vendorName.toLowerCase().includes(historySearch.toLowerCase()));
                       const matchesVendor = vendorFilter === 'All Vendors' || r.vendorName === vendorFilter;
-                      return matchesSearch && matchesVendor;
+                      const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
+                      return matchesSearch && matchesVendor && matchesDate;
                     })
                     .sort((a,b) => new Date(b.date) - new Date(a.date))
                     .map(r => (
@@ -817,53 +850,29 @@ const DamageTracking = () => {
                                  // 2. Try Native Share (Mobile)
                                  if (navigator.share) {
                                    try {
-                                     // Create the list of files to share
+                                     // ONLY send the PDF file to ensure it's treated as a "Report"
                                      const shareFiles = [pdfFile];
                                      
-                                     // Also add images to the share if they exist
-                                     if (r.images && r.images.length > 0) {
-                                       toast.loading("Attaching photos...");
-                                       for (let i = 0; i < r.images.length; i++) {
-                                         try {
-                                           const imgRes = await fetch(r.images[i]);
-                                           const imgBlob = await imgRes.blob();
-                                           shareFiles.push(new File([imgBlob], `QC_Photo_${i+1}.jpg`, { type: 'image/jpeg' }));
-                                         } catch (err) { console.error("Image attachment failed", err); }
-                                       }
-                                       toast.dismiss();
-                                     }
-
                                      const shareData = {
                                        files: shareFiles,
                                        title: `QC Report: ${r.productName}`,
-                                       text: `Hi,, Please find the official QC Inspection Report attached.`
+                                       text: `Hi, Please find the official QC Inspection Report attached.`
                                      };
                                      
-                                     // Try sharing all files (Report + Photos)
-                                     if (navigator.canShare && navigator.canShare(shareData)) {
-                                       await navigator.share(shareData);
-                                       return;
-                                     } 
-                                     // Fallback: Try sharing ONLY the PDF Report if multi-file share is rejected
-                                     else if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-                                       await navigator.share({
-                                         files: [pdfFile],
-                                         title: `QC Report: ${r.productName}`,
-                                         text: `Hi,, Please find the official QC Inspection Report attached.`
-                                       });
-                                       return;
-                                     }
+                                     // Try directly sharing the file
+                                     await navigator.share(shareData);
+                                     return; // If successful, stop here
                                    } catch (shareErr) {
-                                     toast.dismiss();
                                      console.log("Native share failed, falling back to link...", shareErr);
+                                     // If it's a "NOT_ALLOWED" or similar error, let it fall through to the link fallback
                                    }
                                  }
 
-                                 // 3. Fallback to WhatsApp Link for Desktop
+                                 // 3. Fallback to WhatsApp Link for Desktop or Unsupported Browsers
                                  const vendor = vendors.find(v => v.name === r.vendorName);
                                  const contact = vendor?.whatsappName || "";
                                  const phone = contact.replace(/\D/g, "");
-                                 const msg = `Hi,, Please find the official QC Inspection Report attached.\n\nView here: ${r.images?.[0] || 'See attached document'}`;
+                                 const msg = `Hi, Please find the official QC Inspection Report attached.\n\nView here: ${r.images?.[0] || 'See attached document'}`;
                                  const whatsappUrl = `https://wa.me/${phone ? phone : ""}?text=${encodeURIComponent(msg)}`;
                                  window.open(whatsappUrl, "_blank");
                                }}
@@ -1005,9 +1014,9 @@ const DamageTracking = () => {
               </div>
                <div className="flex justify-end gap-3">
                 {isEditing && <Button type="button" variant="secondary" onClick={handleCancel}>Cancel</Button>}
-                <Button type="submit" className="bg-rose-600 hover:bg-rose-700">
-                  <Save size={18} /> {isEditing ? 'Update Damage Record' : 'Confirm Damage'}
-                </Button>
+                  <Button type="submit" variant="danger" loading={isSubmittingDamage}>
+                    <Save size={16} className="mr-2" /> {isEditing ? 'Update Log' : 'Save Log Entry'}
+                  </Button>
               </div>
             </form>
           </Card>
@@ -1029,9 +1038,30 @@ const DamageTracking = () => {
                   onChange={(e) => setHistorySearch(e.target.value)}
                  />
               </div>
+              <div className="flex items-center gap-2">
+                <input 
+                  type="date" 
+                  className="px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-rose-500/20 outline-none cursor-pointer"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  title="Start Date"
+                />
+                <span className="text-slate-400 text-xs">-</span>
+                <input 
+                  type="date" 
+                  className="px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-rose-500/20 outline-none cursor-pointer"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  title="End Date"
+                />
+              </div>
               <Button 
                 onClick={() => {
-                   const filtered = damageRecords.filter(r => r.productName.toLowerCase().includes(historySearch.toLowerCase()));
+                   const filtered = damageRecords.filter(r => {
+                     const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase());
+                     const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
+                     return matchesSearch && matchesDate;
+                   });
                    generateDamagePDFReport(filtered);
                 }}
                 variant="success" 
@@ -1044,12 +1074,20 @@ const DamageTracking = () => {
 
             <Table headers={['Date', 'Product / SKU Name', 'Quantity', 'Deducted?', 'Reason', 'Action']}>
               {damageRecords
-                .filter(r => r.productName.toLowerCase().includes(historySearch.toLowerCase()))
+                .filter(r => {
+                  const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase());
+                  const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
+                  return matchesSearch && matchesDate;
+                })
                 .length === 0 ? (
                 <tr><td colSpan="6" className="py-12 text-center text-slate-400 font-medium">No records matching your search.</td></tr>
               ) : (
                 damageRecords
-                  .filter(r => r.productName.toLowerCase().includes(historySearch.toLowerCase()))
+                  .filter(r => {
+                    const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase());
+                    const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
+                    return matchesSearch && matchesDate;
+                  })
                   .map(r => (
                   <tr key={r.id} className="hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 font-medium">
                     <td className="py-4 px-6 text-sm text-slate-500">{r.date}</td>
