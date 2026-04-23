@@ -345,8 +345,8 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
     });
     
     await Promise.all(loadPromises);
-    // Give it one more frame just in case
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Reduced delay for better responsiveness
+    await new Promise(resolve => setTimeout(resolve, 400));
 
     const canvas = await html2canvas(container, {
       scale: 2,

@@ -804,13 +804,13 @@ const DamageTracking = () => {
                                </div>
                             )}
                             <button 
-                              onClick={async () => {
-                                  // 1. Generate the Image Report
-                                  toast.loading("Generating image report...");
+                              onClick={async (e) => {
+                                  e.preventDefault();
+                                  const toastId = toast.loading("Preparing report... please wait");
                                   try {
                                     const title = `QC Report: ${r.productName}`;
                                     const imageFile = await shareVisualReport([r], 'QC', title);
-                                    toast.dismiss();
+                                    toast.dismiss(toastId);
 
                                     if (!imageFile) {
                                       toast.error("Failed to generate report.");
