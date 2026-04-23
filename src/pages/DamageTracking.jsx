@@ -13,10 +13,10 @@ const DamageTracking = () => {
   const { stock, damageRecords, addDamageRecord, updateDamageRecord, deleteDamageRecord, qcRecords, addQCRecord, updateQCRecord, deleteQCRecord, drafts, updateDraft, clearDraft, purchaseRecords, vendors, uploadQCImages, getQCImageBase64 } = useGlobalState();
   
   const sendQCEmail = (vendorName, date, products, images = []) => {
-    // Replace these with your actual EmailJS credentials
-    const SERVICE_ID = "service_xkm5bck";
-    const TEMPLATE_ID = "template_hatngnl";
-    const PUBLIC_KEY = "NWluldMCpFboOvNZG";
+    // EmailJS credentials from environment variables for security
+    const SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID;
+    const TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
+    const PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
 
     // Format product details as a multi-line string/HTML
     const productDetails = (products || []).map(p => 
@@ -29,7 +29,7 @@ const DamageTracking = () => {
         images.map(url => `<br/><img src="${url}" alt="QC Photo" style="max-width: 400px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;" />`).join('')
       : '';
 
-    const recipients = ["malavikavenu914@gmail.com", "nandanalakshmi21@gmail.com"];
+    const recipients = ["malavikavenu914@gmail.com", "maria@thengacoco.com", "sudha.thenga@gmail.com", "sumitha@thengacoco.com" ];
     
     // Loop through each recipient to ensure everyone definitely receives it
     recipients.forEach(email => {
