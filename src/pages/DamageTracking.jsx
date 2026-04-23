@@ -818,35 +818,47 @@ const DamageTracking = () => {
                                     }
 
                                     // 2. Share via Native API (Mobile - Supports Android/iOS)
-                                    // We only send the file to make it "automatic" in WhatsApp
+                                    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                                    
                                     if (navigator.share) {
                                       try {
                                         await navigator.share({
                                           files: [imageFile]
                                         });
-                                        return; // Success on Mobile
+                                        return; // Success on Mobile App
                                       } catch (e) { 
                                         console.log("Native share failed", e); 
                                       }
                                     }
 
-                                    // 3. Desktop Fallback: Copy to Clipboard + Open WhatsApp
-                                    // NOTE: Automatic file sending on desktop is blocked by browser security.
-                                    // Clipboard Paste (Ctrl+V) is the fastest possible method.
-                                    try {
-                                      const data = [new ClipboardItem({ [imageFile.type]: imageFile })];
-                                      await navigator.clipboard.write(data);
-                                      toast.success("Image copied! Just Paste (Ctrl+V) in WhatsApp.");
-                                    } catch (clipboardErr) {
+                                    // 3. Fallback Logic
+                                    const vendor = vendors.find(v => v.name === r.vendorName);
+                                    const phone = (vendor?.whatsappName || "").replace(/\D/g, "");
+
+                                    if (isMobile) {
+                                      // Mobile Fallback: Open WhatsApp App directly via wa.me
                                       const link = document.createElement('a');
                                       link.href = URL.createObjectURL(imageFile);
                                       link.download = imageFile.name;
                                       link.click();
-                                      toast.success("Report downloaded. Attach it in WhatsApp.");
+                                      
+                                      const whatsappUrl = `https://wa.me/${phone}?text=${encodeURIComponent("Please see the attached QC Report image.")}`;
+                                      window.open(whatsappUrl, "_blank");
+                                    } else {
+                                      // Desktop: Copy to Clipboard + Open WhatsApp Web
+                                      try {
+                                        const data = [new ClipboardItem({ [imageFile.type]: imageFile })];
+                                        await navigator.clipboard.write(data);
+                                        toast.success("Image copied! Just Paste (Ctrl+V) in WhatsApp.");
+                                      } catch (clipboardErr) {
+                                        const link = document.createElement('a');
+                                        link.href = URL.createObjectURL(imageFile);
+                                        link.download = imageFile.name;
+                                        link.click();
+                                        toast.success("Report downloaded. Attach it in WhatsApp.");
+                                      }
+                                      window.open(`https://web.whatsapp.com/`, "_blank");
                                     }
-
-                                    // Open WhatsApp Web or App
-                                    window.open(`https://web.whatsapp.com/`, "_blank");
                                   } catch (err) {
                                     toast.dismiss();
                                     toast.error("Error sharing report.");
