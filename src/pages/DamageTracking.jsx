@@ -173,6 +173,47 @@ const DamageTracking = () => {
       headStyles: { fillColor: [5, 150, 105] }
     });
 
+    // Add Images if any
+    if (finalImages.length > 0) {
+      doc.addPage();
+      doc.setFont("times", "bold");
+      doc.setFontSize(18);
+      doc.setTextColor(5, 150, 105);
+      doc.text("Inspection Photos", 15, 20);
+      doc.line(15, 25, 195, 25);
+
+      let x = 15;
+      let y = 35;
+      const imgWidth = 85;
+      const imgHeight = 85;
+      const margin = 10;
+
+      for (let i = 0; i < finalImages.length; i++) {
+        try {
+          // Use the helper from context
+          const imgBase64 = await getQCImageBase64(finalImages[i]);
+          if (imgBase64 && (imgBase64.startsWith('data:image') || imgBase64.startsWith('http'))) {
+            // Determine format
+            const format = imgBase64.includes('png') ? 'PNG' : 'JPEG';
+            doc.addImage(imgBase64, format, x, y, imgWidth, imgHeight);
+            
+            x += imgWidth + margin;
+            if (x + imgWidth > 195) {
+              x = 15;
+              y += imgHeight + margin;
+            }
+            if (y + imgHeight > 280 && i < finalImages.length - 1) {
+              doc.addPage();
+              x = 15;
+              y = 20;
+            }
+          }
+        } catch (e) {
+          console.error("Error adding image to PDF", e);
+        }
+      }
+    }
+
     if (isShare) return doc;
     doc.save(isSummary ? `QC_History_Summary_${new Date().toISOString().split('T')[0]}.pdf` : `QC_Report_${vendorName}_${date}.pdf`);
   };

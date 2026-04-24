@@ -7,14 +7,14 @@ import Swal from 'sweetalert2';
 import { isRecordEditable } from '../utils/dateUtils';
 import { generateVisualReport } from '../utils/visualReportUtils';
 import { exportFormattedGeneric } from '../utils/exportUtils';
-import { Filter, Download, FileSpreadsheet } from 'lucide-react';
+import { Filter, Download, FileSpreadsheet, Box } from 'lucide-react';
 
 const Returns = () => {
   const { 
     stock, channels, b2bShipments, 
     returnRecords, addReturnRecord, updateReturnRecord, deleteReturnRecord, 
     replacementRecords, addReplacementRecord, updateReplacementRecord, deleteReplacementRecord,
-    drafts, updateDraft, clearDraft 
+    drafts, updateDraft, clearDraft, getAvailableStock 
   } = useGlobalState();
   
   const [activeTab, setActiveTab] = useState('returns');
@@ -177,6 +177,31 @@ const Returns = () => {
 
   const handleRepSubmit = async (e) => {
     e.preventDefault();
+
+    // Validation: Stock Check
+    const masterSKU = stock.find(s => s.name === repForm.productName);
+    const packSize = masterSKU?.packSize || 1;
+    const requestedTotal = Number(repForm.quantity) * packSize;
+    const available = getAvailableStock(repForm.productName);
+    
+    let alreadyDeducted = 0;
+    if (isEditing) {
+      const oldRecord = replacementRecords.find(r => r.id === editingId);
+      if (oldRecord && oldRecord.deducted) {
+        alreadyDeducted = Number(oldRecord.quantity) * (Number(oldRecord.packSize) || 1);
+      }
+    }
+    
+    if (requestedTotal > (available + alreadyDeducted)) {
+        Swal.fire({
+            title: 'Insufficient Stock!',
+            text: `Product "${repForm.productName}" only has ${available + alreadyDeducted} units available. (Requested: ${requestedTotal}).`,
+            icon: 'error',
+            confirmButtonColor: '#4f46e5'
+        });
+        return;
+    }
+
     Swal.fire({
       title: 'Confirm Replacement?',
       text: `Deduct ${repForm.quantity} units of ${repForm.productName} from inventory for this replacement?`,
@@ -451,6 +476,9 @@ const Returns = () => {
                 required
               />
             </div>
+
+
+
             <div className="flex justify-end pt-2">
                <Button type="submit" className="px-8 bg-indigo-600 hover:bg-indigo-700" loading={isSubmitting}>
                   <Save size={18} className="mr-2" /> {isEditing ? 'Update Replacement' : 'Process Replacement'}

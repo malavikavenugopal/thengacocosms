@@ -502,20 +502,20 @@ export const exportFormattedStockCheck = (data, month, fileName = 'Stock_Check.x
   // Row 1: Title
   tableHtml += `
     <tr>
-      <th colspan="11" class="header-main">${title}</th>
+      <th colspan="12" class="header-main">${title}</th>
     </tr>
   `;
 
   // Row 2: Metadata
   tableHtml += `
     <tr>
-      <th colspan="11" class="header-sub">Generated: ${timestamp}</th>
+      <th colspan="12" class="header-sub">Generated: ${timestamp}</th>
     </tr>
   `;
 
   // Row 3: Headers
   const headers = [
-    'SKU Code', 'SKU Name', 'Month', 'Opening', 'Stock In', 'Returns', 'Dispatch', 'Damage', 'Expected', 'Physical', 'Difference'
+    'SKU Code', 'SKU Name', 'Month', 'Opening', 'Stock In', 'Returns', 'Dispatch', 'Replacement', 'Damage', 'Expected', 'Physical', 'Difference'
   ];
   
   tableHtml += `<tr>`;
@@ -539,6 +539,7 @@ export const exportFormattedStockCheck = (data, month, fileName = 'Stock_Check.x
     tableHtml += `<td>${row.Production || 0}</td>`;
     tableHtml += `<td>${row['Returned Items'] || 0}</td>`;
     tableHtml += `<td>${row.Dispatch || 0}</td>`;
+    tableHtml += `<td>${row.Replacement || 0}</td>`;
     tableHtml += `<td>${row.Damage || 0}</td>`;
     tableHtml += `<td class="expected-col">${row.Expected || 0}</td>`;
     tableHtml += `<td class="num-bold">${row.Physical || 0}</td>`;

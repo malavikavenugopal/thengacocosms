@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Input, Select, SearchableSelect, MultiSelect, Button, Table } from '../components/ui';
-import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Truck, Package } from 'lucide-react';
+import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Truck, Package, Box } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 
@@ -11,7 +11,7 @@ import { generateVisualReport } from '../utils/visualReportUtils';
 import { isRecordEditable } from '../utils/dateUtils';
 
 const B2BShipments = () => {
-  const { stock, staff, couriers, b2bShipments: shipments, addB2BShipment, updateB2BShipment, deleteB2BShipment, drafts, updateDraft, clearDraft } = useGlobalState();
+  const { stock, staff, couriers, b2bShipments: shipments, addB2BShipment, updateB2BShipment, deleteB2BShipment, drafts, updateDraft, clearDraft, getAvailableStock } = useGlobalState();
   
   const [formData, setFormData] = useState(() => {
     const defaultDate = new Date().toISOString().split('T')[0];
@@ -127,6 +127,44 @@ const B2BShipments = () => {
     setIsSubmitting(true);
     
     try {
+      // Validation: Stock Check
+      for (const p of products) {
+        if (!p.name || !p.quantity) continue;
+        
+        const masterSKU = stock.find(s => s.name === p.name);
+        const packSize = (() => {
+            let ps = masterSKU?.packSize || 1;
+            if (ps === 1) {
+              const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+              if (match && match[1]) ps = Number(match[1]);
+            }
+            return ps;
+        })();
+        
+        const requestedTotal = Number(p.quantity) * packSize;
+        const available = getAvailableStock(p.name);
+        
+        let alreadyDeducted = 0;
+        if (isEditing) {
+          const oldShipment = shipments.find(s => s.id === editingId);
+          const oldProduct = oldShipment?.products?.find(op => op.name === p.name);
+          if (oldProduct) {
+            alreadyDeducted = Number(oldProduct.quantity) * (Number(oldProduct.packSize) || 1);
+          }
+        }
+        
+        if (requestedTotal > (available + alreadyDeducted)) {
+          Swal.fire({
+            title: 'Insufficient Stock!',
+            text: `Product "${p.name}" only has ${available + alreadyDeducted} units available. (Requested: ${requestedTotal}).`,
+            icon: 'error',
+            confirmButtonColor: '#4f46e5'
+          });
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       const finalizedProducts = products.map(p => {
         const masterSKU = stock.find(s => s.name === p.name);
         return {
@@ -286,6 +324,18 @@ const B2BShipments = () => {
                 }
 
                 const totalDeduction = (Number(product.quantity) || 0) * packSize;
+                
+                // Stock Availability Logic
+                const available = product.name ? getAvailableStock(product.name) : null;
+                let alreadyDeducted = 0;
+                if (isEditing && product.name) {
+                  const oldShipment = shipments.find(s => s.id === editingId);
+                  const oldProduct = oldShipment?.products?.find(op => op.name === product.name);
+                  if (oldProduct) {
+                    alreadyDeducted = Number(oldProduct.quantity) * (Number(oldProduct.packSize) || 1);
+                  }
+                }
+                const totalAvailable = available !== null ? available + alreadyDeducted : null;
 
                 return (
                   <div key={product.id} className="px-4 py-4 bg-slate-50 rounded-2xl border border-slate-100 relative group">
@@ -329,25 +379,27 @@ const B2BShipments = () => {
                         </button>
                       </div>
                     </div>
-                    {selectedSKU && (
-                      <div className="mt-2 flex items-center gap-3">
-                         <span className="text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded font-bold uppercase tracking-wider">SKU Code: {selectedSKU.sku}</span>
-                         <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold uppercase tracking-wider">
-                           Pack Size: {(() => {
-                             let ps = selectedSKU.packSize || 1;
-                             if (ps === 1) {
-                               const match = selectedSKU.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                               if (match && match[1]) return match[1] + " (Auto)";
-                             }
-                             return ps;
-                           })()}
-                         </span>
-                         <span className="text-[10px] px-2 py-0.5 bg-slate-200 text-slate-600 rounded font-medium italic">{selectedSKU.category}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                     {selectedSKU && (
+                       <div className="mt-2 flex items-center gap-3">
+                          <span className="text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded font-bold uppercase tracking-wider">SKU Code: {selectedSKU.sku}</span>
+                          <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold uppercase tracking-wider">
+                            Pack Size: {(() => {
+                              let ps = selectedSKU.packSize || 1;
+                              if (ps === 1) {
+                                const match = selectedSKU.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                                if (match && match[1]) return match[1] + " (Auto)";
+                              }
+                              return ps;
+                            })()}
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 bg-slate-200 text-slate-600 rounded font-medium italic">{selectedSKU.category}</span>
+                       </div>
+                     )}
+
+
+                   </div>
+                 );
+               })}
             </div>
           </div>
 

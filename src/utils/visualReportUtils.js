@@ -21,11 +21,11 @@ export const generateVisualReport = async (shipments, type, title, dateRange = {
   if (useImage) {
     await downloadAsImage(shipments, type, title, fileName, dateRange);
   } else {
-    downloadAsPDF(shipments, type, title, fileName, dateRange);
+    await downloadAsPDF(shipments, type, title, fileName, dateRange);
   }
 };
 
-const downloadAsPDF = (shipments, type, title, fileName, dateRange) => {
+const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
   const doc = new jsPDF();
   
   const themes = {
@@ -113,6 +113,43 @@ const downloadAsPDF = (shipments, type, title, fileName, dateRange) => {
     styles: { fontSize: 11, cellPadding: 4, valign: 'middle', font: 'times' },
     alternateRowStyles: { fillColor: [245, 247, 250] }
   });
+
+  // Add Images for QC PDF Summary
+  if (type === 'QC') {
+    const allImages = shipments.flatMap(s => s.images || []);
+    if (allImages.length > 0) {
+      doc.addPage();
+      doc.setFont("times", "bold");
+      doc.setFontSize(16);
+      doc.setTextColor(theme.color[0], theme.color[1], theme.color[2]);
+      doc.text("Inspection Photos", 15, 20);
+      doc.line(15, 25, 195, 25);
+      
+      let x = 15;
+      let y = 35;
+      const imgWidth = 85;
+      const imgHeight = 85;
+      const margin = 10;
+      
+      for (let i = 0; i < allImages.length; i++) {
+        try {
+          const imgBase64 = await getProxyImageBase64(allImages[i]);
+          if (imgBase64 && (imgBase64.startsWith('data:image') || imgBase64.startsWith('http'))) {
+            const format = imgBase64.includes('png') ? 'PNG' : 'JPEG';
+            doc.addImage(imgBase64, format, x, y, imgWidth, imgHeight);
+            x += imgWidth + margin;
+            if (x + imgWidth > 195) { x = 15; y += imgHeight + margin; }
+            if (y + imgHeight > 280 && i < allImages.length - 1) {
+              doc.addPage();
+              x = 15; y = 20;
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to add image to PDF report", e);
+        }
+      }
+    }
+  }
 
   doc.save(`${fileName}.pdf`);
 };
@@ -213,6 +250,19 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
       </tbody>
     </table>
     
+    ${shipmentsWithBase64.some(s => s.base64Images && s.base64Images.length > 0) ? `
+      <div style="margin-top: 30px; page-break-before: auto;">
+        <h3 style="color: ${theme.color}; font-size: 14px; text-transform: uppercase; margin-bottom: 12px; border-bottom: 2px solid ${theme.color}; padding-bottom: 5px;">Inspection Photos</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+          ${shipmentsWithBase64.flatMap(s => s.base64Images.map(img => `
+            <div style="width: 170px; height: 170px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #f8fafc;">
+              <img src="${img}" style="width: 100%; height: 100%; object-fit: cover;" />
+            </div>
+          `)).join('')}
+        </div>
+      </div>
+    ` : ''}
+
     <div style="margin-top: 40px; text-align: center; color: #94a3b8; font-size: 10px; border-top: 1px solid #eee; padding-top: 15px;">
       © ThengaCoco - Internal Inventory Report
     </div>
@@ -324,6 +374,20 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
         `).join('')}
       </tbody>
     </table>
+
+    ${shipmentsWithBase64.some(s => s.base64Images && s.base64Images.length > 0) ? `
+      <div style="margin-top: 30px;">
+        <h3 style="color: ${themeColor}; font-size: 14px; text-transform: uppercase; margin-bottom: 12px; border-bottom: 2px solid ${themeColor}; padding-bottom: 5px;">Inspection Photos</h3>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+          ${shipmentsWithBase64.flatMap(s => s.base64Images.map(img => `
+            <div style="width: 170px; height: 170px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #f8fafc;">
+              <img src="${img}" style="width: 100%; height: 100%; object-fit: cover;" />
+            </div>
+          `)).join('')}
+        </div>
+      </div>
+    ` : ''}
+
     <div style="margin-top: 40px; text-align: center; color: #94a3b8; font-size: 10px; border-top: 1px solid #eee; padding-top: 15px;">
       © ThengaCoco - Internal Inventory Report
     </div>

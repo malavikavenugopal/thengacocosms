@@ -35,6 +35,67 @@ export const GlobalProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
+
+  const getAvailableStock = (productName) => {
+    if (!productName || !stock) return 0;
+    const item = stock.find(s => s.name === productName);
+    if (!item) return 0;
+    
+    if (item.isComposite) {
+      if (!item.components || item.components.length === 0) return 0;
+      const componentStocks = item.components.map(comp => {
+        const compStock = getAvailableStock(comp.name);
+        return Math.floor(compStock / (Number(comp.quantity) || 1));
+      });
+      return Math.min(...componentStocks);
+    } else {
+      // Monthly-Aware Calculation to match "Expected" stock
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      
+      // 1. Get Opening Balance for this month
+      const mData = monthlyStockData?.find(d => d.month === currentMonth && d.productId === item.id);
+      
+      // 2. Filter movements for this month only
+      const isThisMonth = (date) => {
+        if (!date) return false;
+        return String(date).startsWith(currentMonth);
+      };
+
+      const movements = {
+        in: (purchaseRecords || []).filter(r => r.productName === productName && isThisMonth(r.date))
+            .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
+        
+        out: (b2bShipments || []).filter(s => isThisMonth(s.date))
+            .reduce((s, sh) => s + (sh.products || []).filter(p => p.name === productName)
+            .reduce((s2, p) => s2 + (Number(p.quantity) * Number(p.packSize || 1)), 0), 0) +
+            (b2cShipments || []).filter(s => isThisMonth(s.date))
+            .reduce((s, sh) => s + (sh.products || []).filter(p => p.name === productName)
+            .reduce((s2, p) => s2 + (Number(p.quantity) * Number(p.packSize || 1)), 0), 0),
+
+        returned: (returnRecords || []).filter(r => r.productName === productName && r.isReusable && isThisMonth(r.date))
+            .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
+
+        damage: (damageRecords || []).filter(r => r.productName === productName && isThisMonth(r.date))
+            .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0) +
+            (qcRecords || []).filter(r => r.productName === productName && isThisMonth(r.date) && r.deducted)
+            .reduce((s, r) => s + (Number(r.damaged) * Number(r.packSize || 1)), 0),
+
+        rejected: (qcRecords || []).filter(r => r.productName === productName && isThisMonth(r.date) && r.deducted)
+            .reduce((s, r) => s + (Number(r.rejected) * Number(r.packSize || 1)), 0),
+
+        replacement: (replacementRecords || []).filter(r => r.productName === productName && isThisMonth(r.date) && r.deducted)
+            .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0)
+      };
+
+      // If no monthly data, fallback to master opening + global totals (initial behavior)
+      if (!mData) {
+        return (Number(item.opening) || 0) + (Number(item.in) || 0) + (Number(item.returned) || 0) - (Number(item.out) || 0) - (Number(item.damage) || 0) - (Number(item.rejected) || 0) - (Number(item.replacement) || 0);
+      }
+
+      return (Number(mData.opening) || 0) + (Number(mData.in) || 0) + movements.in + movements.returned - movements.out - movements.damage - movements.rejected - movements.replacement;
+    }
+  };
   
   // Form Drafts for Persistence
   const [drafts, setDrafts] = useState(() => {
@@ -519,7 +580,7 @@ export const GlobalProvider = ({ children }) => {
 
     if (shouldDeduct) {
       const totalUnits = (Number(record.quantity) || 0) * (masterSKU?.packSize || 1);
-      await updateFirestoreStock(record.productName, totalUnits, 'add', 'out');
+      await updateFirestoreStock(record.productName, totalUnits, 'add', 'replacement');
     }
   };
 
@@ -530,7 +591,7 @@ export const GlobalProvider = ({ children }) => {
     // 1. Revert old stock if it was deducted
     if (oldRecord.deducted) {
       const oldUnits = (Number(oldRecord.quantity) || 0) * (Number(oldRecord.packSize) || 1);
-      await updateFirestoreStock(oldRecord.productName, oldUnits, 'sub', 'out');
+      await updateFirestoreStock(oldRecord.productName, oldUnits, 'sub', 'replacement');
     }
 
     // 2. Update Document
@@ -541,7 +602,7 @@ export const GlobalProvider = ({ children }) => {
     // 3. Apply new stock if confirmed
     if (shouldAdjust) {
       const newUnits = (Number(updatedRecord.quantity) || 0) * (masterSKU?.packSize || 1);
-      await updateFirestoreStock(updatedRecord.productName, newUnits, 'add', 'out');
+      await updateFirestoreStock(updatedRecord.productName, newUnits, 'add', 'replacement');
     }
   };
 
@@ -554,7 +615,7 @@ export const GlobalProvider = ({ children }) => {
         await deleteDoc(doc(db, 'replacementRecords', docId));
         if (record.deducted) {
           const totalUnits = (Number(record.quantity) || 0) * (Number(record.packSize) || 1);
-          await updateFirestoreStock(record.productName, totalUnits, 'sub', 'out');
+          await updateFirestoreStock(record.productName, totalUnits, 'sub', 'replacement');
         }
       } catch (err) {
         console.error("Replacement Delete Error:", err);
@@ -657,6 +718,7 @@ export const GlobalProvider = ({ children }) => {
       couriers, addCourier, updateCourier, deleteCourier,
       vendors, addVendor, updateVendor, deleteVendor,
       drafts, updateDraft, clearDraft,
+      getAvailableStock,
       monthlyStockData,
       saveMonthlyStock: async (month, productId, updates) => {
         const id = `${month}_${productId}`;

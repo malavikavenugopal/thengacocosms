@@ -7,11 +7,23 @@ export const Card = ({ children, className = '', noPadding = false }) => (
   </div>
 );
 
-export const Input = ({ label, className = '', ...props }) => (
+export const Input = ({ label, info, infoColor = 'indigo', className = '', ...props }) => (
   <div className={`flex flex-col gap-1.5 w-full ${className}`}>
-    {label && <label className="text-sm font-semibold text-slate-700">{label}</label>}
+    <div className="flex justify-between items-center">
+      {label && <label className="text-sm font-semibold text-slate-700">{label}</label>}
+      {info && (
+        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md ${
+          infoColor === 'red' ? 'text-red-500 bg-red-50 animate-pulse' : 
+          'text-indigo-500 bg-indigo-50'
+        }`}>
+          {info}
+        </span>
+      )}
+    </div>
     <input
-      className="px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white transition-all text-sm w-full placeholder-slate-400 text-slate-800"
+      className={`px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white transition-all text-sm w-full placeholder-slate-400 text-slate-800 ${
+        infoColor === 'red' ? 'border-red-300 ring-2 ring-red-500/10' : ''
+      }`}
       {...props}
     />
   </div>
