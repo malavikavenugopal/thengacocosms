@@ -213,7 +213,7 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
   let tableHtml = `<table>`;
   
   // Row 1: Title
-  const totalColSpan = type === 'B2B' ? 9 : 7;
+  const totalColSpan = type === 'B2B' ? 9 : 8;
   tableHtml += `
     <tr>
       <th colspan="${totalColSpan}" class="header-main">${title}</th>
@@ -230,7 +230,7 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
   // Row 3: Headers
   const headers = type === 'B2B' 
     ? ['Date', 'Client Name', 'Courier', 'Parceled By', 'Boxes', 'Product Name', 'Order Qty', 'Pack Size', 'Total Units']
-    : ['Date', 'Sales Channel', 'Parceled By', 'Product Name', 'Order Qty', 'Pack Size', 'Total Units'];
+    : ['Date', 'Sales Channel', 'Orders', 'Parceled By', 'Product Name', 'Order Qty', 'Pack Size', 'Total Units'];
   
   tableHtml += `<tr>`;
   headers.forEach(h => {
@@ -254,11 +254,12 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
         tableHtml += `<td rowspan="${rowCount}">${s.date}</td>`;
         if (type === 'B2C') {
           tableHtml += `<td rowspan="${rowCount}" class="channel-badge" style="background-color: ${channelColor}">${s.channel}</td>`;
+          tableHtml += `<td rowspan="${rowCount}">${s.orderCount || '1'}</td>`;
         } else {
           tableHtml += `<td rowspan="${rowCount}">${s.clientName}</td>`;
           tableHtml += `<td rowspan="${rowCount}">${s.courierName}</td>`;
         }
-        tableHtml += `<td rowspan="${rowCount}">${s.whoParceled}</td>`;
+        tableHtml += `<td rowspan="${rowCount}">${Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : s.whoParceled}</td>`;
         if (type === 'B2B') {
           tableHtml += `<td rowspan="${rowCount}">${s.boxes}</td>`;
         }
@@ -287,7 +288,7 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
   });
 
   // Footer: Grand Total
-  const footerColSpan = type === 'B2B' ? 8 : 6;
+  const footerColSpan = type === 'B2B' ? 8 : 7;
   tableHtml += `
     <tr>
       <td colspan="${footerColSpan}" class="grand-total text-right">GRAND TOTAL</td>

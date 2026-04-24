@@ -18,10 +18,11 @@ const PurchaseManagement = () => {
   const [isSavingVendor, setIsSavingVendor] = useState(false);
   
   const [formData, setFormData] = useState(() => {
+    const defaultDate = new Date().toISOString().split('T')[0];
     const defaultData = {
       vendorName: '',
       place: '',
-      date: new Date().toISOString().split('T')[0],
+      date: defaultDate,
       items: [{ productName: '', quantity: '' }]
     };
 

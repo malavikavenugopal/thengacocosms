@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
+import { Card, Input, Select, SearchableSelect, MultiSelect, Button, Table } from '../components/ui';
 import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Package } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
@@ -12,10 +12,13 @@ const B2CShipments = () => {
   const { stock, staff, channels, b2cShipments: shipments, addB2CShipment, updateB2CShipment, deleteB2CShipment, drafts, updateDraft, clearDraft } = useGlobalState();
   
   const [formData, setFormData] = useState(() => {
-    return drafts.b2c?.formData || {
-      whoParceled: '',
-      channel: '',
-      date: new Date().toISOString().split('T')[0]
+    const defaultDate = new Date().toISOString().split('T')[0];
+    const saved = drafts.b2c?.formData;
+    return {
+      whoParceled: Array.isArray(saved?.whoParceled) ? saved.whoParceled : saved?.whoParceled ? [saved.whoParceled] : [],
+      channel: saved?.channel || '',
+      orderCount: saved?.orderCount || '',
+      date: saved?.date || defaultDate
     };
   });
 
@@ -30,8 +33,12 @@ const B2CShipments = () => {
   const [isGeneratingVisual, setIsGeneratingVisual] = useState(false);
 
   // Filters
-  const [filterStartDate, setFilterStartDate] = useState('');
-  const [filterEndDate, setFilterEndDate] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [filterEndDate, setFilterEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Sync draft
@@ -60,7 +67,9 @@ const B2CShipments = () => {
       if (searchTerm) {
         const term = searchTerm.toLowerCase();
         const channelMatch = shipment.channel.toLowerCase().includes(term);
-        const staffMatch = shipment.whoParceled.toLowerCase().includes(term);
+        const staffMatch = Array.isArray(shipment.whoParceled) 
+          ? shipment.whoParceled.some(s => s?.toLowerCase().includes(term))
+          : shipment.whoParceled?.toLowerCase().includes(term);
         const productMatch = shipment.products.some(p => {
           const masterSKU = stock.find(item => item.name === p.name);
           return p.name.toLowerCase().includes(term) || masterSKU?.sku?.toLowerCase().includes(term);
@@ -162,8 +171,9 @@ const B2CShipments = () => {
     setIsEditing(true);
     setEditingId(s.id);
     setFormData({
-      whoParceled: s.whoParceled,
+      whoParceled: Array.isArray(s.whoParceled) ? s.whoParceled : s.whoParceled ? [s.whoParceled] : [],
       channel: s.channel,
+      orderCount: s.orderCount || '',
       date: s.date
     });
     setProducts(s.products.map((p, idx) => ({ ...p, id: Date.now() + idx })));
@@ -173,7 +183,7 @@ const B2CShipments = () => {
   const handleCancel = () => {
     setIsEditing(false);
     setEditingId(null);
-    setFormData({ whoParceled: '', channel: '', date: new Date().toISOString().split('T')[0] });
+    setFormData({ whoParceled: [], channel: '', orderCount: '', date: new Date().toISOString().split('T')[0] });
     setProducts([{ id: Date.now(), name: '', quantity: '' }]);
   };
 
@@ -213,19 +223,26 @@ const B2CShipments = () => {
 
       <Card>
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <SearchableSelect 
+          <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-4 gap-4">
+            <MultiSelect 
               label="Who Parceled" 
               options={staff.map(s => s.name)} 
               value={formData.whoParceled}
               onChange={(val) => setFormData({...formData, whoParceled: val})}
-              required
             />
             <SearchableSelect 
               label="Sales Channel" 
               options={channels.map(c => c.name)} 
               value={formData.channel}
               onChange={(val) => setFormData({...formData, channel: val})}
+              required
+            />
+            <Input 
+              label="No. of Orders" 
+              type="number" 
+              placeholder="Total orders"
+              value={formData.orderCount}
+              onChange={(e) => setFormData({...formData, orderCount: e.target.value})}
               required
             />
             <Input 
@@ -399,10 +416,10 @@ const B2CShipments = () => {
           </div>
         </div>
 
-        <Table headers={['Date', 'Channel', 'Parceled By', 'Products (Qty x Pack)', 'Total Units', 'Action']}>
+        <Table headers={['Date', 'Channel', 'Orders', 'Parceled By', 'Products', 'Qty', 'Pack', 'Total', 'Action']}>
           {filteredShipments.length === 0 ? (
             <tr>
-              <td colSpan="6" className="py-16 text-center text-slate-500">
+              <td colSpan="9" className="py-16 text-center text-slate-500">
                 <div className="flex flex-col items-center justify-center">
                   <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-3">
                     <ShoppingCart size={32} className="text-slate-300" />
@@ -426,7 +443,12 @@ const B2CShipments = () => {
                     {s.channel}
                   </span>
                 </td>
-                <td className="py-4 px-6 text-sm text-slate-600 whitespace-nowrap">{s.whoParceled}</td>
+                <td className="py-4 px-6 text-sm font-bold text-slate-900 text-center">
+                  {s.orderCount || '1'}
+                </td>
+                <td className="py-4 px-6 text-sm text-slate-600 whitespace-nowrap">
+                  {Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : s.whoParceled}
+                </td>
                 <td className="py-4 px-6 text-sm text-slate-500">
                   <div className="flex flex-col gap-1">
                     {(s.products || []).map((p, idx) => {
@@ -435,30 +457,41 @@ const B2CShipments = () => {
                         <div key={idx} className="flex items-center gap-1.5">
                           <span className="text-[10px] font-mono font-bold text-emerald-600 bg-emerald-50 px-1 rounded">{masterSKU?.sku || 'N/A'}</span>
                           <span className="font-semibold text-slate-900">{p.name}</span>
-                          <span className="text-xs text-slate-400">
-                            ({p.quantity} × {(() => {
-                               let ps = p.packSize || 1;
-                               if (ps === 1) {
-                                 const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                                 if (match && match[1]) ps = Number(match[1]);
-                               }
-                               return ps;
-                             })()})
-                          </span>
                         </div>
                       );
                     })}
                   </div>
                 </td>
-                <td className="py-4 px-6 text-sm text-indigo-600 font-bold">
-                  {s.products.reduce((acc, curr) => {
-                    let ps = Number(curr.packSize) || 1;
-                    if (ps === 1) {
-                      const match = curr.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                      if (match && match[1]) ps = Number(match[1]);
-                    }
-                    return acc + (Number(curr.quantity) * ps);
-                  }, 0)} units
+                <td className="py-4 px-6 text-sm text-center text-slate-600">
+                  <div className="flex flex-col gap-1">
+                    {(s.products || []).map((p, idx) => (
+                      <div key={idx} className="font-medium">{p.quantity}</div>
+                    ))}
+                  </div>
+                </td>
+                <td className="py-4 px-6 text-sm text-center text-slate-600">
+                  <div className="flex flex-col gap-1">
+                    {(s.products || []).map((p, idx) => {
+                       let ps = p.packSize || 1;
+                       if (ps === 1) {
+                         const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                         if (match && match[1]) ps = Number(match[1]);
+                       }
+                       return <div key={idx} className="text-slate-400">{ps}</div>;
+                    })}
+                  </div>
+                </td>
+                <td className="py-4 px-6 text-sm text-center font-bold text-indigo-600">
+                  <div className="flex flex-col gap-1">
+                    {(s.products || []).map((p, idx) => {
+                       let ps = p.packSize || 1;
+                       if (ps === 1) {
+                         const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                         if (match && match[1]) ps = Number(match[1]);
+                       }
+                       return <div key={idx}>{Number(p.quantity) * ps}</div>;
+                    })}
+                  </div>
                 </td>
                 <td className="py-4 px-6 text-sm text-center">
                   <div className="flex items-center justify-center gap-2">

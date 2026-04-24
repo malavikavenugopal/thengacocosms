@@ -10,8 +10,12 @@ const Reports = () => {
   
   // Filter states
   const [filter, setFilter] = useState({
-    startDate: '',
-    endDate: '',
+    startDate: (() => {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      return d.toISOString().split('T')[0];
+    })(),
+    endDate: new Date().toISOString().split('T')[0],
     sku: 'All SKUs',
     channel: 'All Channels'
   });
@@ -476,10 +480,10 @@ const Reports = () => {
           )}
 
           {activeTab === 'shipments' && (
-            <Table headers={['Date', 'Type', 'Destination/Channel', 'Details', 'Total Units']}>
+            <Table headers={['Date', 'Type', 'Channel', 'Orders', 'Products', 'Qty', 'Pack', 'Total Units']}>
               {filteredShipments.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="py-12 text-center text-slate-400">No shipments found for the current filters.</td>
+                  <td colSpan="8" className="py-12 text-center text-slate-400">No shipments found for the current filters.</td>
                 </tr>
               ) : (
                 filteredShipments.map(s => (
@@ -493,20 +497,50 @@ const Reports = () => {
                       </span>
                     </td>
                     <td className="py-4 px-6 text-sm font-semibold text-slate-900">
-                      {s.type === 'B2B' ? s.whoParceled : s.channel}
+                      {s.type === 'B2B' 
+                        ? (Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : s.whoParceled)
+                        : s.channel}
+                    </td>
+                    <td className="py-4 px-6 text-sm font-bold text-slate-900 text-center">
+                      {s.type === 'B2C' ? (s.orderCount || '1') : '-'}
                     </td>
                     <td className="py-4 px-6 text-sm text-slate-600 leading-relaxed">
-                      {(s.products || []).map(p => `${p.name} (${p.quantity})`).join(', ')}
+                      <div className="flex flex-col gap-1">
+                        {(s.products || []).map((p, idx) => (
+                          <div key={idx} className="font-medium text-slate-900">{p.name}</div>
+                        ))}
+                      </div>
                     </td>
-                    <td className="py-4 px-6 text-sm font-bold text-slate-800">
-                      {s.products.reduce((sum, p) => {
-                        let ps = Number(p.packSize) || 1;
-                        if (ps === 1) {
-                          const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                          if (match && match[1]) ps = Number(match[1]);
-                        }
-                        return sum + (Number(p.quantity) * ps);
-                      }, 0)}
+                    <td className="py-4 px-6 text-sm text-center text-slate-600">
+                      <div className="flex flex-col gap-1">
+                        {(s.products || []).map((p, idx) => (
+                          <div key={idx}>{p.quantity}</div>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-sm text-center text-slate-400">
+                      <div className="flex flex-col gap-1">
+                        {(s.products || []).map((p, idx) => {
+                          let ps = Number(p.packSize) || 1;
+                          if (ps === 1) {
+                            const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                            if (match && match[1]) ps = Number(match[1]);
+                          }
+                          return <div key={idx}>{ps}</div>;
+                        })}
+                      </div>
+                    </td>
+                    <td className="py-4 px-6 text-sm text-center font-bold text-slate-800">
+                      <div className="flex flex-col gap-1 text-indigo-600">
+                        {(s.products || []).map((p, idx) => {
+                          let ps = Number(p.packSize) || 1;
+                          if (ps === 1) {
+                            const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                            if (match && match[1]) ps = Number(match[1]);
+                          }
+                          return <div key={idx}>{Number(p.quantity) * ps}</div>;
+                        })}
+                      </div>
                     </td>
                   </tr>
                 ))

@@ -30,6 +30,7 @@ export const GlobalProvider = ({ children }) => {
   const [couriers, setCouriers] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [qcRecords, setQcRecords] = useState([]);
+  const [replacementRecords, setReplacementRecords] = useState([]);
   const [monthlyStockData, setMonthlyStockData] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -45,10 +46,11 @@ export const GlobalProvider = ({ children }) => {
         purchase: null,
         return: null,
         damage: null,
-        qc: null
+        qc: null,
+        replacement: null
       };
     } catch (e) {
-      return { b2b: null, b2c: null, purchase: null, return: null, damage: null, qc: null };
+      return { b2b: null, b2c: null, purchase: null, return: null, damage: null, qc: null, replacement: null };
     }
   });
 
@@ -143,13 +145,17 @@ export const GlobalProvider = ({ children }) => {
 
     const unsubVendors = onSnapshot(collection(db, 'vendors'), (snapshot) => {
       setVendors(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
+
+    const unsubReplacements = onSnapshot(query(collection(db, 'replacementRecords'), orderBy('date', 'desc')), (snapshot) => {
+      setReplacementRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       setLoading(false);
     });
 
     return () => {
       unsubStock(); unsubB2B(); unsubB2C(); unsubDamage(); 
       unsubReturns(); unsubQC(); unsubStaff(); unsubChannels(); unsubCouriers();
-      unsubMonthly(); unsubPurchases(); unsubVendors();
+      unsubMonthly(); unsubPurchases(); unsubVendors(); unsubReplacements();
     };
   }, [currentUser]);
 
@@ -455,8 +461,8 @@ export const GlobalProvider = ({ children }) => {
     
     await addDoc(collection(db, 'qcRecords'), finalizedRecord);
     
-    // Deduct BOTH rejected and damaged items from stock if any and confirmed
-    const issueQty = (Number(record.rejected) || 0) + (Number(record.damaged) || 0);
+    // Deduct Rejected, Damaged, and Baseless items from stock if any and confirmed
+    const issueQty = (Number(record.rejected) || 0) + (Number(record.damaged) || 0) + (Number(record.baseless) || 0);
     if (shouldDeduct && issueQty > 0) {
       const totalUnits = issueQty * (masterSKU?.packSize || 1);
       await updateFirestoreStock(record.productName, totalUnits, 'add', 'damage');
@@ -467,8 +473,8 @@ export const GlobalProvider = ({ children }) => {
     const oldRecord = qcRecords.find(r => r.id === id);
     if (!oldRecord) return;
 
-    // 1. Revert old (Rejected + Damaged)
-    const oldIssues = (Number(oldRecord.rejected) || 0) + (Number(oldRecord.damaged) || 0);
+    // 1. Revert old (Rejected + Damaged + Baseless)
+    const oldIssues = (Number(oldRecord.rejected) || 0) + (Number(oldRecord.damaged) || 0) + (Number(oldRecord.baseless) || 0);
     if (oldRecord.deducted && oldIssues > 0) {
       const oldUnits = oldIssues * (Number(oldRecord.packSize) || 1);
       await updateFirestoreStock(oldRecord.productName, oldUnits, 'sub', 'damage');
@@ -479,8 +485,8 @@ export const GlobalProvider = ({ children }) => {
     const finalized = { ...updatedRecord, packSize: masterSKU?.packSize || 1, deducted: shouldDeduct };
     await updateDoc(doc(db, 'qcRecords', String(id)), finalized);
 
-    // 3. Apply new (Rejected + Damaged)
-    const newIssues = (Number(updatedRecord.rejected) || 0) + (Number(updatedRecord.damaged) || 0);
+    // 3. Apply new (Rejected + Damaged + Baseless)
+    const newIssues = (Number(updatedRecord.rejected) || 0) + (Number(updatedRecord.damaged) || 0) + (Number(updatedRecord.baseless) || 0);
     if (shouldDeduct && newIssues > 0) {
       const newUnits = newIssues * (masterSKU?.packSize || 1);
       await updateFirestoreStock(updatedRecord.productName, newUnits, 'add', 'damage');
@@ -494,14 +500,64 @@ export const GlobalProvider = ({ children }) => {
     if (record) {
       try {
         await deleteDoc(doc(db, 'qcRecords', docId));
-        // Restore stock if there was rejection/damage AND it was deducted
-        const issueQty = (Number(record.rejected) || 0) + (Number(record.damaged) || 0);
+        // Restore stock if there was rejection/damage/baseless AND it was deducted
+        const issueQty = (Number(record.rejected) || 0) + (Number(record.damaged) || 0) + (Number(record.baseless) || 0);
         if (record.deducted && issueQty > 0) {
           const totalUnits = issueQty * (Number(record.packSize) || 1);
           await updateFirestoreStock(record.productName, totalUnits, 'sub', 'damage');
         }
       } catch (err) {
         console.error("QC Delete Error:", err);
+      }
+    }
+  };
+
+  const addReplacementRecord = async (record, shouldDeduct) => {
+    const masterSKU = stock.find(s => s.name === record.productName);
+    const finalizedRecord = { ...record, packSize: masterSKU?.packSize || 1, deducted: shouldDeduct };
+    await addDoc(collection(db, 'replacementRecords'), finalizedRecord);
+
+    if (shouldDeduct) {
+      const totalUnits = (Number(record.quantity) || 0) * (masterSKU?.packSize || 1);
+      await updateFirestoreStock(record.productName, totalUnits, 'add', 'out');
+    }
+  };
+
+  const updateReplacementRecord = async (id, updatedRecord, shouldAdjust) => {
+    const oldRecord = replacementRecords.find(r => r.id === id);
+    if (!oldRecord) return;
+
+    // 1. Revert old stock if it was deducted
+    if (oldRecord.deducted) {
+      const oldUnits = (Number(oldRecord.quantity) || 0) * (Number(oldRecord.packSize) || 1);
+      await updateFirestoreStock(oldRecord.productName, oldUnits, 'sub', 'out');
+    }
+
+    // 2. Update Document
+    const masterSKU = stock.find(s => s.name === updatedRecord.productName);
+    const finalized = { ...updatedRecord, packSize: masterSKU?.packSize || 1, deducted: shouldAdjust };
+    await updateDoc(doc(db, 'replacementRecords', String(id)), finalized);
+
+    // 3. Apply new stock if confirmed
+    if (shouldAdjust) {
+      const newUnits = (Number(updatedRecord.quantity) || 0) * (masterSKU?.packSize || 1);
+      await updateFirestoreStock(updatedRecord.productName, newUnits, 'add', 'out');
+    }
+  };
+
+  const deleteReplacementRecord = async (id) => {
+    if (!id) return;
+    const docId = String(id);
+    const record = replacementRecords.find(r => r.id === docId);
+    if (record) {
+      try {
+        await deleteDoc(doc(db, 'replacementRecords', docId));
+        if (record.deducted) {
+          const totalUnits = (Number(record.quantity) || 0) * (Number(record.packSize) || 1);
+          await updateFirestoreStock(record.productName, totalUnits, 'sub', 'out');
+        }
+      } catch (err) {
+        console.error("Replacement Delete Error:", err);
       }
     }
   };
@@ -585,15 +641,6 @@ export const GlobalProvider = ({ children }) => {
     await deleteDoc(doc(db, 'stock', id));
   };
 
-  if (currentUser && loading && stock.length === 0) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
-        <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-slate-600 font-medium tracking-wide">Syncing data...</p>
-      </div>
-    );
-  }
-
   return (
     <GlobalContext.Provider value={{ 
       currentUser, logout, authLoading,
@@ -604,6 +651,7 @@ export const GlobalProvider = ({ children }) => {
       returnRecords, addReturnRecord, updateReturnRecord, deleteReturnRecord,
       purchaseRecords, addPurchaseRecord, updatePurchaseRecord, deletePurchaseRecord,
       qcRecords, addQCRecord, updateQCRecord, deleteQCRecord,
+      replacementRecords, addReplacementRecord, updateReplacementRecord, deleteReplacementRecord,
       staff, addStaffMember, updateStaffMember, deleteStaffMember,
       channels, addChannel, updateChannel, deleteChannel,
       couriers, addCourier, updateCourier, deleteCourier,
@@ -622,12 +670,10 @@ export const GlobalProvider = ({ children }) => {
         const urls = [];
         for (const file of files) {
           if (!file) continue;
-          // If it's already a URL (string), just keep it
           if (typeof file === 'string') {
             urls.push(file);
             continue;
           }
-          // If it's a new File/Blob object, upload it
           const storageRef = ref(storage, `qc/${Date.now()}_${file.name}`);
           await uploadBytes(storageRef, file);
           const url = await getDownloadURL(storageRef);
@@ -639,10 +685,6 @@ export const GlobalProvider = ({ children }) => {
         try {
           if (!url) return null;
           if (url.startsWith('data:')) return url;
-          
-          console.log("CORS Proxy: Trying primary proxy for", url);
-          
-          // Primary Proxy: corsproxy.io
           const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
           try {
             const response = await fetch(proxyUrl);
@@ -658,8 +700,6 @@ export const GlobalProvider = ({ children }) => {
           } catch (e) {
             console.warn("Primary proxy failed, trying secondary...");
           }
-
-          // Secondary Proxy: allorigins.win (different structure)
           const secondaryProxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
           const response2 = await fetch(secondaryProxy);
           if (response2.ok) {
@@ -671,7 +711,6 @@ export const GlobalProvider = ({ children }) => {
               reader.readAsDataURL(blob);
             });
           }
-          
           throw new Error("All proxies failed");
         } catch (err) {
           console.warn("CORS Proxy Failed. Falling back to direct URL link.", err);
@@ -679,7 +718,12 @@ export const GlobalProvider = ({ children }) => {
         }
       }
     }}>
-      {children}
+      {currentUser && loading && stock.length === 0 ? (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
+          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+          <p className="text-slate-600 font-medium tracking-wide">Syncing data...</p>
+        </div>
+      ) : children}
     </GlobalContext.Provider>
   );
 };

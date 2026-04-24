@@ -13,44 +13,69 @@ import emailjs from 'emailjs-com';
 const DamageTracking = () => {
   const { stock, damageRecords, addDamageRecord, updateDamageRecord, deleteDamageRecord, qcRecords, addQCRecord, updateQCRecord, deleteQCRecord, drafts, updateDraft, clearDraft, purchaseRecords, vendors, uploadQCImages, getQCImageBase64 } = useGlobalState();
   
-  const sendQCEmail = (vendorName, date, products, images = []) => {
-    // EmailJS credentials from environment variables for security
-    const SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID;
-    const TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
-    const PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
+  const sendQCEmail = (vendorName, date, products, images = [], recordId = null) => {
+    // EmailJS credentials hardcoded as requested
+    const SERVICE_ID = "service_wjn0j8t";
+    const TEMPLATE_ID = "template_fg6ypin";
+    const PUBLIC_KEY = "P2y2DvSD3VRiaAFoK";
 
-    // Format product details as a multi-line string/HTML
-    const productDetails = (products || []).map(p => 
-      `• <b>${p.productName}</b>: Checked: ${p.checked}, Rejected: ${p.rejected || 0}, Damaged: ${p.damaged}, Approved: ${Number(p.checked) - Number(p.damaged) - (Number(p.rejected) || 0)}`
-    ).join('<br/>');
+    // Format product details with larger text and line-by-line metrics
+    const productDetails = (products || []).map(p => `
+      <div style="font-size: 16px; font-family: sans-serif; line-height: 1.5; margin-bottom: 20px; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #f8fafc;">
+        <b style="font-size: 20px; color: #065f46; display: block; margin-bottom: 10px;">${p.productName}</b>
+        <div style="margin-left: 10px;">
+          • Checked: <b>${p.checked}</b><br/>
+          • Rejected: <b>${p.rejected || 0}</b><br/>
+          • Damaged: <b>${p.damaged}</b><br/>
+          • Baseless: <b>${p.baseless || 0}</b><br/>
+          • Approved: <b style="color: #059669;">${Number(p.checked) - Number(p.damaged) - (Number(p.rejected) || 0) - (Number(p.baseless) || 0)}</b>
+        </div>
+      </div>
+    `).join('');
 
     // Format images as HTML tags
     const imageHtml = images && images.length > 0 
-      ? `<br/><br/><b>Inspection Photos:</b><br/>` + 
-        images.map(url => `<br/><img src="${url}" alt="QC Photo" style="max-width: 400px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;" />`).join('')
+      ? `<br/><br/><b style="font-size: 18px; color: #475569;">Inspection Photos:</b><br/>` + 
+        images.map(url => `<br/><img src="${url}" alt="QC Photo" style="max-width: 450px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;" />`).join('')
       : '';
 
-    const recipients = ["malavikavenu914@gmail.com", "nandanalakshmi21@gmail.com"]
+    // Combined recipients to avoid sending multiple separate emails
+    const recipients = "malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com";
     
-    // Loop through each recipient to ensure everyone definitely receives it
-    recipients.forEach(email => {
-      const templateParams = {
-        to_email: email,
-        vendor_name: vendorName || "N/A",
-        date: date,
-        product_details: productDetails + imageHtml 
-      };
+    // Header with Title, Vendor, and Date
+    const headerHtml = `
+      <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #065f46;">
+        <h1 style="color: #065f46; font-size: 32px; font-family: 'Georgia', serif; margin: 0; text-transform: uppercase; letter-spacing: 3px;">ThengaCoco</h1>
+        <p style="color: #64748b; font-size: 14px; font-weight: bold; margin: 5px 0 10px 0; text-transform: uppercase; letter-spacing: 1px;">Quality Inspection Report</p>
+        <div style="margin-top: 15px; color: #334155; font-family: sans-serif; font-size: 16px; background: #f1f5f9; padding: 10px; border-radius: 6px; display: inline-block;">
+          Vendor: <b style="color: #065f46;">${vendorName || "N/A"}</b> &nbsp; | &nbsp; Date: <b style="color: #065f46;">${date}</b>
+        </div>
+      </div>
+    `;
 
-      emailjs.send(SERVICE_ID, TEMPLATE_ID, templateParams, PUBLIC_KEY)
-        .then((res) => {
-          console.log(`Email sent to ${email}:`, res.status);
-        })
-        .catch((err) => {
-          console.error(`Failed to send to ${email}:`, err);
-        });
-    });
-    
-    toast.success("Email sent to all accounts!");
+    const templateParams = {
+      to_email: recipients,
+      vendor_name: vendorName || "N/A",
+      date: date,
+      product_details: headerHtml + productDetails + imageHtml 
+    };
+
+    emailjs.send(SERVICE_ID, TEMPLATE_ID, templateParams, PUBLIC_KEY)
+      .then((res) => {
+        console.log("Email sent successfully:", res.status);
+        toast.success("QC Report emailed to accounts.");
+        
+        // If a specific recordId was provided (manual resend), update its status in Firestore
+        if (recordId) {
+          const record = qcRecords.find(r => r.id === recordId);
+          if (record) {
+            updateQCRecord(recordId, { ...record, emailSent: true }, record.deducted);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error("Email send failure:", err);
+      });
   };
   const [activeTab, setActiveTab] = useState('qc'); 
   const [isExporting, setIsExporting] = useState(false);
@@ -64,8 +89,12 @@ const DamageTracking = () => {
   const [isSubmittingDamage, setIsSubmittingDamage] = useState(false);
   const [isSubmittingQC, setIsSubmittingQC] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
 
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files);
@@ -130,14 +159,15 @@ const DamageTracking = () => {
       p.date || date,
       isSummary ? `${p.productName}\n(${p.vendorName || 'N/A'})` : p.productName,
       p.checked,
-      Number(p.checked) - (Number(p.damaged) || 0) - (Number(p.rejected) || 0),
+      Number(p.checked) - (Number(p.damaged) || 0) - (Number(p.rejected) || 0) - (Number(p.baseless) || 0),
       p.damaged || 0,
-      p.rejected || 0
+      p.rejected || 0,
+      p.baseless || 0
     ]);
     
     autoTable(doc, {
       startY: 60,
-      head: [['#', 'Date', 'Product / Vendor', 'Checked', 'Good', 'Damaged', 'Rejected']],
+      head: [['#', 'Date', 'Product / Vendor', 'Checked', 'Good', 'Damaged', 'Rejected', 'Baseless']],
       body: tableData,
       theme: 'grid',
       headStyles: { fillColor: [5, 150, 105] }
@@ -149,29 +179,30 @@ const DamageTracking = () => {
   
   // Damage Form State
   const [damageForm, setDamageForm] = useState(() => {
-    return drafts.damage || {
-      date: new Date().toISOString().split('T')[0],
-      productName: '',
-      quantity: '',
-      reason: ''
+    const defaultDate = new Date().toISOString().split('T')[0];
+    const saved = drafts.damage;
+    return {
+      date: saved?.date || defaultDate,
+      productName: saved?.productName || '',
+      quantity: saved?.quantity || '',
+      reason: saved?.reason || ''
     };
   });
 
   // QC Form State
   const [qcForm, setQcForm] = useState(() => {
-    const base = drafts.qc || {
-      date: new Date().toISOString().split('T')[0],
+    const defaultDate = new Date().toISOString().split('T')[0];
+    const saved = drafts.qc;
+    const base = saved || {
+      date: defaultDate,
       vendorName: '',
-      products: [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '' }]
+      products: [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', baseless: '' }]
     };
-    // Ensure products is always an array for local storage compatibility
-    if (!base.products) {
-      return {
-        ...base,
-        products: [{ id: Date.now(), productName: base.productName || '', checked: base.checked || '', damaged: base.damaged || '', rejected: base.rejected || '' }]
-      };
-    }
-    return base;
+    return {
+      ...base,
+      date: base.date || defaultDate,
+      products: base.products || [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', baseless: '' }]
+    };
   });
 
   const vendorsList = vendors.length > 0 ? vendors.map(v => v.name) : Array.from(new Set((purchaseRecords || []).map(r => r.vendorName))).filter(Boolean);
@@ -248,7 +279,7 @@ const DamageTracking = () => {
       return;
     }
 
-    const hasDamages = qcForm.products.some(p => Number(p.damaged) > 0 || (Number(p.rejected) || 0) > 0);
+    const hasDamages = qcForm.products.some(p => Number(p.damaged) > 0 || (Number(p.rejected) || 0) > 0 || (Number(p.baseless) || 0) > 0);
 
     const processSubmission = async (shouldDeduct) => {
       try {
@@ -263,8 +294,9 @@ const DamageTracking = () => {
           ...p,
           date: qcForm.date,
           vendorName: qcForm.vendorName,
-          good: Number(p.checked) - Number(p.damaged) - (Number(p.rejected) || 0),
-          images: imageUrls
+          good: Number(p.checked) - Number(p.damaged) - (Number(p.rejected) || 0) - (Number(p.baseless) || 0),
+          images: imageUrls,
+          emailSent: false // Manual sending required
         }));
 
         for (const record of recordsToProcess) {
@@ -543,14 +575,22 @@ const DamageTracking = () => {
                           required
                         />
                       </div>
-                      <div className="md:col-span-4 lg:col-span-2">
+                      <div className="md:col-span-4 lg:col-span-1.5">
                         <Input 
                           label="Rejected" 
                           type="number" 
                           min="0" 
                           value={p.rejected}
                           onChange={(e) => updateQCProductField(p.id, 'rejected', e.target.value)}
-                          required
+                        />
+                      </div>
+                      <div className="md:col-span-4 lg:col-span-1.5">
+                        <Input 
+                          label="Baseless" 
+                          type="number" 
+                          min="0" 
+                          value={p.baseless}
+                          onChange={(e) => updateQCProductField(p.id, 'baseless', e.target.value)}
                         />
                       </div>
                       <div className="md:col-span-4 lg:col-span-1 flex justify-end pb-2">
@@ -729,7 +769,7 @@ const DamageTracking = () => {
             </div>
 
             <div className="overflow-x-auto">
-              <Table headers={['Date', 'Product', 'Vendor', 'Checked', 'Preview + Share', 'Actions']}>
+              <Table headers={['Date', 'Product', 'Vendor', 'Checked', 'Damaged', 'Rejected', 'Baseless', 'Approved', 'Preview + Share', 'Actions']}>
                 {qcRecords
                   .filter(r => {
                     const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) || 
@@ -739,7 +779,7 @@ const DamageTracking = () => {
                     return matchesSearch && matchesVendor && matchesDate;
                   })
                   .length === 0 ? (
-                  <tr><td colSpan="6" className="py-12 text-center text-slate-400 font-medium">No records matching your search.</td></tr>
+                  <tr><td colSpan="9" className="py-12 text-center text-slate-400 font-medium">No records matching your search.</td></tr>
                 ) : (
                   [...qcRecords]
                     .filter(r => {
@@ -760,7 +800,13 @@ const DamageTracking = () => {
                          </div>
                       </td>
                       <td className="py-4 px-6 text-sm text-slate-600 font-semibold">{r.vendorName || 'N/A'}</td>
-                      <td className="py-4 px-6 text-sm font-black text-slate-900">{r.checked}</td>
+                      <td className="py-4 px-6 text-sm font-bold text-slate-900">{r.checked}</td>
+                      <td className="py-4 px-6 text-sm font-bold text-rose-600">{r.damaged}</td>
+                      <td className="py-4 px-6 text-sm font-bold text-amber-600">{r.rejected || 0}</td>
+                      <td className="py-4 px-6 text-sm font-bold text-slate-500">{r.baseless || 0}</td>
+                      <td className="py-4 px-6 text-sm font-black text-emerald-600">
+                        {Number(r.checked) - Number(r.damaged) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0)}
+                      </td>
                       <td className="py-4 px-6 text-sm">
                          <div className="flex items-center gap-2">
                             {r.images && r.images.length > 0 && (
@@ -878,8 +924,9 @@ const DamageTracking = () => {
                             </button>
                             <button 
                               onClick={() => {
+                                if (r.emailSent) return;
                                 Swal.fire({
-                                  title: 'Resend Email?',
+                                  title: 'Send QC Email?',
                                   text: "Send this QC report as a message to accounts?",
                                   icon: 'question',
                                   showCancelButton: true,
@@ -887,12 +934,13 @@ const DamageTracking = () => {
                                   confirmButtonText: 'Yes, Send'
                                 }).then((result) => {
                                   if (result.isConfirmed) {
-                                    sendQCEmail(r.vendorName, r.date, [r], r.images);
+                                    sendQCEmail(r.vendorName, r.date, [r], r.images, r.id);
                                   }
                                 });
                               }}
-                              className="p-1.5 text-blue-500 hover:text-blue-600 hover:bg-white rounded-lg border border-transparent hover:border-blue-100 transition-all shadow-sm"
-                              title="Send Email"
+                              disabled={r.emailSent}
+                              className={`p-1.5 rounded-lg border border-transparent transition-all shadow-sm ${r.emailSent ? 'text-slate-300 bg-slate-50 cursor-not-allowed' : 'text-blue-500 hover:text-blue-600 hover:bg-white hover:border-blue-100'}`}
+                              title={r.emailSent ? "Email already sent" : "Send Email"}
                             >
                               <Mail size={18} />
                             </button>

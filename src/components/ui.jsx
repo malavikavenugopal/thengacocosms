@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, X } from 'lucide-react';
 
 export const Card = ({ children, className = '', noPadding = false }) => (
   <div className={`bg-white rounded-2xl shadow-[0_4px_20px_-4px_rgba(0,0,0,0.05)] border border-slate-100 ${noPadding ? '' : 'p-6'} transition-all duration-300 hover:shadow-[0_8px_30px_rgb(0,0,0,0.05)] ${className}`}>
@@ -101,6 +101,98 @@ export const SearchableSelect = ({ label, options, value, onChange, placeholder 
                     }}
                   >
                     {opt}
+                  </div>
+                ))
+              ) : (
+                <div className="p-4 text-xs text-slate-400 italic text-center">No results found</div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export const MultiSelect = ({ label, options, value = [], onChange, placeholder = "Select...", className = "" }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const wrapperRef = useRef(null);
+
+  const filteredOptions = (options || []).filter(opt => 
+    opt.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleOption = (opt) => {
+    const newValue = value.includes(opt) 
+      ? value.filter(v => v !== opt)
+      : [...value, opt];
+    onChange(newValue);
+  };
+
+  return (
+    <div className={`flex flex-col gap-1.5 w-full ${className}`} ref={wrapperRef}>
+      {label && <label className="text-sm font-semibold text-slate-700">{label}</label>}
+      <div className="relative">
+        <div 
+          onClick={() => setIsOpen(!isOpen)}
+          className={`w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer flex justify-between items-center hover:border-indigo-300 transition-all text-sm min-h-[46px] ${isOpen ? 'ring-2 ring-indigo-500/30 border-indigo-500 bg-white' : ''}`}
+        >
+          <div className="flex flex-wrap gap-1 py-1">
+            {value && value.length > 0 ? (
+              value.map((v, i) => (
+                <span key={i} className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-lg text-xs font-bold flex items-center gap-1">
+                  {v}
+                  <X size={12} className="cursor-pointer hover:text-indigo-900" onClick={(e) => { e.stopPropagation(); toggleOption(v); }} />
+                </span>
+              ))
+            ) : (
+              <span className="text-slate-400">{placeholder}</span>
+            )}
+          </div>
+          <div className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}>
+            <Plus size={16} className="rotate-45 text-slate-400" />
+          </div>
+        </div>
+
+        {isOpen && (
+          <div className="absolute z-[100] mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-2xl p-2 animate-in fade-in zoom-in-95 duration-100 max-h-72 overflow-hidden flex flex-col">
+            <input 
+              autoFocus
+              type="text"
+              className="w-full p-2.5 mb-2 text-sm border-b border-slate-100 outline-none placeholder:text-slate-300 font-medium"
+              placeholder="Type to search..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div className="overflow-y-auto custom-scrollbar flex-1">
+              {filteredOptions.length > 0 ? (
+                filteredOptions.map((opt, i) => (
+                  <div 
+                    key={i}
+                    className={`p-2.5 text-sm rounded-lg cursor-pointer transition-colors mb-1 last:mb-0 flex justify-between items-center ${
+                      value && value.includes(opt) 
+                        ? 'bg-indigo-50 text-indigo-700 font-bold' 
+                        : 'text-slate-600 hover:bg-slate-50'
+                    }`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleOption(opt);
+                    }}
+                  >
+                    {opt}
+                    {value && value.includes(opt) && <div className="w-2 h-2 bg-indigo-600 rounded-full" />}
                   </div>
                 ))
               ) : (

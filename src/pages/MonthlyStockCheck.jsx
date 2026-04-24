@@ -14,6 +14,7 @@ const MonthlyStockCheck = () => {
     returnRecords, 
     qcRecords,
     purchaseRecords,
+    replacementRecords,
     monthlyStockData,
     saveMonthlyStock
   } = useGlobalState();
@@ -101,12 +102,17 @@ const MonthlyStockCheck = () => {
       if (sums[r.productName]) sums[r.productName].purchased += (Number(r.quantity) || 0) * (Number(r.packSize) || 1);
     });
 
+    // Replacements
+    replacementRecords.filter(r => isTargetMonth(r.date) && r.deducted).forEach(r => {
+      if (sums[r.productName]) sums[r.productName].out += (Number(r.quantity) || 0) * (Number(r.packSize) || 1);
+    });
+
     return sums;
   };
 
   const monthlyMovements = useMemo(() => {
     return getMovementsForMonth(selectedMonth);
-  }, [selectedMonth, b2bShipments, b2cShipments, damageRecords, returnRecords, qcRecords, purchaseRecords, stock]);
+  }, [selectedMonth, b2bShipments, b2cShipments, damageRecords, returnRecords, qcRecords, purchaseRecords, replacementRecords, stock]);
 
   const calculateExpected = (opening, production, returned, out, damage, rejected) => 
     Number(opening || 0) + Number(production || 0) + Number(returned || 0) - Number(out || 0) - Number(damage || 0) - Number(rejected || 0);

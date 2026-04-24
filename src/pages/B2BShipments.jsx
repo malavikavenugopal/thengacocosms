@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
+import { Card, Input, Select, SearchableSelect, MultiSelect, Button, Table } from '../components/ui';
 import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Truck, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
@@ -14,12 +14,14 @@ const B2BShipments = () => {
   const { stock, staff, couriers, b2bShipments: shipments, addB2BShipment, updateB2BShipment, deleteB2BShipment, drafts, updateDraft, clearDraft } = useGlobalState();
   
   const [formData, setFormData] = useState(() => {
-    return drafts.b2b?.formData || {
-      whoParceled: '',
-      clientName: '',
-      courierName: '',
-      boxes: '',
-      date: new Date().toISOString().split('T')[0]
+    const defaultDate = new Date().toISOString().split('T')[0];
+    const saved = drafts.b2b?.formData;
+    return {
+      whoParceled: Array.isArray(saved?.whoParceled) ? saved.whoParceled : saved?.whoParceled ? [saved.whoParceled] : [],
+      clientName: saved?.clientName || '',
+      courierName: saved?.courierName || '',
+      boxes: saved?.boxes || '',
+      date: saved?.date || defaultDate
     };
   });
 
@@ -34,8 +36,12 @@ const B2BShipments = () => {
   const [isGeneratingVisual, setIsGeneratingVisual] = useState(false);
 
   // Filters
-  const [filterStartDate, setFilterStartDate] = useState('');
-  const [filterEndDate, setFilterEndDate] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().split('T')[0];
+  });
+  const [filterEndDate, setFilterEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState('');
 
   // Sync draft
@@ -65,7 +71,9 @@ const B2BShipments = () => {
         const term = searchTerm.toLowerCase();
         const clientMatch = shipment.clientName.toLowerCase().includes(term);
         const courierMatch = shipment.courierName.toLowerCase().includes(term);
-        const staffMatch = shipment.whoParceled.toLowerCase().includes(term);
+        const staffMatch = Array.isArray(shipment.whoParceled) 
+          ? shipment.whoParceled.some(s => s?.toLowerCase().includes(term))
+          : shipment.whoParceled?.toLowerCase().includes(term);
         const productMatch = shipment.products.some(p => {
           const masterSKU = stock.find(item => item.name === p.name);
           return p.name.toLowerCase().includes(term) || masterSKU?.sku?.toLowerCase().includes(term);
@@ -162,7 +170,7 @@ const B2BShipments = () => {
     setIsEditing(true);
     setEditingId(s.id);
     setFormData({
-      whoParceled: s.whoParceled,
+      whoParceled: Array.isArray(s.whoParceled) ? s.whoParceled : s.whoParceled ? [s.whoParceled] : [],
       clientName: s.clientName,
       courierName: s.courierName,
       boxes: s.boxes,
@@ -175,7 +183,7 @@ const B2BShipments = () => {
   const handleCancel = () => {
     setIsEditing(false);
     setEditingId(null);
-    setFormData({ whoParceled: '', clientName: '', courierName: '', boxes: '', date: new Date().toISOString().split('T')[0] });
+    setFormData({ whoParceled: [], clientName: '', courierName: '', boxes: '', date: new Date().toISOString().split('T')[0] });
     setProducts([{ id: Date.now(), name: '', quantity: '' }]);
   };
 
@@ -214,13 +222,12 @@ const B2BShipments = () => {
 
       <Card>
         <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <SearchableSelect 
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            <MultiSelect 
               label="Who Parceled" 
               options={staff.map(s => s.name)} 
               value={formData.whoParceled}
               onChange={(val) => setFormData({...formData, whoParceled: val})}
-              required
             />
             <Input 
               label="Client Name" 
@@ -416,7 +423,7 @@ const B2BShipments = () => {
           </div>
         </div>
         
-        <Table headers={['Date', 'Client', 'Courier', 'Parceled By', 'Total Units', 'SKUs', 'Action']}>
+        <Table headers={['Date', 'Client / Courier', 'Products', 'Qty', 'Pack', 'Total', 'Action']}>
           {filteredShipments.length === 0 ? (
             <tr>
               <td colSpan="7" className="py-16 text-center text-slate-500">
@@ -433,34 +440,52 @@ const B2BShipments = () => {
             filteredShipments.map(s => (
               <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
                 <td className="py-4 px-6 text-sm text-slate-800 whitespace-nowrap">{s.date}</td>
-                <td className="py-4 px-6 text-sm font-medium text-slate-900">{s.clientName}</td>
+                <td className="py-4 px-6 text-sm">
+                  <div className="font-bold text-slate-900">{s.clientName}</div>
+                  <div className="text-[10px] uppercase font-bold text-indigo-500 mt-0.5">{s.courierName}</div>
+                  <div className="text-[9px] text-slate-400 mt-1">Parceled By: {Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : s.whoParceled}</div>
+                </td>
                 <td className="py-4 px-6 text-sm text-slate-600">
-                  <span className="inline-flex items-center px-3 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-bold tracking-wide">
-                    {s.courierName}
-                  </span>
-                </td>
-                <td className="py-4 px-6 text-sm text-slate-600 whitespace-nowrap">{s.whoParceled}</td>
-                <td className="py-4 px-6 text-sm text-slate-900 font-bold">
-                  {s.products.reduce((acc, curr) => {
-                    let ps = Number(curr.packSize) || 1;
-                    if (ps === 1) {
-                      const match = curr.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                      if (match && match[1]) ps = Number(match[1]);
-                    }
-                    return acc + (Number(curr.quantity) * ps);
-                  }, 0)} units
-                </td>
-                <td className="py-4 px-6 text-sm text-slate-500">
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-1.5">
                     {(s.products || []).map((p, idx) => {
-                      const masterSKU = stock.find(item => item.name === p.name);
-                      return (
-                        <div key={idx} className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-mono font-bold text-indigo-500 bg-indigo-50 px-1 rounded">{masterSKU?.sku || 'N/A'}</span>
-                          <span className="font-medium text-slate-700">{p.name}</span>
-                          <span className="text-xs text-slate-400">({p.quantity})</span>
-                        </div>
-                      );
+                       const masterSKU = stock.find(item => item.name === p.name);
+                       return (
+                         <div key={idx} className="flex items-center gap-1.5">
+                           <span className="text-[10px] font-mono font-bold text-emerald-600 bg-emerald-50 px-1 rounded">{masterSKU?.sku || 'N/A'}</span>
+                           <span className="font-medium text-slate-800">{p.name}</span>
+                         </div>
+                       );
+                    })}
+                  </div>
+                </td>
+                <td className="py-4 px-6 text-sm text-center text-slate-600">
+                  <div className="flex flex-col gap-1.5">
+                    {(s.products || []).map((p, idx) => (
+                      <div key={idx} className="font-bold">{p.quantity}</div>
+                    ))}
+                  </div>
+                </td>
+                <td className="py-4 px-6 text-sm text-center text-slate-400">
+                  <div className="flex flex-col gap-1.5">
+                    {(s.products || []).map((p, idx) => {
+                       let ps = p.packSize || 1;
+                       if (ps === 1) {
+                         const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                         if (match && match[1]) ps = Number(match[1]);
+                       }
+                       return <div key={idx}>{ps}</div>;
+                    })}
+                  </div>
+                </td>
+                <td className="py-4 px-6 text-sm text-center font-bold text-indigo-600">
+                  <div className="flex flex-col gap-1.5">
+                    {(s.products || []).map((p, idx) => {
+                       let ps = p.packSize || 1;
+                       if (ps === 1) {
+                         const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                         if (match && match[1]) ps = Number(match[1]);
+                       }
+                       return <div key={idx}>{Number(p.quantity) * ps}</div>;
                     })}
                   </div>
                 </td>
@@ -478,7 +503,7 @@ const B2BShipments = () => {
                         <button 
                           onClick={() => handleDelete(s.id)}
                           className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
-                          title="Delete Record & Restore Stock"
+                          title="Delete Record"
                         >
                           <Trash2 size={18} />
                         </button>
