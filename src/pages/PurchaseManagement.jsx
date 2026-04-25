@@ -17,6 +17,15 @@ const PurchaseManagement = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingVendor, setIsSavingVendor] = useState(false);
   
+  // Purchase History Filter State
+  const [historyFilters, setHistoryFilters] = useState({
+    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+    vendor: '',
+    product: '',
+    search: ''
+  });
+
   const [formData, setFormData] = useState(() => {
     const defaultDate = new Date().toISOString().split('T')[0];
     const defaultData = {
@@ -299,76 +308,181 @@ const PurchaseManagement = () => {
         </Card>
       )}
 
-      {activeTab === 'history' && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                <History size={18} className="text-slate-400" />
-                Purchase History
-              </h3>
-            </div>
-            <div className="overflow-x-auto">
-              <Table headers={['Date', 'Product / SKU', 'Vendor', 'Place', 'Quantity', 'Action']}>
-                {purchaseRecords.length === 0 ? (
-                  <tr><td colSpan="6" className="py-12 text-center text-slate-400 font-medium">No purchase records found.</td></tr>
-                ) : (
-                  purchaseRecords.map(r => (
-                    <tr key={r.id} className="hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 font-medium">
-                      <td className="py-4 px-6 text-sm text-slate-500">{r.date}</td>
-                      <td className="py-4 px-6">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] font-mono font-bold text-indigo-500 uppercase tracking-tighter">{soloProducts.find(s => s.name === r.productName)?.sku || 'N/A'}</span>
-                          <span className="text-sm font-bold text-slate-900">{r.productName}</span>
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-sm font-semibold text-slate-900">{r.vendorName}</td>
-                      <td className="py-4 px-6 text-sm text-slate-500 flex items-center gap-1.5">
-                        <MapPin size={14} className="text-slate-400" />
-                        {r.place || 'N/A'}
-                      </td>
-                      <td className="py-4 px-6 text-sm">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold ring-4 ring-emerald-50">
-                          +{r.quantity}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6 text-center">
-                        {isRecordEditable(r.date) ? (
-                            <div className="flex items-center justify-center gap-2">
-                              <button onClick={() => handleEdit(r)} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
-                                <Edit2 size={18} />
-                              </button>
-                              <button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
-                                <Trash2 size={18} />
-                              </button>
-                            </div>
-                        ) : (
-                          <div className="flex justify-center p-1.5 text-slate-200" title="Records older than 5 days cannot be deleted">
-                              <Lock size={16} />
+      {activeTab === 'history' && (() => {
+        const filteredHistory = purchaseRecords
+          .filter(r => {
+            const matchDate = (!historyFilters.startDate || r.date >= historyFilters.startDate) && 
+                            (!historyFilters.endDate || r.date <= historyFilters.endDate);
+            const matchVendor = !historyFilters.vendor || r.vendorName === historyFilters.vendor;
+            const matchProduct = !historyFilters.product || r.productName === historyFilters.product;
+            const matchSearch = !historyFilters.search || 
+                               r.vendorName.toLowerCase().includes(historyFilters.search.toLowerCase()) || 
+                               r.productName.toLowerCase().includes(historyFilters.search.toLowerCase()) ||
+                               (soloProducts.find(s => s.name === r.productName)?.sku || '').toLowerCase().includes(historyFilters.search.toLowerCase());
+            return matchDate && matchVendor && matchProduct && matchSearch;
+          })
+          .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        return (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <Card className="mb-4 border-slate-200/60 shadow-sm overflow-visible">
+              <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Start Date</label>
+                  <Input 
+                    type="date" 
+                    value={historyFilters.startDate} 
+                    onChange={e => setHistoryFilters(f => ({ ...f, startDate: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">End Date</label>
+                  <Input 
+                    type="date" 
+                    value={historyFilters.endDate} 
+                    onChange={e => setHistoryFilters(f => ({ ...f, endDate: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Vendor</label>
+                  <SearchableSelect 
+                    options={['All Vendors', ...vendors.map(v => v.name)]}
+                    value={historyFilters.vendor || 'All Vendors'}
+                    onChange={val => setHistoryFilters(f => ({ ...f, vendor: val === 'All Vendors' ? '' : val }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Product</label>
+                  <SearchableSelect 
+                    options={['All Products', ...soloProducts.map(s => s.name)]}
+                    value={historyFilters.product || 'All Products'}
+                    onChange={val => setHistoryFilters(f => ({ ...f, product: val === 'All Products' ? '' : val }))}
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Search</label>
+                  <div className="relative">
+                    <Input 
+                      placeholder="Search SKU, Name, Vendor..."
+                      value={historyFilters.search}
+                      onChange={e => setHistoryFilters(f => ({ ...f, search: e.target.value }))}
+                      className="pl-9"
+                    />
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                      <Plus size={14} className="rotate-45" /> 
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Card>
+
+            <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
+              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white">
+                <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                  <History size={18} className="text-slate-400" />
+                  Purchase History
+                  <span className="ml-2 bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">
+                    {filteredHistory.length} Records
+                  </span>
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <Table headers={['Date', 'Product / SKU', 'Vendor', 'Place', 'Quantity', 'Action']}>
+                  {filteredHistory.length === 0 ? (
+                    <tr><td colSpan="6" className="py-12 text-center text-slate-400 font-medium">No purchase records found matching your filters.</td></tr>
+                  ) : (
+                    filteredHistory.map(r => (
+                      <tr key={r.id} className="hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 font-medium">
+                        <td className="py-4 px-6 text-sm text-slate-500">{r.date}</td>
+                        <td className="py-4 px-6">
+                          <div className="flex flex-col">
+                            <span className="text-[10px] font-mono font-bold text-indigo-500 uppercase tracking-tighter">{soloProducts.find(s => s.name === r.productName)?.sku || 'N/A'}</span>
+                            <span className="text-sm font-bold text-slate-900">{r.productName}</span>
                           </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </Table>
-            </div>
-          </Card>
+                        </td>
+                        <td className="py-4 px-6 text-sm font-semibold text-slate-900">{r.vendorName}</td>
+                        <td className="py-4 px-6 text-sm text-slate-500 flex items-center gap-1.5">
+                          <MapPin size={14} className="text-slate-400" />
+                          {r.place || 'N/A'}
+                        </td>
+                        <td className="py-4 px-6 text-sm">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold ring-4 ring-emerald-50">
+                            +{r.quantity}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          {isRecordEditable(r.date) ? (
+                              <div className="flex items-center justify-center gap-2">
+                                <button onClick={() => handleEdit(r)} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
+                                  <Edit2 size={18} />
+                                </button>
+                                <button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
+                                  <Trash2 size={18} />
+                                </button>
+                              </div>
+                          ) : (
+                            <div className="flex justify-center p-1.5 text-slate-200" title="Records older than 5 days cannot be deleted">
+                                <Lock size={16} />
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </Table>
+              </div>
+            </Card>
+
 
           <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
-            <div className="p-6 border-b border-slate-100 bg-indigo-50/10">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                <ClipboardCheck size={20} className="text-indigo-500" />
-                Quality Check Report (Last Arrivals)
-              </h3>
-              <p className="text-xs text-slate-500 mt-1">Inspection logs for products received from vendors</p>
+            <div className="p-6 border-b border-slate-100 bg-indigo-50/10 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                  <ClipboardCheck size={20} className="text-indigo-500" />
+                  Quality Check Report (Last Arrivals)
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">Inspection logs for products received from vendors</p>
+              </div>
+              <span className="bg-white text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-200">
+                Filtered: {qcRecords.filter(r => {
+                  const matchDate = (!historyFilters.startDate || r.date >= historyFilters.startDate) && 
+                                  (!historyFilters.endDate || r.date <= historyFilters.endDate);
+                  const matchVendor = !historyFilters.vendor || r.vendorName === historyFilters.vendor;
+                  const matchProduct = !historyFilters.product || r.productName === historyFilters.product;
+                  const matchSearch = !historyFilters.search || 
+                                     (r.vendorName || '').toLowerCase().includes(historyFilters.search.toLowerCase()) || 
+                                     r.productName.toLowerCase().includes(historyFilters.search.toLowerCase());
+                  return matchDate && matchVendor && matchProduct && matchSearch;
+                }).length}
+              </span>
             </div>
             <div className="overflow-x-auto">
               <Table headers={['Date', 'Product / SKU', 'Vendor', 'Checked', 'Good', 'Damaged', 'Rejected', 'Status']}>
-                {qcRecords.length === 0 ? (
-                  <tr><td colSpan="8" className="py-12 text-center text-slate-400 font-medium">No QC reports available.</td></tr>
+                {qcRecords.filter(r => {
+                  const matchDate = (!historyFilters.startDate || r.date >= historyFilters.startDate) && 
+                                  (!historyFilters.endDate || r.date <= historyFilters.endDate);
+                  const matchVendor = !historyFilters.vendor || r.vendorName === historyFilters.vendor;
+                  const matchProduct = !historyFilters.product || r.productName === historyFilters.product;
+                  const matchSearch = !historyFilters.search || 
+                                     (r.vendorName || '').toLowerCase().includes(historyFilters.search.toLowerCase()) || 
+                                     r.productName.toLowerCase().includes(historyFilters.search.toLowerCase());
+                  return matchDate && matchVendor && matchProduct && matchSearch;
+                }).length === 0 ? (
+                  <tr><td colSpan="8" className="py-12 text-center text-slate-400 font-medium">No QC reports available matching your filters.</td></tr>
                 ) : (
-                  [...qcRecords].sort((a,b) => new Date(b.date) - new Date(a.date)).slice(0, 10).map(r => (
+                  qcRecords
+                    .filter(r => {
+                      const matchDate = (!historyFilters.startDate || r.date >= historyFilters.startDate) && 
+                                      (!historyFilters.endDate || r.date <= historyFilters.endDate);
+                      const matchVendor = !historyFilters.vendor || r.vendorName === historyFilters.vendor;
+                      const matchProduct = !historyFilters.product || r.productName === historyFilters.product;
+                      const matchSearch = !historyFilters.search || 
+                                         (r.vendorName || '').toLowerCase().includes(historyFilters.search.toLowerCase()) || 
+                                         r.productName.toLowerCase().includes(historyFilters.search.toLowerCase());
+                      return matchDate && matchVendor && matchProduct && matchSearch;
+                    })
+                    .sort((a,b) => new Date(b.date) - new Date(a.date))
+                    .map(r => (
                     <tr key={r.id} className="hover:bg-slate-50 border-b border-slate-50 last:border-0 font-medium">
                       <td className="py-4 px-6 text-sm text-slate-500">{r.date}</td>
                       <td className="py-4 px-6">
@@ -411,7 +525,8 @@ const PurchaseManagement = () => {
             </div>
           </Card>
         </div>
-      )}
+        );
+      })()}
 
       {activeTab === 'vendors' && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">

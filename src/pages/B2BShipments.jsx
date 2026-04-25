@@ -127,43 +127,9 @@ const B2BShipments = () => {
     setIsSubmitting(true);
     
     try {
-      // Validation: Stock Check
-      for (const p of products) {
-        if (!p.name || !p.quantity) continue;
+
         
-        const masterSKU = stock.find(s => s.name === p.name);
-        const packSize = (() => {
-            let ps = masterSKU?.packSize || 1;
-            if (ps === 1) {
-              const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-              if (match && match[1]) ps = Number(match[1]);
-            }
-            return ps;
-        })();
-        
-        const requestedTotal = Number(p.quantity) * packSize;
-        const available = getAvailableStock(p.name);
-        
-        let alreadyDeducted = 0;
-        if (isEditing) {
-          const oldShipment = shipments.find(s => s.id === editingId);
-          const oldProduct = oldShipment?.products?.find(op => op.name === p.name);
-          if (oldProduct) {
-            alreadyDeducted = Number(oldProduct.quantity) * (Number(oldProduct.packSize) || 1);
-          }
-        }
-        
-        if (requestedTotal > (available + alreadyDeducted)) {
-          Swal.fire({
-            title: 'Insufficient Stock!',
-            text: `Product "${p.name}" only has ${available + alreadyDeducted} units available. (Requested: ${requestedTotal}).`,
-            icon: 'error',
-            confirmButtonColor: '#4f46e5'
-          });
-          setIsSubmitting(false);
-          return;
-        }
-      }
+
 
       const finalizedProducts = products.map(p => {
         const masterSKU = stock.find(s => s.name === p.name);

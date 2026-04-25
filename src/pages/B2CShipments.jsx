@@ -123,40 +123,9 @@ const B2CShipments = () => {
     setIsSubmitting(true);
     
     try {
-      // Validation: Stock Check
-      for (const p of products) {
-        if (!p.name || !p.quantity) continue;
+
         
-        const masterSKU = stock.find(s => s.name === p.name);
-        let packSize = masterSKU?.packSize || 1;
-        if (packSize === 1) {
-          const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-          if (match && match[1]) packSize = Number(match[1]);
-        }
-        
-        const requestedTotal = Number(p.quantity) * packSize;
-        const available = getAvailableStock(p.name);
-        
-        let alreadyDeducted = 0;
-        if (isEditing) {
-          const oldShipment = shipments.find(s => s.id === editingId);
-          const oldProduct = oldShipment?.products?.find(op => op.name === p.name);
-          if (oldProduct) {
-            alreadyDeducted = Number(oldProduct.quantity) * (Number(oldProduct.packSize) || 1);
-          }
-        }
-        
-        if (requestedTotal > (available + alreadyDeducted)) {
-          Swal.fire({
-            title: 'Insufficient Stock!',
-            text: `Product "${p.name}" only has ${available + alreadyDeducted} units available. (Requested: ${requestedTotal}).`,
-            icon: 'error',
-            confirmButtonColor: '#4f46e5'
-          });
-          setIsSubmitting(false);
-          return;
-        }
-      }
+
 
       // Inject packSize from Master Data for each product before saving
       const finalizedProducts = products.map(p => {
@@ -278,7 +247,6 @@ const B2CShipments = () => {
               placeholder="Total orders"
               value={formData.orderCount}
               onChange={(e) => setFormData({...formData, orderCount: e.target.value})}
-              required
             />
             <Input 
               label="Order Date" 

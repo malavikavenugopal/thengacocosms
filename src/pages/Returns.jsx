@@ -178,29 +178,7 @@ const Returns = () => {
   const handleRepSubmit = async (e) => {
     e.preventDefault();
 
-    // Validation: Stock Check
-    const masterSKU = stock.find(s => s.name === repForm.productName);
-    const packSize = masterSKU?.packSize || 1;
-    const requestedTotal = Number(repForm.quantity) * packSize;
-    const available = getAvailableStock(repForm.productName);
-    
-    let alreadyDeducted = 0;
-    if (isEditing) {
-      const oldRecord = replacementRecords.find(r => r.id === editingId);
-      if (oldRecord && oldRecord.deducted) {
-        alreadyDeducted = Number(oldRecord.quantity) * (Number(oldRecord.packSize) || 1);
-      }
-    }
-    
-    if (requestedTotal > (available + alreadyDeducted)) {
-        Swal.fire({
-            title: 'Insufficient Stock!',
-            text: `Product "${repForm.productName}" only has ${available + alreadyDeducted} units available. (Requested: ${requestedTotal}).`,
-            icon: 'error',
-            confirmButtonColor: '#4f46e5'
-        });
-        return;
-    }
+
 
     Swal.fire({
       title: 'Confirm Replacement?',
