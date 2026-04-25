@@ -433,16 +433,16 @@ const B2CShipments = () => {
           </div>
         </div>
 
-        <Table headers={['Date', 'Channel', 'Orders', 'Parceled By', 'Products', 'Qty', 'Pack', 'Total', 'Action']}>
+        <Table headers={['Date', 'Channel / Order Count', 'Parceled By', 'Shipment Details', 'Action']}>
           {filteredShipments.length === 0 ? (
             <tr>
-              <td colSpan="9" className="py-16 text-center text-slate-500">
+              <td colSpan="5" className="py-16 text-center text-slate-500">
                 <div className="flex flex-col items-center justify-center">
                   <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-3">
-                    <ShoppingCart size={32} className="text-slate-300" />
+                    <Package size={32} className="text-slate-300" />
                   </div>
                   <p className="text-base font-medium text-slate-800">No shipments found</p>
-                  <p className="text-sm text-slate-500 mt-1">Try adjusting your filters or record a new sale.</p>
+                  <p className="text-sm text-slate-500 mt-1">Try adjusting your filters or add a new record.</p>
                 </div>
               </td>
             </tr>
@@ -451,63 +451,51 @@ const B2CShipments = () => {
               <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
                 <td className="py-4 px-6 text-sm text-slate-800 whitespace-nowrap">{s.date}</td>
                 <td className="py-4 px-6 text-sm font-medium">
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold tracking-wide
+                  <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold tracking-wide mb-1
                     ${s.channel === 'Amazon' ? 'bg-amber-100 text-amber-800' : 
                       s.channel === 'Shopify' ? 'bg-emerald-100 text-emerald-800' :
                       s.channel === 'Flipkart' ? 'bg-sky-100 text-sky-800' :
                       'bg-slate-100 text-slate-800'}`}
                   >
                     {s.channel}
-                  </span>
-                </td>
-                <td className="py-4 px-6 text-sm font-bold text-slate-900 text-center">
-                  {s.orderCount || '1'}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest pl-1">
+                    Orders: <span className="text-slate-900">{s.orderCount || '1'}</span>
+                  </div>
                 </td>
                 <td className="py-4 px-6 text-sm text-slate-600 whitespace-nowrap">
-                  {Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : s.whoParceled}
+                  <div className="font-medium text-slate-700">{Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : s.whoParceled}</div>
                 </td>
-                <td className="py-4 px-6 text-sm text-slate-500">
-                  <div className="flex flex-col gap-1">
-                    {(s.products || []).map((p, idx) => {
-                      const masterSKU = stock.find(item => item.name === p.name);
-                      return (
-                        <div key={idx} className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-mono font-bold text-emerald-600 bg-emerald-50 px-1 rounded">{masterSKU?.sku || 'N/A'}</span>
-                          <span className="font-semibold text-slate-900">{p.name}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </td>
-                <td className="py-4 px-6 text-sm text-center text-slate-600">
-                  <div className="flex flex-col gap-1">
-                    {(s.products || []).map((p, idx) => (
-                      <div key={idx} className="font-medium">{p.quantity}</div>
-                    ))}
-                  </div>
-                </td>
-                <td className="py-4 px-6 text-sm text-center text-slate-600">
-                  <div className="flex flex-col gap-1">
-                    {(s.products || []).map((p, idx) => {
-                       let ps = p.packSize || 1;
-                       if (ps === 1) {
-                         const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                         if (match && match[1]) ps = Number(match[1]);
-                       }
-                       return <div key={idx} className="text-slate-400">{ps}</div>;
-                    })}
-                  </div>
-                </td>
-                <td className="py-4 px-6 text-sm text-center font-bold text-indigo-600">
-                  <div className="flex flex-col gap-1">
-                    {(s.products || []).map((p, idx) => {
-                       let ps = p.packSize || 1;
-                       if (ps === 1) {
-                         const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                         if (match && match[1]) ps = Number(match[1]);
-                       }
-                       return <div key={idx}>{Number(p.quantity) * ps}</div>;
-                    })}
+                <td className="py-4 px-6 text-sm">
+                  <div className="min-w-[400px]">
+                     {/* Internal Header */}
+                     <div className="grid grid-cols-[1fr,50px,50px,60px] gap-2 mb-2 px-2 py-1 bg-slate-50 rounded text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <span>Product</span>
+                      <span className="text-center">Qty</span>
+                      <span className="text-center">Pack</span>
+                      <span className="text-center">Total</span>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {(s.products || []).map((p, idx) => {
+                        const masterSKU = stock.find(item => item.name === p.name);
+                        let ps = p.packSize || 1;
+                        if (ps === 1) {
+                          const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                          if (match && match[1]) ps = Number(match[1]);
+                        }
+                        return (
+                          <div key={idx} className="grid grid-cols-[1fr,50px,50px,60px] gap-2 items-center px-2 py-2 border-b border-slate-100 last:border-0 hover:bg-white rounded transition-colors group">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-[9px] font-mono font-bold text-emerald-600 bg-emerald-50 px-1 rounded shrink-0 border border-emerald-100">{masterSKU?.sku || 'N/A'}</span>
+                              <span className="font-semibold text-slate-800 break-words line-clamp-2" title={p.name}>{p.name}</span>
+                            </div>
+                            <div className="text-center font-bold text-slate-900">{p.quantity}</div>
+                            <div className="text-center text-slate-400 font-medium">{ps}</div>
+                            <div className="text-center font-bold text-emerald-600 bg-emerald-50/50 py-0.5 rounded">{Number(p.quantity) * ps}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </td>
                 <td className="py-4 px-6 text-sm text-center">

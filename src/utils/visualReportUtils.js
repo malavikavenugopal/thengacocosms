@@ -14,9 +14,9 @@ export const generateVisualReport = async (shipments, type, title, dateRange = {
 
   const fileName = `${type}_Report_${new Date().toISOString().split('T')[0]}`;
 
-  // Use Image for short reports, PDF for long ones
-  const limit = type === 'QC' ? 8 : 12;
-  const useImage = shipments.length <= limit;
+  // Count total product rows to decide between Image and PDF
+  const totalRows = shipments.reduce((acc, s) => acc + (s.products?.length || 1), 0);
+  const useImage = totalRows <= 10; // Keep images short and crisp
 
   if (useImage) {
     await downloadAsImage(shipments, type, title, fileName, dateRange);
@@ -57,38 +57,49 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
   }
   doc.text(dateText, 15, 35);
 
-  let headers, body;
-  if (type === 'B2B') {
-    headers = [['Date', 'Client', 'Courier', 'Product', 'Qty', 'Pack', 'Total']];
-    body = shipments.map(s => [
-      s.date, 
-      s.clientName, 
-      s.courierName, 
-      (s.products || []).map(p => p.name).join('\n'),
-      (s.products || []).map(p => p.quantity).join('\n'),
-      (s.products || []).map(p => p.packSize || 1).join('\n'),
-      (s.products || []).map(p => (Number(p.quantity) * (Number(p.packSize) || 1))).join('\n')
-    ]);
-  } else if (type === 'B2C') {
-    headers = [['Date', 'Channel', 'Parceled By', 'Product', 'Qty', 'Pack', 'Total']];
-    body = shipments.map(s => [
-      s.date, 
-      s.channel, 
-      s.whoParceled, 
-      (s.products || []).map(p => p.name).join('\n'),
-      (s.products || []).map(p => p.quantity).join('\n'),
-      (s.products || []).map(p => p.packSize || 1).join('\n'),
-      (s.products || []).map(p => (Number(p.quantity) * (Number(p.packSize) || 1))).join('\n')
-    ]);
+  let headers, body = [];
+  if (type === 'B2B' || type === 'B2C') {
+    headers = [['Date', type === 'B2B' ? 'Client' : 'Channel', type === 'B2B' ? 'Courier' : 'Parceled By', 'Product', 'Qty', 'Pack', 'Total']];
+    shipments.forEach(s => {
+      const products = s.products || [];
+      if (products.length === 0) {
+        const row = [s.date, type === 'B2B' ? s.clientName : s.channel, type === 'B2B' ? s.courierName : s.whoParceled, '-', '-', '-', '-'];
+        row._isFirst = true;
+        body.push(row);
+      } else {
+        products.forEach((p, pIdx) => {
+          const row = [
+            s.date,
+            type === 'B2B' ? s.clientName : s.channel,
+            type === 'B2B' ? (s.courierName || '-') : (Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : (s.whoParceled || '-')),
+            p.name,
+            p.quantity,
+            p.packSize || 1,
+            Number(p.quantity) * (Number(p.packSize) || 1)
+          ];
+          // Attach metadata for the drawing hooks
+          row._isFirst = (pIdx === 0);
+          body.push(row);
+        });
+      }
+    });
   } else if (type === 'Damage') {
     headers = [['Date', 'Product', 'Quantity', 'Reason', 'Recorded By']];
     body = shipments.map(s => [s.date, s.productName, s.quantity, s.reason, s.staffName]);
   } else if (type === 'QC') {
-    headers = [['Date', 'Vendor', 'Product Details']];
-    body = shipments.map(s => [
-      s.date, s.vendorName, 
-      `• ${s.productName}\n  Checked: ${s.checked}\n  Rejected: ${s.rejected || 0}\n  Damaged: ${s.damaged}\n  Baseless: ${s.baseless || 0}\n  Approved: ${Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0)}`
-    ]);
+    headers = [['Date', 'Vendor', 'Product', 'Checked', 'Rejected', 'Damaged', 'Approved']];
+    body = shipments.map(s => {
+      const approved = Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0);
+      return [
+        s.date, 
+        s.vendorName, 
+        s.productName,
+        s.checked,
+        s.rejected || 0,
+        s.damaged,
+        approved
+      ];
+    });
   } else if (type === 'Return') {
     headers = [['Date', 'Channel', 'Condition', 'Product', 'Qty', 'Reason']];
     body = shipments.map(s => [s.date, s.channel, s.isReusable ? 'GOOD' : 'DAMAGED', s.productName, s.quantity, s.reason]);
@@ -109,9 +120,45 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
     head: headers,
     body: body,
     theme: 'grid',
-    headStyles: { fillColor: theme.color, fontSize: 12, halign: 'center', font: 'times' },
-    styles: { fontSize: 11, cellPadding: 4, valign: 'middle', font: 'times' },
-    alternateRowStyles: { fillColor: [245, 247, 250] }
+    headStyles: { fillColor: theme.color, fontSize: 11, halign: 'center', font: 'times', cellPadding: 3 },
+    styles: { fontSize: 10, cellPadding: 3, valign: 'middle', font: 'times', overflow: 'linebreak' },
+    columnStyles: {
+      0: { cellWidth: 25 },
+      1: { cellWidth: 'auto' },
+      2: { cellWidth: 'auto' },
+      3: { cellWidth: 50 } // Product column
+    },
+    alternateRowStyles: { fillColor: [245, 247, 250] },
+    didParseCell: (data) => {
+      if ((type === 'B2B' || type === 'B2C') && data.section === 'body' && [0, 1, 2].includes(data.column.index)) {
+        const isFirst = data.row.raw._isFirst !== false;
+        
+        // Track the first row of each page to ensure text repeats on page break
+        // data.pageNumber is available and reliable
+        if (!data.table._lastPageNum || data.table._lastPageNum !== data.pageNumber) {
+          data.table._lastPageNum = data.pageNumber;
+          data.table._firstRowOnPage = data.row.index;
+        }
+
+        const isFirstOnPage = data.row.index === data.table._firstRowOnPage;
+        
+        if (!isFirst && !isFirstOnPage) {
+          data.cell.styles.textColor = [255, 255, 255]; 
+        }
+      }
+    },
+    didDrawCell: (data) => {
+      if ((type === 'B2B' || type === 'B2C') && data.section === 'body' && [0, 1, 2].includes(data.column.index)) {
+        const isFirst = data.row.raw._isFirst !== false;
+        const isFirstOnPage = data.row.index === data.table._firstRowOnPage;
+
+        if (!isFirst && !isFirstOnPage) {
+          doc.setDrawColor(255, 255, 255); 
+          doc.setLineWidth(0.4);
+          doc.line(data.cell.x + 0.1, data.cell.y, data.cell.x + data.cell.width - 0.1, data.cell.y);
+        }
+      }
+    }
   });
 
   // Add Images for QC PDF Summary
@@ -198,55 +245,71 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
     
     <div style="border-bottom: 2px solid ${theme.color}; margin-bottom: 30px;"></div>
 
-    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
       <thead>
         <tr style="background-color: ${theme.color}; color: white; text-align: left;">
-          <th style="padding: 10px; border: 1px solid #ddd;">Date</th>
-          <th style="padding: 10px; border: 1px solid #ddd;">${type === 'QC' ? 'Vendor' : type === 'Damage' ? 'Product' : type === 'B2B' ? 'Client' : 'Channel'}</th>
-          <th style="padding: 10px; border: 1px solid #ddd;">Details / Product</th>
+          <th style="padding: 12px; border: 1px solid #ddd;">Date</th>
+          <th style="padding: 12px; border: 1px solid #ddd;">${type === 'QC' ? 'Vendor' : type === 'Damage' ? 'Product' : type === 'B2B' ? 'Client' : 'Channel'}</th>
+          <th style="padding: 12px; border: 1px solid #ddd;">Product Details</th>
           ${type === 'B2B' || type === 'B2C' ? `
-            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Qty</th>
-            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Pack</th>
-            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Total</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center; width: 50px;">Qty</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center; width: 50px;">Pack</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center; width: 60px;">Total</th>
           ` : `
-            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Units</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Units</th>
           `}
         </tr>
       </thead>
       <tbody>
-        ${shipmentsWithBase64.map((s, idx) => `
-          <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-            <td style="padding: 10px; border: 1px solid #ddd; white-space: nowrap;">${s.date}</td>
-            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">
-              ${type === 'B2B' ? s.clientName : type === 'B2C' ? s.channel : type === 'Damage' ? s.productName : type === 'Return' ? s.channel : type === 'Replacement' ? (s.type === 'B2B' ? s.clientName : s.channel) : s.vendorName}
-            </td>
-            <td style="padding: 10px; border: 1px solid #ddd; font-size: 14px;">
-              ${type === 'QC' 
-                ? `• <b>${s.productName}</b><br/>
-                   <div style="margin-left: 10px; margin-top: 5px; font-size: 12px;">
-                     Checked: ${s.checked} | Rejected: ${s.rejected || 0} | Damaged: ${s.damaged} | Baseless: ${s.baseless || 0}<br/>
-                     <span style="color: #059669; font-weight: bold;">Approved: ${Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0)}</span>
-                   </div>`
-                : type === 'Damage' 
-                  ? `Reason: ${s.reason}`
-                  : type === 'Return'
-                    ? `Product: ${s.productName}<br/>Condition: ${s.isReusable ? 'GOOD' : 'DAMAGED'}<br/>Reason: ${s.reason}`
-                    : type === 'Replacement'
-                      ? `Product: ${s.productName}<br/>Reason: ${s.reason}`
-                      : (s.products || []).map(p => `• ${p.name}`).join('<br/>')
-              }
-            </td>
-            ${type === 'B2B' || type === 'B2C' ? `
-              <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${(s.products || []).map(p => p.quantity).join('<br/>')}</td>
-              <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${(s.products || []).map(p => p.packSize || 1).join('<br/>')}</td>
-              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold;">${(s.products || []).map(p => (Number(p.quantity) * (Number(p.packSize) || 1))).join('<br/>')}</td>
-            ` : `
-              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold;">
+        ${shipmentsWithBase64.map((s, idx) => {
+          const products = s.products || [];
+          const rowBg = idx % 2 === 0 ? '#ffffff' : '#fcfcfc';
+          
+          if ((type === 'B2B' || type === 'B2C') && products.length > 0) {
+            return products.map((p, pIdx) => `
+              <tr style="background-color: ${rowBg};">
+                <td style="padding: 12px; border: 1px solid #ddd; white-space: nowrap; color: ${pIdx === 0 ? '#000' : 'transparent'}; font-size: 11px;">${s.date}</td>
+                <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold; color: ${pIdx === 0 ? '#000' : 'transparent'};">
+                  ${type === 'B2B' ? s.clientName : s.channel}
+                </td>
+                <td style="padding: 12px; border: 1px solid #ddd;">• ${p.name}</td>
+                <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">${p.quantity}</td>
+                <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">${p.packSize || 1}</td>
+                <td style="padding: 12px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: ${theme.color};">
+                  ${Number(p.quantity) * (Number(p.packSize) || 1)}
+                </td>
+              </tr>
+            `).join('');
+          }
+
+          return `
+            <tr style="background-color: ${rowBg};">
+              <td style="padding: 12px; border: 1px solid #ddd; white-space: nowrap; font-size: 11px;">${s.date}</td>
+              <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">
+                ${type === 'B2B' ? s.clientName : type === 'B2C' ? s.channel : type === 'Damage' ? s.productName : type === 'Return' ? s.channel : type === 'Replacement' ? (s.type === 'B2B' ? s.clientName : s.channel) : s.vendorName}
+              </td>
+              <td style="padding: 12px; border: 1px solid #ddd;">
+                ${type === 'QC' 
+                  ? `• <b>${s.productName}</b><br/>
+                     <div style="margin-left: 10px; margin-top: 5px; font-size: 11px; color: #64748b;">
+                       Checked: ${s.checked} | Rejected: ${s.rejected || 0} | Damaged: ${s.damaged}<br/>
+                       <span style="color: #059669; font-weight: bold;">Approved: ${Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0)}</span>
+                     </div>`
+                  : type === 'Damage' 
+                    ? `Reason: ${s.reason}`
+                    : type === 'Return'
+                      ? `Product: ${s.productName}<br/>Condition: ${s.isReusable ? 'GOOD' : 'DAMAGED'}<br/>Reason: ${s.reason}`
+                      : type === 'Replacement'
+                        ? `Product: ${s.productName}<br/>Reason: ${s.reason}`
+                        : '-'
+                }
+              </td>
+              <td colspan="${type === 'B2B' || type === 'B2C' ? '3' : '1'}" style="padding: 12px; border: 1px solid #ddd; text-align: center; font-weight: bold;">
                 ${type === 'QC' ? (Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0)) : (type === 'Return' ? `+${s.quantity}` : (type === 'Replacement' ? `-${s.quantity}` : s.quantity))}
               </td>
-            `}
-          </tr>
-        `).join('')}
+            </tr>
+          `;
+        }).join('')}
       </tbody>
     </table>
     
@@ -334,44 +397,83 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
     
     <div style="border-bottom: 2px solid ${themeColor}; margin-bottom: 30px;"></div>
 
-    <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
       <thead>
         <tr style="background-color: ${themeColor}; color: white; text-align: left;">
           <th style="padding: 10px; border: 1px solid #ddd;">Date</th>
-          <th style="padding: 10px; border: 1px solid #ddd;">Target</th>
-          <th style="padding: 10px; border: 1px solid #ddd;">Details</th>
-          ${type === 'B2B' || type === 'B2C' ? `
-            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Qty</th>
-            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Pack</th>
-            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Total</th>
+          <th style="padding: 10px; border: 1px solid #ddd;">${type === 'QC' ? 'Vendor' : (type === 'B2B' ? 'Client' : 'Channel')}</th>
+          <th style="padding: 10px; border: 1px solid #ddd;">${type === 'QC' ? 'Product' : (type === 'B2B' ? 'Courier' : 'Parceled By')}</th>
+          ${type === 'QC' ? `
+            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Checked</th>
+            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Rejected</th>
+            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Damaged</th>
+            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Approved</th>
           ` : `
-            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Units</th>
+            <th style="padding: 10px; border: 1px solid #ddd;">${type === 'B2B' || type === 'B2C' ? 'Product' : 'Details'}</th>
+            ${type === 'B2B' || type === 'B2C' ? `
+              <th style="padding: 10px; border: 1px solid #ddd; text-align: center; width: 40px;">Qty</th>
+              <th style="padding: 10px; border: 1px solid #ddd; text-align: center; width: 40px;">Pack</th>
+              <th style="padding: 10px; border: 1px solid #ddd; text-align: center; width: 50px;">Total</th>
+            ` : `
+              <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Units</th>
+            `}
           `}
         </tr>
       </thead>
       <tbody>
-        ${shipmentsWithBase64.map((s, idx) => `
-          <tr style="background-color: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
-            <td style="padding: 10px; border: 1px solid #ddd;">${s.date}</td>
-            <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">
-              ${type === 'B2B' ? s.clientName : type === 'B2C' ? s.channel : type === 'Damage' ? s.productName : type === 'Return' ? s.channel : type === 'Replacement' ? (s.type === 'B2B' ? s.clientName : s.channel) : s.vendorName}
-            </td>
-            <td style="padding: 10px; border: 1px solid #ddd;">
-              ${type === 'QC' 
-                ? `• ${s.productName}<br/>Approved: ${Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0)}`
-                : type === 'Damage' ? `Reason: ${s.reason}` : type === 'Return' ? `Product: ${s.productName}` : type === 'Replacement' ? `Product: ${s.productName}` : (s.products || []).map(p => `• ${p.name}`).join('<br/>')}
-            </td>
-            ${type === 'B2B' || type === 'B2C' ? `
-              <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${(s.products || []).map(p => p.quantity).join('<br/>')}</td>
-              <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${(s.products || []).map(p => p.packSize || 1).join('<br/>')}</td>
-              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold;">${(s.products || []).map(p => (Number(p.quantity) * (Number(p.packSize) || 1))).join('<br/>')}</td>
-            ` : `
-              <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold;">
-                 ${type === 'Return' ? `+${s.quantity}` : type === 'Replacement' ? `-${s.quantity}` : s.quantity}
+        ${shipmentsWithBase64.map((s, idx) => {
+          const products = s.products || [];
+          const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
+          
+          if ((type === 'B2B' || type === 'B2C') && products.length > 0) {
+             return products.map((p, pIdx) => `
+              <tr style="background-color: ${rowBg};">
+                ${pIdx === 0 ? `
+                  <td rowspan="${products.length}" style="padding: 10px; border: 1px solid #ddd; font-size: 11px;">${s.date}</td>
+                  <td rowspan="${products.length}" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">
+                    ${type === 'B2B' ? s.clientName : s.channel}
+                  </td>
+                  <td rowspan="${products.length}" style="padding: 10px; border: 1px solid #ddd; font-size: 11px;">
+                    ${type === 'B2B' ? (s.courierName || '-') : (Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : (s.whoParceled || '-'))}
+                  </td>
+                ` : ''}
+                <td style="padding: 10px; border: 1px solid #ddd;">• ${p.name}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${p.quantity}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${p.packSize || 1}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold;">
+                  ${Number(p.quantity) * (Number(p.packSize) || 1)}
+                </td>
+              </tr>
+            `).join('');
+          }
+
+          const approved = Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0);
+
+          return `
+            <tr style="background-color: ${rowBg};">
+              <td style="padding: 10px; border: 1px solid #ddd;">${s.date}</td>
+              <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">
+                ${type === 'B2B' ? s.clientName : type === 'B2C' ? s.channel : type === 'Damage' ? s.productName : type === 'Return' ? s.channel : type === 'Replacement' ? (s.type === 'B2B' ? s.clientName : s.channel) : s.vendorName}
               </td>
-            `}
-          </tr>
-        `).join('')}
+              <td style="padding: 10px; border: 1px solid #ddd;">
+                ${type === 'QC' ? s.productName : (type === 'B2B' ? (s.courierName || '-') : (type === 'B2C' ? (Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : (s.whoParceled || '-')) : '-'))}
+              </td>
+              ${type === 'QC' ? `
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${s.checked}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${s.rejected || 0}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${s.damaged}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #059669;">${approved}</td>
+              ` : `
+                <td style="padding: 10px; border: 1px solid #ddd;">
+                  ${type === 'Damage' ? `Reason: ${s.reason}` : type === 'Return' ? `Product: ${s.productName}` : type === 'Replacement' ? `Product: ${s.productName}` : '-'}
+                </td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold;">
+                   ${type === 'Return' ? `+${s.quantity}` : type === 'Replacement' ? `-${s.quantity}` : s.quantity}
+                </td>
+              `}
+            </tr>
+          `;
+        }).join('')}
       </tbody>
     </table>
 
@@ -379,7 +481,7 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
       <div style="margin-top: 30px;">
         <h3 style="color: ${themeColor}; font-size: 14px; text-transform: uppercase; margin-bottom: 12px; border-bottom: 2px solid ${themeColor}; padding-bottom: 5px;">Inspection Photos</h3>
         <div style="display: flex; flex-wrap: wrap; gap: 12px;">
-          ${shipmentsWithBase64.flatMap(s => s.base64Images.map(img => `
+          ${shipmentsWithBase64.flatMap(s => (s.base64Images || []).filter(img => img && img.startsWith('data:')).map(img => `
             <div style="width: 170px; height: 170px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #f8fafc;">
               <img src="${img}" style="width: 100%; height: 100%; object-fit: cover;" />
             </div>
@@ -399,10 +501,20 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
     const imgs = container.querySelectorAll('img');
     await Promise.all(Array.from(imgs).map(img => {
       if (img.complete) return Promise.resolve();
-      return new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
+      return new Promise(resolve => { 
+        img.onload = resolve; 
+        img.onerror = resolve; // Continue even if one image fails
+      });
     }));
-    await new Promise(resolve => setTimeout(resolve, 500));
-    const canvas = await html2canvas(container, { scale: 2, backgroundColor: '#ffffff', useCORS: true });
+    // Extra wait for fonts and layout
+    await new Promise(resolve => setTimeout(resolve, 800));
+    const canvas = await html2canvas(container, { 
+      scale: 2, 
+      backgroundColor: '#ffffff', 
+      useCORS: true,
+      logging: false,
+      allowTaint: false
+    });
     const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
     return new File([blob], `${fileName}.png`, { type: 'image/png' });
   } catch (err) {
@@ -416,6 +528,8 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
 const getProxyImageBase64 = async (url) => {
   if (!url) return null;
   if (url.startsWith('data:')) return url;
+  
+  // Try direct fetch first (if CORS allowed)
   try {
     const directResp = await fetch(url, { mode: 'cors', cache: 'no-cache' });
     if (directResp.ok) {
@@ -427,23 +541,28 @@ const getProxyImageBase64 = async (url) => {
       });
     }
   } catch (e) { }
+
+  // Try multiple proxies in order
   const proxies = [
     `https://images.weserv.nl/?url=${encodeURIComponent(url)}&output=jpg&q=80`,
     `https://corsproxy.io/?${encodeURIComponent(url)}`,
     `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
   ];
+
   for (const proxy of proxies) {
     try {
       const response = await fetch(proxy);
       if (response.ok) {
         const blob = await response.blob();
-        return await new Promise((resolve) => {
+        const base64 = await new Promise((resolve) => {
           const reader = new FileReader();
           reader.onloadend = () => resolve(reader.result);
           reader.readAsDataURL(blob);
         });
+        if (base64 && base64.startsWith('data:image')) return base64;
       }
     } catch (e) { continue; }
   }
-  return url; 
+
+  return null; // Return null instead of original URL to prevent html2canvas CORS issues
 };

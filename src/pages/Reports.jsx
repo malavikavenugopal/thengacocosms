@@ -480,15 +480,15 @@ const Reports = () => {
           )}
 
           {activeTab === 'shipments' && (
-            <Table headers={['Date', 'Type', 'Channel', 'Orders', 'Products', 'Qty', 'Pack', 'Total Units']}>
+            <Table headers={['Date', 'Type', 'Channel / Orders', 'Shipment Details']}>
               {filteredShipments.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="py-12 text-center text-slate-400">No shipments found for the current filters.</td>
+                  <td colSpan="4" className="py-12 text-center text-slate-400">No shipments found for the current filters.</td>
                 </tr>
               ) : (
                 filteredShipments.map(s => (
                   <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-4 px-6 text-sm text-slate-800">{s.date}</td>
+                    <td className="py-4 px-6 text-sm text-slate-800 whitespace-nowrap">{s.date}</td>
                     <td className="py-4 px-6 text-sm">
                       <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wide ${
                         s.type === 'B2B' ? 'bg-indigo-50 text-indigo-700' : 'bg-emerald-50 text-emerald-700'
@@ -496,50 +496,44 @@ const Reports = () => {
                         {s.type}
                       </span>
                     </td>
-                    <td className="py-4 px-6 text-sm font-semibold text-slate-900">
-                      {s.type === 'B2B' 
-                        ? (Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : s.whoParceled)
-                        : s.channel}
-                    </td>
-                    <td className="py-4 px-6 text-sm font-bold text-slate-900 text-center">
-                      {s.type === 'B2C' ? (s.orderCount || '1') : '-'}
-                    </td>
-                    <td className="py-4 px-6 text-sm text-slate-600 leading-relaxed">
-                      <div className="flex flex-col gap-1">
-                        {(s.products || []).map((p, idx) => (
-                          <div key={idx} className="font-medium text-slate-900">{p.name}</div>
-                        ))}
+                    <td className="py-4 px-6 text-sm">
+                      <div className="font-bold text-slate-900 leading-tight">
+                        {s.type === 'B2B' ? s.clientName : s.channel}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">
+                        Orders: <span className="text-slate-900">{s.orderCount || '1'}</span>
                       </div>
                     </td>
-                    <td className="py-4 px-6 text-sm text-center text-slate-600">
-                      <div className="flex flex-col gap-1">
-                        {(s.products || []).map((p, idx) => (
-                          <div key={idx}>{p.quantity}</div>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-sm text-center text-slate-400">
-                      <div className="flex flex-col gap-1">
-                        {(s.products || []).map((p, idx) => {
-                          let ps = Number(p.packSize) || 1;
-                          if (ps === 1) {
-                            const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                            if (match && match[1]) ps = Number(match[1]);
-                          }
-                          return <div key={idx}>{ps}</div>;
-                        })}
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-sm text-center font-bold text-slate-800">
-                      <div className="flex flex-col gap-1 text-indigo-600">
-                        {(s.products || []).map((p, idx) => {
-                          let ps = Number(p.packSize) || 1;
-                          if (ps === 1) {
-                            const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                            if (match && match[1]) ps = Number(match[1]);
-                          }
-                          return <div key={idx}>{Number(p.quantity) * ps}</div>;
-                        })}
+                    <td className="py-4 px-6 text-sm">
+                      <div className="min-w-[450px]">
+                        {/* Internal Header */}
+                        <div className="grid grid-cols-[1fr,60px,60px,60px] gap-2 mb-2 px-2 py-1 bg-slate-50 rounded text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          <span>Product</span>
+                          <span className="text-center">Qty</span>
+                          <span className="text-center">Pack</span>
+                          <span className="text-center">Total</span>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {(s.products || []).map((p, idx) => {
+                            const masterSKU = stock.find(item => item.name === p.name);
+                            let ps = Number(p.packSize) || 1;
+                            if (ps === 1) {
+                              const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                              if (match && match[1]) ps = Number(match[1]);
+                            }
+                            return (
+                              <div key={idx} className="grid grid-cols-[1fr,60px,60px,60px] gap-2 items-center px-2 py-2 border-b border-slate-100 last:border-0 hover:bg-white rounded transition-colors group">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-[9px] font-mono font-bold text-emerald-600 bg-emerald-50 px-1 rounded shrink-0 border border-emerald-100">{masterSKU?.sku || 'N/A'}</span>
+                                  <span className="font-medium text-slate-800 break-words line-clamp-2" title={p.name}>{p.name}</span>
+                                </div>
+                                <div className="text-center font-bold text-slate-900">{p.quantity}</div>
+                                <div className="text-center text-slate-400 font-medium">{ps}</div>
+                                <div className="text-center font-bold text-indigo-600 bg-indigo-50/50 py-0.5 rounded">{Number(p.quantity) * ps}</div>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </td>
                   </tr>
