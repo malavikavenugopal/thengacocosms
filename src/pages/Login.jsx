@@ -4,6 +4,7 @@ import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'fire
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useGlobalState } from '../context/GlobalContext';
 import { LogIn, Lock, Mail, Loader2, Sparkles } from 'lucide-react';
+import { Button } from '../components/ui';
 import toast from 'react-hot-toast';
 
 const Login = () => {
