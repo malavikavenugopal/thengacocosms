@@ -32,9 +32,6 @@ const Reports = () => {
 
   // B2C Pivot Logic: Group by SKU and Channel
   const { b2cPivotData, activeChannels } = useMemo(() => {
-    // 1. Filter out 'Samples' channel and get initial list
-    const filteredChannels = channels.filter(c => c.name.toLowerCase() !== 'samples');
-
     const activeB2C = b2cShipments.filter(s => {
       const dateMatch = (!filter.startDate || s.date >= filter.startDate) && 
                         (!filter.endDate || s.date <= filter.endDate);
@@ -42,10 +39,15 @@ const Reports = () => {
       return dateMatch && isNotSample;
     });
 
+    // 1. Get unique channels from active shipments to ensure FBA and others are included
+    const foundChannels = Array.from(new Set(activeB2C.map(s => s.channel || 'Unknown')))
+      .filter(name => name.toLowerCase() !== 'samples')
+      .sort();
+
     const results = stock.map(p => {
       const channelCounts = {};
-      filteredChannels.forEach(c => {
-        channelCounts[c.name] = 0;
+      foundChannels.forEach(name => {
+        channelCounts[name] = 0;
       });
       
       let rowTotal = 0;
@@ -73,10 +75,8 @@ const Reports = () => {
 
         if (qtyForThisProduct > 0) {
           const channelName = s.channel || 'Unknown';
-          if (filteredChannels.some(c => c.name === channelName)) {
-            channelCounts[channelName] = (channelCounts[channelName] || 0) + qtyForThisProduct;
-            rowTotal += qtyForThisProduct;
-          }
+          channelCounts[channelName] = (channelCounts[channelName] || 0) + qtyForThisProduct;
+          rowTotal += qtyForThisProduct;
         }
       });
 
@@ -90,8 +90,8 @@ const Reports = () => {
     });
 
     // 2. Identify channels which actually have sales in this filtered set
-    const channelsWithSales = filteredChannels.filter(c => 
-      results.some(row => row.channels[c.name] > 0)
+    const channelsWithSales = foundChannels.filter(name => 
+      results.some(row => row.channels[name] > 0)
     );
 
     // 3. Filter products that have sales in selected period OR if specifically filtered

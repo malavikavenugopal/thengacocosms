@@ -18,7 +18,8 @@ const B2CShipments = () => {
       whoParceled: Array.isArray(saved?.whoParceled) ? saved.whoParceled : saved?.whoParceled ? [saved.whoParceled] : [],
       channel: saved?.channel || '',
       orderCount: saved?.orderCount || '',
-      date: saved?.date || defaultDate
+      date: saved?.date || defaultDate,
+      isFBA: saved?.isFBA || false
     };
   });
 
@@ -178,7 +179,8 @@ const B2CShipments = () => {
       whoParceled: Array.isArray(s.whoParceled) ? s.whoParceled : s.whoParceled ? [s.whoParceled] : [],
       channel: s.channel,
       orderCount: s.orderCount || '',
-      date: s.date
+      date: s.date,
+      isFBA: s.isFBA || false
     });
     setProducts(s.products.map((p, idx) => ({ ...p, id: Date.now() + idx })));
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -187,7 +189,7 @@ const B2CShipments = () => {
   const handleCancel = () => {
     setIsEditing(false);
     setEditingId(null);
-    setFormData({ whoParceled: [], channel: '', orderCount: '', date: new Date().toISOString().split('T')[0] });
+    setFormData({ whoParceled: [], channel: '', orderCount: '', date: new Date().toISOString().split('T')[0], isFBA: false });
     setProducts([{ id: Date.now(), name: '', quantity: '' }]);
   };
 
@@ -255,6 +257,25 @@ const B2CShipments = () => {
               onChange={(e) => setFormData({...formData, date: e.target.value})}
               required
             />
+            <div className="flex items-center gap-2 pt-8">
+              <label className="text-sm font-bold text-slate-700 cursor-pointer flex items-center gap-2">
+                <input 
+                  type="checkbox" 
+                  checked={formData.isFBA}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setFormData({
+                      ...formData, 
+                      isFBA: checked,
+                      channel: checked ? 'Amazon FBA' : formData.channel
+                    });
+                  }}
+                  className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                />
+                FBA Shipment?
+              </label>
+              <Box size={16} className={formData.isFBA ? "text-orange-500" : "text-slate-300"} />
+            </div>
           </div>
 
           <div className="border-t border-slate-100 pt-6">
@@ -452,12 +473,13 @@ const B2CShipments = () => {
                 <td className="py-4 px-6 text-sm text-slate-800 whitespace-nowrap">{s.date}</td>
                 <td className="py-4 px-6 text-sm font-medium">
                   <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold tracking-wide mb-1
-                    ${s.channel === 'Amazon' ? 'bg-amber-100 text-amber-800' : 
+                    ${s.channel === 'Amazon' || s.channel === 'Amazon FBA' ? 'bg-amber-100 text-amber-800' : 
                       s.channel === 'Shopify' ? 'bg-emerald-100 text-emerald-800' :
                       s.channel === 'Flipkart' ? 'bg-sky-100 text-sky-800' :
                       'bg-slate-100 text-slate-800'}`}
                   >
                     {s.channel}
+                    {s.isFBA && <span className="ml-1.5 px-1 bg-amber-600 text-white rounded text-[8px] leading-tight">FBA</span>}
                   </div>
                   <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest pl-1">
                     Orders: <span className="text-slate-900">{s.orderCount || '1'}</span>
