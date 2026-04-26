@@ -18,11 +18,11 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
     { name: 'Returns Management', path: '/returns', icon: <RotateCcw size={20} /> },
     { name: 'Damage Tracking', path: '/damage', icon: <AlertTriangle size={20} /> },
     { name: 'Reorder Points', path: '/rop', icon: <Package size={20} /> },
-    { name: 'Monthly Stock Check', path: '/stock', icon: <ClipboardList size={20} /> },
+    { name: 'Stock Check', path: '/stock', icon: <ClipboardList size={20} /> },
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
   ];
 
-  const sidebarClasses = `w-64 bg-slate-900 text-slate-300 flex flex-col h-screen fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out md:translate-x-0 ${
+  const sidebarClasses = `w-64 bg-slate-900 text-slate-300 flex flex-col h-screen fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
     mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
   }`;
 

@@ -355,20 +355,20 @@ const Reports = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Reports</h2>
-          <p className="text-sm text-slate-500">Generate and export operations analytics</p>
+          <h2 className="text-xl md:text-2xl font-bold tracking-tight text-slate-900">Reports Dashboard</h2>
+          <p className="text-[10px] md:text-xs text-slate-500 uppercase tracking-wider font-medium">Operations Analytics & Data Export</p>
         </div>
-        <Button onClick={handleExport} variant="success" className="w-full lg:w-auto shrink-0 flex items-center justify-center gap-2 shadow-lg shadow-emerald-50" loading={isExporting}>
+        <Button onClick={handleExport} variant="success" className="w-full lg:w-auto shrink-0 flex items-center justify-center gap-2 shadow-lg shadow-emerald-50 h-10 px-6 text-xs font-bold" loading={isExporting}>
           <Download size={16} /> Export {tabs.find(t => t.id === activeTab)?.label}
         </Button>
       </div>
 
-      <Card className="p-4 bg-white">
-        <div className="flex items-center gap-2 mb-4 text-indigo-600 font-medium text-sm">
+      <Card className="p-4 bg-white border-slate-200 shadow-sm">
+        <div className="flex items-center gap-2 mb-4 text-indigo-600 font-bold text-xs uppercase tracking-widest">
           <Filter size={16} />
-          Filters
+          Report Filters
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Input 
@@ -376,35 +376,39 @@ const Reports = () => {
             type="date" 
             value={filter.startDate}
             onChange={(e) => setFilter({...filter, startDate: e.target.value})}
+            className="text-xs"
           />
           <Input 
             label="End Date" 
             type="date" 
             value={filter.endDate}
             onChange={(e) => setFilter({...filter, endDate: e.target.value})}
+            className="text-xs"
           />
           <Select 
             label="SKU" 
             options={skuOptions} 
             value={filter.sku}
             onChange={(e) => setFilter({...filter, sku: e.target.value})}
+            className="text-xs"
           />
           <Select 
             label="Channel" 
             options={channelOptions} 
             value={filter.channel}
             onChange={(e) => setFilter({...filter, channel: e.target.value})}
+            className="text-xs"
           />
         </div>
       </Card>
 
-      <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm">
-        <div className="flex border-b border-slate-100 bg-slate-50/50 overflow-x-auto no-scrollbar whitespace-nowrap">
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+        <div className="flex border-b border-slate-100 bg-slate-50/50 overflow-x-auto scrollbar-hide whitespace-nowrap">
           {tabs.map(tab => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-6 py-4 text-sm font-medium transition-colors ${
+              className={`px-4 sm:px-6 py-3 sm:py-4 text-[10px] sm:text-sm font-medium transition-colors inline-block ${
                 activeTab === tab.id 
                   ? 'bg-white text-indigo-600 border-b-2 border-indigo-600' 
                   : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
@@ -505,7 +509,8 @@ const Reports = () => {
                       </div>
                     </td>
                     <td className="py-4 px-6 text-sm">
-                      <div className="min-w-[450px]">
+                      <div className="overflow-x-auto max-w-[500px]">
+                        <div className="min-w-[450px]">
                         {/* Internal Header */}
                         <div className="grid grid-cols-[1fr,60px,60px,60px] gap-2 mb-2 px-2 py-1 bg-slate-50 rounded text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                           <span>Product</span>
@@ -535,7 +540,8 @@ const Reports = () => {
                           })}
                         </div>
                       </div>
-                    </td>
+                    </div>
+                  </td>
                   </tr>
                 ))
               )}

@@ -444,10 +444,11 @@ export const exportFormattedROP = (products, type = 'ROP', fileName = 'ROP_Plann
 /**
  * Specialized Formatted Export for Monthly Stock Check
  */
-export const exportFormattedStockCheck = (data, month, fileName = 'Stock_Check.xlsx') => {
+export const exportFormattedStockCheck = (data, period, fileName = 'Stock_Check.xlsx') => {
   if (!data || !data.length) return;
 
-  const title = `MONTHLY INVENTORY RECONCILIATION — ${month.toUpperCase()}`;
+  const isWeekly = period.includes('-W');
+  const title = `${isWeekly ? 'WEEKLY' : 'MONTHLY'} INVENTORY RECONCILIATION — ${period.toUpperCase()}`;
   const timestamp = new Date().toISOString().split('T')[0];
   
   const styles = `
@@ -502,20 +503,20 @@ export const exportFormattedStockCheck = (data, month, fileName = 'Stock_Check.x
   // Row 1: Title
   tableHtml += `
     <tr>
-      <th colspan="12" class="header-main">${title}</th>
+      <th colspan="14" class="header-main">${title}</th>
     </tr>
   `;
 
   // Row 2: Metadata
   tableHtml += `
     <tr>
-      <th colspan="12" class="header-sub">Generated: ${timestamp}</th>
+      <th colspan="14" class="header-sub">Generated: ${timestamp}</th>
     </tr>
   `;
 
   // Row 3: Headers
   const headers = [
-    'SKU Code', 'SKU Name', 'Month', 'Opening', 'Stock In', 'Returns', 'Dispatch', 'Replacement', 'Damage', 'Expected', 'Physical', 'Difference'
+    'SKU Code', 'SKU Name', 'Period', 'Opening', 'Stock In', 'Produced', 'Used (Raw)', 'Returns', 'Dispatch', 'Replacement', 'Damage', 'Expected', 'Physical', 'Difference'
   ];
   
   tableHtml += `<tr>`;
@@ -532,12 +533,14 @@ export const exportFormattedStockCheck = (data, month, fileName = 'Stock_Check.x
     else if (diff > 0) diffClass = 'diff-pos';
 
     tableHtml += `<tr>`;
-    tableHtml += `<td>${row.SKU_Code || '-'}</td>`;
-    tableHtml += `<td class="product-name">${row.SKU_Name}</td>`;
-    tableHtml += `<td>${row.Month}</td>`;
+    tableHtml += `<td>${row.SKU_Code || row.SKU || '-'}</td>`;
+    tableHtml += `<td class="product-name">${row.SKU_Name || row.Name}</td>`;
+    tableHtml += `<td>${row.Month || row.Week || period}</td>`;
     tableHtml += `<td>${row.Opening || 0}</td>`;
     tableHtml += `<td>${row.Production || 0}</td>`;
-    tableHtml += `<td>${row['Returned Items'] || 0}</td>`;
+    tableHtml += `<td>${row.Produced || 0}</td>`;
+    tableHtml += `<td>${row['Used in Production'] || row['Used In Production'] || 0}</td>`;
+    tableHtml += `<td>${row['Returned Items'] || row.Returns || 0}</td>`;
     tableHtml += `<td>${row.Dispatch || 0}</td>`;
     tableHtml += `<td>${row.Replacement || 0}</td>`;
     tableHtml += `<td>${row.Damage || 0}</td>`;
@@ -548,13 +551,6 @@ export const exportFormattedStockCheck = (data, month, fileName = 'Stock_Check.x
   });
 
   tableHtml += `</table>`;
-
-  const excelFile = `
-    <html>
-    <head><meta charset="UTF-8">${styles}</head>
-    <body>${tableHtml}</body>
-    </html>
-  `;
 
   const table = document.createElement('table');
   table.innerHTML = tableHtml;
