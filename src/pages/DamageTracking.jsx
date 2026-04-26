@@ -13,6 +13,16 @@ import emailjs from 'emailjs-com';
 const DamageTracking = () => {
   const { stock, damageRecords, addDamageRecord, updateDamageRecord, deleteDamageRecord, qcRecords, addQCRecord, updateQCRecord, deleteQCRecord, drafts, updateDraft, clearDraft, purchaseRecords, vendors, uploadQCImages, getQCImageBase64 } = useGlobalState();
   
+  const REJECTION_REASONS = [
+    "Crack / Chipping",
+    "Polishing Issue",
+    "Fungus / Mold",
+    "Size Mismatch",
+    "Threading/Fit Issue",
+    "Natural Defect",
+    "Other"
+  ];
+  
   const sendQCEmail = (vendorName, date, products, images = [], recordId = null) => {
     // EmailJS credentials hardcoded as requested
     const SERVICE_ID = "service_wjn0j8t";
@@ -25,7 +35,7 @@ const DamageTracking = () => {
         <b style="font-size: 20px; color: #065f46; display: block; margin-bottom: 10px;">${p.productName}</b>
         <div style="margin-left: 10px;">
           • Checked: <b>${p.checked}</b><br/>
-          • Rejected: <b>${p.rejected || 0}</b><br/>
+          • Rejected: <b>${p.rejected || 0}</b> ${p.rejectionReason ? `(${p.rejectionReason})` : ''}<br/>
           • Damaged: <b>${p.damaged}</b><br/>
           • Baseless: <b>${p.baseless || 0}</b><br/>
           • Approved: <b style="color: #059669;">${Number(p.checked) - Number(p.damaged) - (Number(p.rejected) || 0) - (Number(p.baseless) || 0)}</b>
@@ -57,7 +67,16 @@ const DamageTracking = () => {
       to_email: recipients,
       vendor_name: vendorName || "N/A",
       date: date,
-      product_details: headerHtml + productDetails + imageHtml 
+      product_details: headerHtml + productDetails + `
+        ${qcForm.suggestionEn || qcForm.suggestionMl || qcForm.suggestionTa ? `
+          <div style="margin-top: 20px; padding: 15px; border: 2px solid #fde68a; border-radius: 10px; background-color: #fffbeb; font-family: sans-serif;">
+            <b style="color: #92400e; font-size: 16px; text-transform: uppercase;">Suggestions & Corrective Actions:</b><br/>
+            ${qcForm.suggestionEn ? `<div style="margin-top: 10px;"><b>English:</b> ${qcForm.suggestionEn}</div>` : ''}
+            ${qcForm.suggestionMl ? `<div style="margin-top: 8px;"><b>മലയാളം:</b> ${qcForm.suggestionMl}</div>` : ''}
+            ${qcForm.suggestionTa ? `<div style="margin-top: 8px;"><b>தமிழ்:</b> ${qcForm.suggestionTa}</div>` : ''}
+          </div>
+        ` : ''}
+      ` + imageHtml 
     };
 
     emailjs.send(SERVICE_ID, TEMPLATE_ID, templateParams, PUBLIC_KEY)
@@ -237,12 +256,21 @@ const DamageTracking = () => {
     const base = saved || {
       date: defaultDate,
       vendorName: '',
-      products: [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', baseless: '' }]
+      suggestionEn: '',
+      suggestionMl: '',
+      suggestionTa: '',
+      products: [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', baseless: '', rejectionReason: '' }]
     };
     return {
       ...base,
       date: base.date || defaultDate,
-      products: base.products || [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', baseless: '' }]
+      suggestionEn: base.suggestionEn || '',
+      suggestionMl: base.suggestionMl || '',
+      suggestionTa: base.suggestionTa || '',
+      products: (base.products || [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', baseless: '', rejectionReason: '' }]).map(p => ({
+        ...p,
+        rejectionReason: p.rejectionReason || ''
+      }))
     };
   });
 
@@ -335,7 +363,10 @@ const DamageTracking = () => {
           ...p,
           date: qcForm.date,
           vendorName: qcForm.vendorName,
-          good: Number(p.checked) - Number(p.damaged) - (Number(p.rejected) || 0) - (Number(p.baseless) || 0),
+          rejectionReason: p.rejectionReason || '',
+          suggestionEn: qcForm.suggestionEn || '',
+          suggestionMl: qcForm.suggestionMl || '',
+          suggestionTa: qcForm.suggestionTa || '',
           images: imageUrls,
           emailSent: false // Manual sending required
         }));
@@ -389,7 +420,7 @@ const DamageTracking = () => {
   const addQCProduct = () => {
     setQcForm({
       ...qcForm,
-      products: [...qcForm.products, { id: Date.now(), productName: '', checked: '', damaged: '', rejected: '' }]
+      products: [...qcForm.products, { id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', rejectionReason: '' }]
     });
   };
 
@@ -455,13 +486,22 @@ const DamageTracking = () => {
                     <p style="margin: 0; font-size: 18px; font-weight: 900; color: #e11d48;">${r.damaged || 0}</p>
                     <p style="margin: 0; font-size: 9px; color: #e11d48; text-transform: uppercase;">Damaged</p>
                   </div>
-                  <div style="background: #fef2f2; padding: 8px; border-radius: 6px;">
                     <p style="margin: 0; font-size: 18px; font-weight: 900; color: #b91c1c;">${r.rejected || 0}</p>
                     <p style="margin: 0; font-size: 9px; color: #b91c1c; text-transform: uppercase;">Rejected</p>
                   </div>
                 </div>
+                ${r.rejectionReason ? `<p style="margin: 10px 0 0 0; font-size: 11px; color: #b91c1c;"><b>Reason:</b> ${r.rejectionReason}</p>` : ''}
              </div>
           </div>
+
+          ${r.suggestionEn || r.suggestionMl || r.suggestionTa ? `
+            <div style="margin-top: 20px; padding: 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px;">
+               <p style="margin: 0 0 8px 0; font-size: 10px; font-weight: bold; color: #b45309; text-transform: uppercase;">Suggestions / Feedback</p>
+               ${r.suggestionEn ? `<p style="margin: 0 0 4px 0; font-size: 13px; color: #92400e;"><b>EN:</b> ${r.suggestionEn}</p>` : ''}
+               ${r.suggestionMl ? `<p style="margin: 0 0 4px 0; font-size: 13px; color: #92400e;"><b>ML:</b> ${r.suggestionMl}</p>` : ''}
+               ${r.suggestionTa ? `<p style="margin: 0; font-size: 13px; color: #92400e;"><b>TA:</b> ${r.suggestionTa}</p>` : ''}
+            </div>
+          ` : ''}
 
           ${r.images && r.images.length > 0 ? `
             <div>
@@ -491,7 +531,10 @@ const DamageTracking = () => {
     setQcForm({
       date: r.date,
       vendorName: r.vendorName || '',
-      products: [{ id: Date.now(), productName: r.productName, checked: r.checked, damaged: r.damaged, rejected: r.rejected || '' }]
+      suggestionEn: r.suggestionEn || '',
+      suggestionMl: r.suggestionMl || '',
+      suggestionTa: r.suggestionTa || '',
+      products: [{ id: Date.now(), productName: r.productName, checked: r.checked, damaged: r.damaged, rejected: r.rejected || '', rejectionReason: r.rejectionReason || '' }]
     });
     setSelectedImages(r.images || []);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -504,7 +547,10 @@ const DamageTracking = () => {
     setQcForm({ 
       date: new Date().toISOString().split('T')[0], 
       vendorName: '',
-      products: [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '' }]
+      suggestionEn: '',
+      suggestionMl: '',
+      suggestionTa: '',
+      products: [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', rejectionReason: '' }]
     });
     setSelectedImages([]);
   };
@@ -634,6 +680,21 @@ const DamageTracking = () => {
                           onChange={(e) => updateQCProductField(p.id, 'baseless', e.target.value)}
                         />
                       </div>
+                      <div className="md:col-span-12 lg:col-span-2">
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold text-slate-500 uppercase tracking-tight ml-1">Reason</label>
+                          <select 
+                            className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none"
+                            value={p.rejectionReason || ''}
+                            onChange={(e) => updateQCProductField(p.id, 'rejectionReason', e.target.value)}
+                          >
+                            <option value="">No Reason</option>
+                            {REJECTION_REASONS.map(res => (
+                              <option key={res} value={res}>{res}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
                       <div className="md:col-span-4 lg:col-span-1 flex justify-end pb-2">
                          {!isEditing && qcForm.products.length > 1 && (
                            <button 
@@ -647,6 +708,42 @@ const DamageTracking = () => {
                       </div>
                     </div>
                   ))}
+                </div>
+              </div>
+
+              {/* Suggestions / Feedback Section */}
+              <div className="border-t border-indigo-100 pt-6 mt-6">
+                <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2 mb-4">
+                  <MessageCircle size={14} /> Rejection Suggestions / Actions
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">English Suggestion</label>
+                    <textarea 
+                      className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all min-h-[80px]"
+                      placeholder="Enter suggestion in English..."
+                      value={qcForm.suggestionEn || ''}
+                      onChange={(e) => setQcForm({...qcForm, suggestionEn: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Malayalam Suggestion (മലയാളം)</label>
+                    <textarea 
+                      className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all min-h-[80px]"
+                      placeholder="നിർദ്ദേശങ്ങൾ മലയാളത്തിൽ നൽകുക..."
+                      value={qcForm.suggestionMl || ''}
+                      onChange={(e) => setQcForm({...qcForm, suggestionMl: e.target.value})}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Tamil Suggestion (தமிழ்)</label>
+                    <textarea 
+                      className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all min-h-[80px]"
+                      placeholder="பரிந்துரைகளை தமிழில் உள்ளிடவும்..."
+                      value={qcForm.suggestionTa || ''}
+                      onChange={(e) => setQcForm({...qcForm, suggestionTa: e.target.value})}
+                    />
+                  </div>
                 </div>
               </div>
 

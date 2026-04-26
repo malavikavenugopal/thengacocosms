@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Card, Button } from '../components/ui';
-import { Search, DownloadCloud, Eye, Calendar, ArrowRightLeft, X, ShoppingCart, MapPin, ClipboardList, History, Zap, Package, TrendingUp, TrendingDown, Layers } from 'lucide-react';
+import { Search, DownloadCloud, Eye, Calendar, ArrowRightLeft, X, ShoppingCart, MapPin, ClipboardList, History, Zap, Package, TrendingUp, TrendingDown, Layers, Save } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import { exportFormattedStockCheck } from '../utils/exportUtils';
 import toast from 'react-hot-toast';
@@ -77,7 +77,10 @@ const MonthlyStockCheck = () => {
           }
         }
         if (latestValue !== null) {
-          await saveMonthlyStock(selectedMonth, item.id, { physical: latestValue });
+          const mData = monthlyStockData.find(d => d.month === selectedMonth && d.productId === item.id) || {};
+          const m = monthlyMovements[item.name] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+          const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+          await saveMonthlyStock(selectedMonth, item.id, { physical: latestValue, expected });
         }
       }
       toast.success("Updated Monthly Physical from Weekly Logs!", { id: toastId });
@@ -127,6 +130,23 @@ const MonthlyStockCheck = () => {
   const calculateExpected = (opening, otherIn, purchased, produced, returned, out, packed, replacement, damage, rejected, used) => 
     Number(opening || 0) + Number(otherIn || 0) + Number(purchased || 0) + Number(produced || 0) + Number(returned || 0) - Number(out || 0) - Number(packed || 0) - Number(replacement || 0) - Number(damage || 0) - Number(rejected || 0) - Number(used || 0);
 
+  // Automatic background sync for Expected Stock
+  useEffect(() => {
+    if (!monthlyMovements || stock.length === 0) return;
+    const sync = async () => {
+      stock.forEach(item => {
+        if (item.isComposite) return;
+        const mData = monthlyStockData.find(d => d.month === selectedMonth && d.productId === item.id) || {};
+        const m = monthlyMovements[item.name] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+        const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+        if (mData.expected !== expected) {
+          saveMonthlyStock(selectedMonth, item.id, { expected });
+        }
+      });
+    };
+    sync();
+  }, [monthlyMovements, selectedMonth]);
+
   const handleCarryForward = async () => {
     const [year, month] = selectedMonth.split('-').map(Number);
     const prevDate = new Date(year, month - 2, 1);
@@ -142,8 +162,9 @@ const MonthlyStockCheck = () => {
         const m = prevMovements[product.name] || { out: 0, packed: 0, returned: 0, damage: 0, purchased: 0, produced: 0, rejected: 0, replacement: 0, used: 0 };
         const expected = calculateExpected(item.opening, item.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
         await saveMonthlyStock(selectedMonth, item.productId, { opening: expected });
+        await saveMonthlyStock(prevMonthStr, item.productId, { expected });
       }
-      toast.success('Balances carried forward!');
+      toast.success('Balances carried forward & Expected stock saved!');
     } finally { setIsCarryingForward(false); }
   };
 
@@ -230,7 +251,12 @@ const MonthlyStockCheck = () => {
                       <div className="flex flex-col"><span className="text-[9px] text-indigo-500 font-mono font-bold uppercase tracking-tighter">{item.sku || '-'}</span>{item.name}</div>
                     </td>
                     <td className="py-3 px-1 text-center">
-                      <input type="number" className="w-14 mx-auto block px-1 py-1 text-center text-xs border border-slate-200 rounded outline-none" value={mData.opening || ''} onChange={(e) => saveMonthlyStock(selectedMonth, item.id, { opening: e.target.value === '' ? '' : Number(e.target.value) })} />
+                      <input type="number" className="w-14 mx-auto block px-1 py-1 text-center text-xs border border-slate-200 rounded outline-none" value={mData.opening || ''} onChange={(e) => {
+                        const val = e.target.value === '' ? '' : Number(e.target.value);
+                        const m = monthlyMovements[item.name] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+                        const expected = calculateExpected(val, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+                        saveMonthlyStock(selectedMonth, item.id, { opening: val, expected });
+                      }} />
                     </td>
                     <td className="py-4 px-2 text-center text-indigo-600 text-xs font-bold">{(Number(mData.in) || 0) + m.purchased + m.produced}</td>
                     <td className="py-4 px-2 text-xs text-center text-emerald-600 font-bold">{m.returned || 0}</td>
@@ -243,7 +269,12 @@ const MonthlyStockCheck = () => {
                     <td className="py-4 px-2 text-sm text-center font-bold bg-slate-50/50 border-x border-slate-100 sticky right-[250px] z-10 group-hover:bg-slate-100/50">{expected}</td>
                     <td className="py-3 px-2 bg-indigo-50/20 sticky right-[160px] z-10 group-hover:bg-indigo-50/30">
                       <div className="flex items-center gap-1">
-                        <input type="number" className="w-16 mx-auto block px-2 py-1 text-center text-sm border border-slate-300 rounded outline-none font-bold bg-white focus:border-indigo-500" value={mData.physical || ''} onChange={(e) => saveMonthlyStock(selectedMonth, item.id, { physical: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="--" />
+                        <input type="number" className="w-16 mx-auto block px-2 py-1 text-center text-sm border border-slate-300 rounded outline-none font-bold bg-white focus:border-indigo-500" value={mData.physical || ''} onChange={(e) => {
+                          const val = e.target.value === '' ? '' : Number(e.target.value);
+                          const m = monthlyMovements[item.name] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+                          const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+                          saveMonthlyStock(selectedMonth, item.id, { physical: val, expected });
+                        }} placeholder="--" />
                         {(mData.physical !== undefined && mData.physical !== '') && <button onClick={() => saveMonthlyStock(selectedMonth, item.id, { physical: '' })} className="p-0.5 text-slate-400 hover:text-red-500"><X size={12} /></button>}
                       </div>
                     </td>
@@ -292,16 +323,30 @@ const MonthlyStockCheck = () => {
                   <button onClick={() => setSelectedProductDetails(item)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-full"><Eye size={18}/></button>
                </div>
 
-               {/* Stats Grid */}
+               {/* Stats Grid - Prioritizing Expected vs Physical */}
                <div className="p-4 grid grid-cols-2 gap-4 border-b border-slate-50">
-                  <div className="space-y-1">
-                    <span className="text-[9px] text-slate-400 uppercase font-bold tracking-widest block">Opening Balance</span>
-                    <input type="number" className="w-full px-3 py-1.5 text-sm font-bold bg-slate-50 border border-slate-200 rounded-lg outline-none" value={mData.opening || ''} onChange={(e) => saveMonthlyStock(selectedMonth, item.id, { opening: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="0" />
+                  <div className="space-y-1 bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                    <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest block">Expected Stock</span>
+                    <p className="text-lg font-black text-slate-900 leading-none">{expected}</p>
+                    <div className="flex items-center gap-1 mt-1 pt-1 border-t border-slate-200/50">
+                       <span className="text-[8px] text-slate-400 font-bold uppercase">Opening:</span>
+                       <input type="number" className="bg-transparent text-[10px] font-bold text-slate-600 outline-none w-12" value={mData.opening || ''} onChange={(e) => {
+                          const val = e.target.value === '' ? '' : Number(e.target.value);
+                          const m = monthlyMovements[item.name] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+                          const expected = calculateExpected(val, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+                          saveMonthlyStock(selectedMonth, item.id, { opening: val, expected });
+                       }} placeholder="0" />
+                    </div>
                   </div>
                   <div className="space-y-1">
-                    <span className="text-[9px] text-indigo-400 uppercase font-bold tracking-widest block">Physical Stock</span>
+                    <span className="text-[9px] text-indigo-500 uppercase font-bold tracking-widest block">Physical Stock</span>
                     <div className="relative">
-                      <input type="number" className="w-full px-3 py-1.5 text-sm font-bold bg-indigo-50/30 border border-indigo-200 rounded-lg outline-none text-indigo-700" value={mData.physical || ''} onChange={(e) => saveMonthlyStock(selectedMonth, item.id, { physical: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="Enter Count" />
+                      <input type="number" className="w-full px-3 py-2 text-base font-black bg-indigo-50/30 border-2 border-indigo-200 rounded-lg outline-none text-indigo-700 focus:border-indigo-500" value={mData.physical || ''} onChange={(e) => {
+                        const val = e.target.value === '' ? '' : Number(e.target.value);
+                        const m = monthlyMovements[item.name] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+                        const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+                        saveMonthlyStock(selectedMonth, item.id, { physical: val, expected });
+                      }} placeholder="Enter Count" />
                       {(mData.physical !== undefined && mData.physical !== '') && <button onClick={() => saveMonthlyStock(selectedMonth, item.id, { physical: '' })} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-300"><X size={14}/></button>}
                     </div>
                   </div>

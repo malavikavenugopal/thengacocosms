@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Input, Select, SearchableSelect, MultiSelect, Button, Table } from '../components/ui';
-import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Package, Box } from 'lucide-react';
+import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Package, Box, Layers } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
@@ -361,19 +361,55 @@ const B2CShipments = () => {
                       </div>
                     </div>
                      {selectedSKU && (
-                       <div className="mt-2 flex items-center gap-3">
-                          <span className="text-[10px] px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded font-bold uppercase tracking-wider">SKU Code: {selectedSKU.sku}</span>
-                          <span className="text-[10px] px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded font-bold uppercase tracking-wider">
-                            Pack Size: {(() => {
-                              let ps = selectedSKU.packSize || 1;
-                              if (ps === 1) {
-                                const match = selectedSKU.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                                if (match && match[1]) return match[1] + " (Auto)";
-                              }
-                              return ps;
-                            })()}
-                          </span>
-                          <span className="text-[10px] px-2 py-0.5 bg-slate-200 text-slate-600 rounded font-medium italic">{selectedSKU.category}</span>
+                       <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
+                          <div className="flex items-center gap-3">
+                             <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-bold uppercase tracking-wider border border-slate-200">SKU: {selectedSKU.sku}</span>
+                             <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-bold uppercase tracking-wider border border-slate-200">
+                               Pack: {(() => {
+                                 let ps = selectedSKU.packSize || 1;
+                                 if (ps === 1) {
+                                   const match = selectedSKU.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
+                                   if (match && match[1]) return match[1] + " (Auto)";
+                                 }
+                                 return ps;
+                               })()}
+                             </span>
+                             <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded font-medium italic">{selectedSKU.category}</span>
+                          </div>
+
+                          {/* Compact Stock Warning Box */}
+                          <div className={`p-2 rounded-lg border transition-all ${totalAvailable <= 0 ? 'bg-red-50 border-red-200' : totalAvailable < 20 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50/30 border-emerald-100'}`}>
+                             <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                   <Box size={12} className={totalAvailable <= 0 ? 'text-red-600' : totalAvailable < 20 ? 'text-amber-600' : 'text-emerald-600'} />
+                                   <div className="flex items-baseline gap-1.5">
+                                      <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tight">Available Stock:</span>
+                                      <span className={`text-xs font-black ${totalAvailable <= 0 ? 'text-red-700' : totalAvailable < 20 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                                         {totalAvailable}
+                                      </span>
+                                   </div>
+                                </div>
+                                {totalAvailable <= 0 && <span className="text-[8px] font-black text-red-600 animate-pulse uppercase">Out of Stock</span>}
+                                {totalAvailable > 0 && totalAvailable < 20 && <span className="text-[8px] font-black text-amber-600 uppercase">Low Stock</span>}
+                             </div>
+
+                             {/* Compact Combo Breakdown */}
+                             {selectedSKU.isComposite && selectedSKU.components && (
+                                <div className="mt-1.5 pt-1.5 border-t border-slate-200/50">
+                                   <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                      {selectedSKU.components.map((comp, idx) => {
+                                         const compStock = getAvailableStock(comp.name);
+                                         return (
+                                            <div key={idx} className="flex items-center gap-1">
+                                               <span className="text-[8px] font-medium text-slate-500">{comp.name}:</span>
+                                               <span className={`text-[8px] font-black ${compStock <= 0 ? 'text-red-600' : 'text-slate-800'}`}>{compStock}</span>
+                                            </div>
+                                         );
+                                      })}
+                                   </div>
+                                </div>
+                             )}
+                          </div>
                        </div>
                      )}
 

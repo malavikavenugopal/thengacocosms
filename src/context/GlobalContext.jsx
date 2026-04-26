@@ -65,10 +65,14 @@ export const GlobalProvider = ({ children }) => {
         in: (purchaseRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date))
             .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
         
-        out: (b2bShipments || []).filter(s => isTargetMonth(s.date))
+        out: (b2bShipments || []).filter(s => isTargetMonth(s.date) && (!s.status || s.status === 'Dispatched'))
             .reduce((s, sh) => s + (sh.products || []).filter(p => p.name === productName)
             .reduce((s2, p) => s2 + (Number(p.quantity) * Number(p.packSize || 1)), 0), 0) +
             (b2cShipments || []).filter(s => isTargetMonth(s.date))
+            .reduce((s, sh) => s + (sh.products || []).filter(p => p.name === productName)
+            .reduce((s2, p) => s2 + (Number(p.quantity) * Number(p.packSize || 1)), 0), 0),
+
+        packed: (b2bShipments || []).filter(s => isTargetMonth(s.date) && s.status === 'Packed')
             .reduce((s, sh) => s + (sh.products || []).filter(p => p.name === productName)
             .reduce((s2, p) => s2 + (Number(p.quantity) * Number(p.packSize || 1)), 0), 0),
 
@@ -114,7 +118,16 @@ export const GlobalProvider = ({ children }) => {
         return (Number(item.opening) || 0) + (Number(item.in) || 0) + (Number(item.returned) || 0) + (Number(item.produced) || 0) - (Number(item.out) || 0) - (Number(item.damage) || 0) - (Number(item.rejected) || 0) - (Number(item.replacement) || 0) - legacyReplacements - multiReplacements - (Number(item.used) || 0);
       }
 
-      return (Number(mData.opening) || 0) + (Number(mData.in) || 0) + movements.in + movements.returned + (movements.produced || 0) - movements.out - movements.damage - movements.rejected - movements.replacement - (movements.usedInProduction || 0);
+      // If we have a reconciled 'expected' value in the DB, use it as the primary truth.
+      // This ensures the UI matches exactly what is in the Monthly Stock Check and Firebase.
+      if (mData && mData.expected !== undefined && mData.expected !== null) {
+        return Number(mData.expected);
+      }
+
+      const totalIn = (Number(mData.in) || 0) + movements.in + (Number(movements.produced) || 0) + (Number(movements.returned) || 0);
+      const totalOut = (Number(movements.out) || 0) + (Number(movements.packed) || 0) + (Number(movements.damage) || 0) + (Number(movements.rejected) || 0) + (Number(movements.replacement) || 0) + (Number(movements.usedInProduction) || 0);
+
+      return (Number(mData.opening) || 0) + totalIn - totalOut;
     }
   };
   
