@@ -32,6 +32,7 @@ export const GlobalProvider = ({ children }) => {
   const [qcRecords, setQcRecords] = useState([]);
   const [replacementRecords, setReplacementRecords] = useState([]);
   const [monthlyStockData, setMonthlyStockData] = useState([]);
+  const [productionRecords, setProductionRecords] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
@@ -84,16 +85,39 @@ export const GlobalProvider = ({ children }) => {
         rejected: (qcRecords || []).filter(r => r.productName === productName && isThisMonth(r.date) && r.deducted)
             .reduce((s, r) => s + (Number(r.rejected) * Number(r.packSize || 1)), 0),
 
-        replacement: (replacementRecords || []).filter(r => r.productName === productName && isThisMonth(r.date) && r.deducted)
-            .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0)
+        replacement: (replacementRecords || []).filter(r => isThisMonth(r.date) && r.deducted)
+            .reduce((s, r) => {
+              if (r.products) {
+                return s + r.products
+                  .filter(p => p.name === productName)
+                  .reduce((s2, p) => s2 + (Number(p.quantity) * (Number(p.packSize) || 1)), 0);
+              }
+              return s + (r.productName === productName ? (Number(r.quantity) * (Number(r.packSize) || 1)) : 0);
+            }, 0),
+
+        produced: (productionRecords || []).filter(r => r.productName === productName && isThisMonth(r.date))
+            .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
+        
+        usedInProduction: (productionRecords || []).filter(r => isThisMonth(r.date))
+            .reduce((s, r) => s + (r.rawMaterials || [])
+              .filter(rm => rm.name === productName)
+              .reduce((s2, rm) => s2 + (Number(rm.quantity) * (Number(rm.packSize) || 1)), 0), 0)
       };
 
       // If no monthly data, fallback to master opening + global totals (initial behavior)
       if (!mData) {
-        return (Number(item.opening) || 0) + (Number(item.in) || 0) + (Number(item.returned) || 0) - (Number(item.out) || 0) - (Number(item.damage) || 0) - (Number(item.rejected) || 0) - (Number(item.replacement) || 0);
+        const legacyReplacements = (replacementRecords || []).filter(r => !r.products && r.productName === productName && r.deducted)
+          .reduce((s, r) => s + (Number(r.quantity) * (Number(r.packSize) || 1)), 0);
+        
+        const multiReplacements = (replacementRecords || []).filter(r => r.products && r.deducted)
+          .reduce((s, r) => s + (r.products || [])
+            .filter(p => p.name === productName)
+            .reduce((s2, p) => s2 + (Number(p.quantity) * (Number(p.packSize) || 1)), 0), 0);
+
+        return (Number(item.opening) || 0) + (Number(item.in) || 0) + (Number(item.returned) || 0) + (Number(item.produced) || 0) - (Number(item.out) || 0) - (Number(item.damage) || 0) - (Number(item.rejected) || 0) - (Number(item.replacement) || 0) - legacyReplacements - multiReplacements - (Number(item.used) || 0);
       }
 
-      return (Number(mData.opening) || 0) + (Number(mData.in) || 0) + movements.in + movements.returned - movements.out - movements.damage - movements.rejected - movements.replacement;
+      return (Number(mData.opening) || 0) + (Number(mData.in) || 0) + movements.in + movements.returned + (movements.produced || 0) - movements.out - movements.damage - movements.rejected - movements.replacement - (movements.usedInProduction || 0);
     }
   };
   
@@ -108,7 +132,8 @@ export const GlobalProvider = ({ children }) => {
         return: null,
         damage: null,
         qc: null,
-        replacement: null
+        replacement: null,
+        production: null
       };
     } catch (e) {
       return { b2b: null, b2c: null, purchase: null, return: null, damage: null, qc: null, replacement: null };
@@ -210,13 +235,17 @@ export const GlobalProvider = ({ children }) => {
 
     const unsubReplacements = onSnapshot(query(collection(db, 'replacementRecords'), orderBy('date', 'desc')), (snapshot) => {
       setReplacementRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
+    
+    const unsubProduction = onSnapshot(query(collection(db, 'productionRecords'), orderBy('date', 'desc')), (snapshot) => {
+      setProductionRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       setLoading(false);
     });
 
     return () => {
       unsubStock(); unsubB2B(); unsubB2C(); unsubDamage(); 
       unsubReturns(); unsubQC(); unsubStaff(); unsubChannels(); unsubCouriers();
-      unsubMonthly(); unsubPurchases(); unsubVendors(); unsubReplacements();
+      unsubMonthly(); unsubPurchases(); unsubVendors(); unsubReplacements(); unsubProduction();
     };
   }, [currentUser]);
 
@@ -574,35 +603,64 @@ export const GlobalProvider = ({ children }) => {
   };
 
   const addReplacementRecord = async (record, shouldDeduct) => {
-    const masterSKU = stock.find(s => s.name === record.productName);
-    const finalizedRecord = { ...record, packSize: masterSKU?.packSize || 1, deducted: shouldDeduct };
+    // 1. Process products to include packSize
+    const processedProducts = (record.products || []).map(p => {
+      const masterSKU = stock.find(s => s.name === p.name);
+      return { ...p, packSize: masterSKU?.packSize || 1 };
+    });
+
+    const finalizedRecord = { ...record, products: processedProducts, deducted: shouldDeduct };
+    // Maintain backward compatibility for single-product fields if needed (optional)
+    if (processedProducts.length === 1) {
+      finalizedRecord.productName = processedProducts[0].name;
+      finalizedRecord.quantity = processedProducts[0].quantity;
+      finalizedRecord.packSize = processedProducts[0].packSize;
+    }
+
     await addDoc(collection(db, 'replacementRecords'), finalizedRecord);
 
     if (shouldDeduct) {
-      const totalUnits = (Number(record.quantity) || 0) * (masterSKU?.packSize || 1);
-      await updateFirestoreStock(record.productName, totalUnits, 'add', 'replacement');
+      for (const p of processedProducts) {
+        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+        await updateFirestoreStock(p.name, totalUnits, 'add', 'replacement');
+      }
     }
   };
 
-  const updateReplacementRecord = async (id, updatedRecord, shouldAdjust) => {
+  const updateReplacementRecord = async (id, updatedRecord, shouldDeduct) => {
     const oldRecord = replacementRecords.find(r => r.id === id);
     if (!oldRecord) return;
 
-    // 1. Revert old stock if it was deducted
+    // 1. Revert old stock
     if (oldRecord.deducted) {
-      const oldUnits = (Number(oldRecord.quantity) || 0) * (Number(oldRecord.packSize) || 1);
-      await updateFirestoreStock(oldRecord.productName, oldUnits, 'sub', 'replacement');
+      const oldProducts = oldRecord.products || [{ name: oldRecord.productName, quantity: oldRecord.quantity, packSize: oldRecord.packSize }];
+      for (const p of oldProducts) {
+        const oldUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+        await updateFirestoreStock(p.name, oldUnits, 'sub', 'replacement');
+      }
     }
 
-    // 2. Update Document
-    const masterSKU = stock.find(s => s.name === updatedRecord.productName);
-    const finalized = { ...updatedRecord, packSize: masterSKU?.packSize || 1, deducted: shouldAdjust };
+    // 2. Process new products
+    const processedProducts = (updatedRecord.products || []).map(p => {
+      const masterSKU = stock.find(s => s.name === p.name);
+      return { ...p, packSize: masterSKU?.packSize || 1 };
+    });
+
+    const finalized = { ...updatedRecord, products: processedProducts, deducted: shouldDeduct };
+    if (processedProducts.length === 1) {
+      finalized.productName = processedProducts[0].name;
+      finalized.quantity = processedProducts[0].quantity;
+      finalized.packSize = processedProducts[0].packSize;
+    }
+
     await updateDoc(doc(db, 'replacementRecords', String(id)), finalized);
 
-    // 3. Apply new stock if confirmed
-    if (shouldAdjust) {
-      const newUnits = (Number(updatedRecord.quantity) || 0) * (masterSKU?.packSize || 1);
-      await updateFirestoreStock(updatedRecord.productName, newUnits, 'add', 'replacement');
+    // 3. Apply new stock
+    if (shouldDeduct) {
+      for (const p of processedProducts) {
+        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+        await updateFirestoreStock(p.name, totalUnits, 'add', 'replacement');
+      }
     }
   };
 
@@ -614,14 +672,18 @@ export const GlobalProvider = ({ children }) => {
       try {
         await deleteDoc(doc(db, 'replacementRecords', docId));
         if (record.deducted) {
-          const totalUnits = (Number(record.quantity) || 0) * (Number(record.packSize) || 1);
-          await updateFirestoreStock(record.productName, totalUnits, 'sub', 'replacement');
+          const products = record.products || [{ name: record.productName, quantity: record.quantity, packSize: record.packSize }];
+          for (const p of products) {
+            const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+            await updateFirestoreStock(p.name, totalUnits, 'sub', 'replacement');
+          }
         }
       } catch (err) {
         console.error("Replacement Delete Error:", err);
       }
     }
   };
+
 
   // Master Data Methods
   const addStaffMember = async (name) => {
@@ -702,6 +764,47 @@ export const GlobalProvider = ({ children }) => {
     await deleteDoc(doc(db, 'stock', id));
   };
 
+  const addProductionRecord = async (record) => {
+    const masterSKU = stock.find(s => s.name === record.productName);
+    const finalizedRecord = { ...record, packSize: masterSKU?.packSize || 1 };
+    await addDoc(collection(db, 'productionRecords'), finalizedRecord);
+
+    // 1. Add Produced Stock
+    const producedUnits = (Number(record.quantity) || 0) * (masterSKU?.packSize || 1);
+    await updateFirestoreStock(record.productName, producedUnits, 'add', 'produced');
+
+    // 2. Subtract Raw Materials
+    for (const rm of (record.rawMaterials || [])) {
+      const rmSKU = stock.find(s => s.name === rm.name);
+      const usedUnits = (Number(rm.quantity) || 0) * (rmSKU?.packSize || 1);
+      await updateFirestoreStock(rm.name, usedUnits, 'add', 'used'); 
+    }
+  };
+
+  const deleteProductionRecord = async (id) => {
+    if (!id) return;
+    const docId = String(id);
+    const record = productionRecords.find(r => r.id === docId);
+    if (record) {
+      try {
+        await deleteDoc(doc(db, 'productionRecords', docId));
+        
+        // 1. Revert Produced Stock
+        const producedUnits = (Number(record.quantity) || 0) * (Number(record.packSize) || 1);
+        await updateFirestoreStock(record.productName, producedUnits, 'sub', 'produced');
+
+        // 2. Revert Raw Materials (add back)
+        for (const rm of (record.rawMaterials || [])) {
+          const rmSKU = stock.find(s => s.name === rm.name);
+          const usedUnits = (Number(rm.quantity) || 0) * (rmSKU?.packSize || 1);
+          await updateFirestoreStock(rm.name, usedUnits, 'sub', 'used');
+        }
+      } catch (err) {
+        console.error("Production Delete Error:", err);
+      }
+    }
+  };
+
   return (
     <GlobalContext.Provider value={{ 
       currentUser, logout, authLoading,
@@ -713,6 +816,7 @@ export const GlobalProvider = ({ children }) => {
       purchaseRecords, addPurchaseRecord, updatePurchaseRecord, deletePurchaseRecord,
       qcRecords, addQCRecord, updateQCRecord, deleteQCRecord,
       replacementRecords, addReplacementRecord, updateReplacementRecord, deleteReplacementRecord,
+      productionRecords, addProductionRecord, deleteProductionRecord,
       staff, addStaffMember, updateStaffMember, deleteStaffMember,
       channels, addChannel, updateChannel, deleteChannel,
       couriers, addCourier, updateCourier, deleteCourier,

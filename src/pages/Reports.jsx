@@ -355,12 +355,12 @@ const Reports = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900">Reports</h2>
           <p className="text-sm text-slate-500">Generate and export operations analytics</p>
         </div>
-        <Button onClick={handleExport} variant="success" className="shrink-0 flex items-center gap-2 shadow-lg shadow-emerald-50" loading={isExporting}>
+        <Button onClick={handleExport} variant="success" className="w-full lg:w-auto shrink-0 flex items-center justify-center gap-2 shadow-lg shadow-emerald-50" loading={isExporting}>
           <Download size={16} /> Export {tabs.find(t => t.id === activeTab)?.label}
         </Button>
       </div>
@@ -370,7 +370,7 @@ const Reports = () => {
           <Filter size={16} />
           Filters
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Input 
             label="Start Date" 
             type="date" 
@@ -399,7 +399,7 @@ const Reports = () => {
       </Card>
 
       <div className="bg-white border border-slate-100 rounded-xl overflow-hidden shadow-sm">
-        <div className="flex border-b border-slate-100 bg-slate-50/50">
+        <div className="flex border-b border-slate-100 bg-slate-50/50 overflow-x-auto no-scrollbar whitespace-nowrap">
           {tabs.map(tab => (
             <button
               key={tab.id}

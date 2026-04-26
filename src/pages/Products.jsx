@@ -359,7 +359,7 @@ const Products = () => {
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto justify-start lg:justify-end">
            <div className="relative group">
               <input 
                 type="file" 
@@ -372,44 +372,46 @@ const Products = () => {
                 variant="ghost" 
                 size="sm" 
                 onClick={() => document.getElementById('bulk-upload-input').click()}
-                className="text-indigo-600 border border-indigo-200 hover:bg-indigo-50"
+                className="text-indigo-600 border border-indigo-200 hover:bg-indigo-50 h-9"
                 loading={isBulkUploading}
               >
-                <Upload size={16} className="mr-2" /> {isBulkUploading ? 'Uploading...' : 'Bulk Upload'}
+                <Upload size={16} className="mr-2" /> {isBulkUploading ? 'Uploading...' : 'Bulk'}
               </Button>
            </div>
            <Button 
               variant="ghost" 
               size="sm" 
               onClick={handleExportSKUs}
-              className="text-emerald-600 border border-emerald-200 hover:bg-emerald-50"
+              className="text-emerald-600 border border-emerald-200 hover:bg-emerald-50 h-9"
               loading={isExporting}
             >
-              <Download size={16} className="mr-2" /> Master
+              <Download size={16} className="mr-2" /> Export
             </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => handleExportByType('solo')}
-              className="text-amber-600 border border-amber-200 hover:bg-amber-50"
-            >
-              <Box size={16} className="mr-2" /> Solo
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => handleExportByType('composite')}
-              className="text-fuchsia-600 border border-fuchsia-200 hover:bg-fuchsia-50"
-            >
-              <Layers size={16} className="mr-2" /> Composite
-            </Button>
-           <div className="flex gap-1 bg-slate-100/50 p-1 rounded-lg">
-              <Button variant="ghost" size="sm" onClick={() => downloadTemplate(false)} className="h-8 text-[10px] font-bold text-slate-500 hover:text-indigo-600 px-2" title="Solo Template">
-                <FileDown size={14} className="mr-1" /> SOLO TEMPLATE
+            <div className="hidden sm:flex gap-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => handleExportByType('solo')}
+                className="text-amber-600 border border-amber-200 hover:bg-amber-50 h-9"
+              >
+                <Box size={16} className="mr-2" /> Solo
               </Button>
-              <div className="w-px h-4 bg-slate-200 self-center mx-1"></div>
-              <Button variant="ghost" size="sm" onClick={() => downloadTemplate(true)} className="h-8 text-[10px] font-bold text-indigo-500 hover:text-indigo-600 px-2" title="Bundle Template">
-                <FileDown size={14} className="mr-1" /> BUNDLE TEMPLATE
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => handleExportByType('composite')}
+                className="text-fuchsia-600 border border-fuchsia-200 hover:bg-fuchsia-50 h-9"
+              >
+                <Layers size={16} className="mr-2" /> Composite
+              </Button>
+            </div>
+           <div className="flex gap-1 bg-slate-100/50 p-1 rounded-lg border border-slate-200">
+              <Button variant="ghost" size="sm" onClick={() => downloadTemplate(false)} className="h-7 text-[9px] font-bold text-slate-500 hover:text-indigo-600 px-2" title="Solo Template">
+                <FileDown size={14} className="mr-1" /> SOLO
+              </Button>
+              <div className="w-px h-4 bg-slate-200 self-center mx-0.5"></div>
+              <Button variant="ghost" size="sm" onClick={() => downloadTemplate(true)} className="h-7 text-[9px] font-bold text-indigo-500 hover:text-indigo-600 px-2" title="Bundle Template">
+                <FileDown size={14} className="mr-1" /> BUNDLE
               </Button>
            </div>
         </div>
@@ -530,15 +532,15 @@ const Products = () => {
                   setFilterType('composite');
                   setShowBrokenOnly(!showBrokenOnly);
                 }}
-                className={`flex-1 max-w-md px-3 py-2 border rounded-lg flex items-center gap-2 transition-all group ${
+                className={`w-full lg:flex-1 lg:max-w-md px-3 py-2 border rounded-lg flex items-center gap-2 transition-all group ${
                   showBrokenOnly 
                     ? 'bg-rose-100 border-rose-300 ring-4 ring-rose-500/10' 
                     : 'bg-rose-50 border-rose-100 hover:bg-rose-100/50 animate-pulse'
                 }`}
               >
                 <AlertCircle className={showBrokenOnly ? 'text-rose-600' : 'text-rose-500'} size={16} />
-                <p className={`text-[10px] font-bold ${showBrokenOnly ? 'text-rose-800' : 'text-rose-700'}`}>
-                  {showBrokenOnly ? 'Showing ONLY Broken Bundles' : `${brokenBundles.length} Bundles have missing solo products! Click to view.`}
+                <p className={`text-[10px] font-bold ${showBrokenOnly ? 'text-rose-800' : 'text-rose-700'} text-left`}>
+                  {showBrokenOnly ? 'Showing ONLY Broken Bundles' : `${brokenBundles.length} Bundles have missing products! Click to view.`}
                 </p>
                 {showBrokenOnly && <X size={12} className="ml-auto text-rose-400 group-hover:text-rose-600" />}
               </button>

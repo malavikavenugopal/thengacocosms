@@ -511,27 +511,27 @@ const DamageTracking = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
-            <AlertTriangle size={24} />
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
+              <AlertTriangle size={24} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight text-slate-900">Damage & Quality Control</h2>
+              <p className="text-sm text-slate-500">Log damaged goods and track quality inspection logs</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Damage & Quality Control</h2>
-            <p className="text-sm text-slate-500">Log damaged goods and track quality inspection logs</p>
-          </div>
-        </div>
-        
-        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+          
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto no-scrollbar whitespace-nowrap w-full sm:w-auto">
            <button 
              onClick={() => setActiveTab('qc')}
-             className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${activeTab === 'qc' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+             className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 flex-1 sm:flex-none ${activeTab === 'qc' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
            >
              <ClipboardCheck size={16} /> Quality Control
            </button>
            <button 
              onClick={() => setActiveTab('damage')}
-             className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 ${activeTab === 'damage' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+             className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 flex-1 sm:flex-none ${activeTab === 'damage' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
            >
              <AlertTriangle size={16} /> Damage Logs
            </button>
@@ -616,7 +616,7 @@ const DamageTracking = () => {
                           required
                         />
                       </div>
-                      <div className="md:col-span-4 lg:col-span-1.5">
+                      <div className="md:col-span-4 lg:col-span-1">
                         <Input 
                           label="Rejected" 
                           type="number" 
@@ -625,7 +625,7 @@ const DamageTracking = () => {
                           onChange={(e) => updateQCProductField(p.id, 'rejected', e.target.value)}
                         />
                       </div>
-                      <div className="md:col-span-4 lg:col-span-1.5">
+                      <div className="md:col-span-4 lg:col-span-1">
                         <Input 
                           label="Baseless" 
                           type="number" 
@@ -700,8 +700,8 @@ const DamageTracking = () => {
                 </div>
               </div>
 
-              <div className="flex justify-between items-center bg-white/50 p-4 rounded-xl border border-indigo-100/50">
-                 <div className="flex gap-6">
+              <div className="flex flex-col sm:flex-row justify-between items-center bg-white/50 p-4 rounded-xl border border-indigo-100/50 gap-4">
+                 <div className="grid grid-cols-3 gap-4 w-full sm:w-auto">
                     <div>
                         <p className="text-[10px] font-bold text-slate-400 uppercase">Total Good</p>
                         <p className="text-xl font-black text-emerald-600">
@@ -721,9 +721,9 @@ const DamageTracking = () => {
                         </p>
                     </div>
                  </div>
-                 <div className="flex gap-3">
-                  <Button type="button" variant="secondary" onClick={handleCancel}>Cancel</Button>
-                  <Button type="submit" loading={isSubmittingQC}>
+                 <div className="flex gap-3 w-full sm:w-auto">
+                  <Button type="button" variant="secondary" onClick={handleCancel} className="flex-1 sm:flex-none">Cancel</Button>
+                  <Button type="submit" loading={isSubmittingQC} className="flex-1 sm:flex-none">
                     {isSubmittingQC ? (
                       <span className="flex items-center gap-2">{isUploading ? 'Uploading images...' : 'Saving Report...'}</span>
                     ) : (
@@ -809,7 +809,7 @@ const DamageTracking = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto">
+            <div className="w-full">
               <Table headers={['Date', 'Product', 'Vendor', 'Checked', 'Damaged', 'Rejected', 'Baseless', 'Approved', 'Preview + Share', 'Actions']}>
                 {qcRecords
                   .filter(r => {

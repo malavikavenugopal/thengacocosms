@@ -22,6 +22,7 @@ const Layout = () => {
       case '/b2c': return 'B2C Shipments';
       case '/damage': return 'Damage Tracking';
       case '/stock': return 'Monthly Stock Check';
+      case '/manufacturing': return 'Candle Manufacturing';
       case '/reports': return 'Analytics & Reports';
       default: return 'Overview';
     }
@@ -33,7 +34,7 @@ const Layout = () => {
     <div className="min-h-screen bg-[#f8fafc] flex font-sans">
       <Sidebar mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
       
-      <main className="flex-1 md:ml-64 flex flex-col min-h-screen transition-all duration-200">
+      <main className="flex-1 md:ml-64 flex flex-col min-h-screen transition-all duration-200 min-w-0 overflow-x-hidden">
         {/* Top Navbar */}
         <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-4 md:px-8 sticky top-0 z-40 shadow-sm">
           <div className="flex items-center gap-4">

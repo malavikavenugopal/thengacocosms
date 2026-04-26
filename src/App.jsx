@@ -15,6 +15,7 @@ import Couriers from './pages/Couriers';
 import Returns from './pages/Returns';
 import PurchaseManagement from './pages/PurchaseManagement';
 import ReorderPoint from './pages/ReorderPoint';
+import CandleManufacturing from './pages/CandleManufacturing';
 import Login from './pages/Login';
 import { GlobalProvider, useGlobalState } from './context/GlobalContext';
 
@@ -62,6 +63,7 @@ function App() {
             <Route path="damage" element={<DamageTracking />} />
             <Route path="stock" element={<MonthlyStockCheck />} />
             <Route path="rop" element={<ReorderPoint />} />
+            <Route path="manufacturing" element={<CandleManufacturing />} />
             <Route path="reports" element={<Reports />} />
           </Route>
         </Routes>

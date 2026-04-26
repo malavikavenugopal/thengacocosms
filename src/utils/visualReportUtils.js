@@ -39,14 +39,23 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
   const theme = themes[type] || themes.B2B;
 
   // Header
+  try {
+    const logoBase64 = await getProxyImageBase64('/logo.jpg');
+    if (logoBase64) {
+      doc.addImage(logoBase64, 'JPEG', 15, 10, 15, 15);
+    }
+  } catch (e) {
+    console.warn("Could not add logo to PDF", e);
+  }
+
   doc.setFont("times", "bold");
   doc.setFontSize(16);
   doc.setTextColor(6, 78, 59); // Dark Green
-  doc.text("ThengaCoco", 15, 20);
+  doc.text("ThengaCoco", 35, 18);
   
   doc.setFontSize(14);
   doc.setTextColor(100);
-  doc.text(title, 15, 28);
+  doc.text(title, 35, 26);
   
   doc.setFont("times", "normal");
   doc.setFontSize(12);
@@ -55,7 +64,7 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
     dateText += ` | From: ${dateRange.startDate}`;
     if (dateRange.endDate) dateText += ` To: ${dateRange.endDate}`;
   }
-  doc.text(dateText, 15, 35);
+  doc.text(dateText, 35, 33);
 
   let headers, body = [];
   if (type === 'B2B' || type === 'B2C') {
@@ -143,7 +152,7 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
         const isFirstOnPage = data.row.index === data.table._firstRowOnPage;
         
         if (!isFirst && !isFirstOnPage) {
-          data.cell.styles.textColor = [255, 255, 255]; 
+          data.cell.text = []; // Completely remove text instead of making it white
         }
       }
     },
@@ -153,7 +162,9 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
         const isFirstOnPage = data.row.index === data.table._firstRowOnPage;
 
         if (!isFirst && !isFirstOnPage) {
-          doc.setDrawColor(255, 255, 255); 
+          // Use the row's background color to hide the border, not just white
+          const fillColor = (data.row.index % 2 === 1) ? [245, 247, 250] : [255, 255, 255];
+          doc.setDrawColor(fillColor[0], fillColor[1], fillColor[2]); 
           doc.setLineWidth(0.4);
           doc.line(data.cell.x + 0.1, data.cell.y, data.cell.x + data.cell.width - 0.1, data.cell.y);
         }
@@ -268,9 +279,9 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
           if ((type === 'B2B' || type === 'B2C') && products.length > 0) {
             return products.map((p, pIdx) => `
               <tr style="background-color: ${rowBg};">
-                <td style="padding: 12px; border: 1px solid #ddd; white-space: nowrap; color: ${pIdx === 0 ? '#000' : 'transparent'}; font-size: 11px;">${s.date}</td>
-                <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold; color: ${pIdx === 0 ? '#000' : 'transparent'};">
-                  ${type === 'B2B' ? s.clientName : s.channel}
+                <td style="padding: 12px; border: 1px solid #ddd; white-space: nowrap; font-size: 11px;">${pIdx === 0 ? s.date : ''}</td>
+                <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">
+                  ${pIdx === 0 ? (type === 'B2B' ? s.clientName : s.channel) : ''}
                 </td>
                 <td style="padding: 12px; border: 1px solid #ddd;">• ${p.name}</td>
                 <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">${p.quantity}</td>

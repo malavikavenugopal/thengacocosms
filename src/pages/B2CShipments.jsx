@@ -212,16 +212,18 @@ const B2CShipments = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
-          <ShoppingCart size={24} />
-        </div>
-        <div className="flex-1">
-          <h2 className="text-2xl font-bold tracking-tight text-slate-900">{isEditing ? 'Edit B2C Order' : 'B2C Retail Orders'}</h2>
-          <p className="text-sm text-slate-500">Sales recorded here use the multiplier set in SKU Master</p>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <div className="flex items-center gap-3 flex-1">
+          <div className="p-2 bg-emerald-100 text-emerald-600 rounded-lg shrink-0">
+            <ShoppingCart size={24} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900">{isEditing ? 'Edit B2C Order' : 'B2C Retail Orders'}</h2>
+            <p className="text-sm text-slate-500">Sales recorded here use the multiplier set in SKU Master</p>
+          </div>
         </div>
         {isEditing && (
-          <Button variant="ghost" onClick={handleCancel} className="text-rose-600 hover:bg-rose-50">
+          <Button variant="ghost" onClick={handleCancel} className="text-rose-600 hover:bg-rose-50 w-full sm:w-auto">
             <X size={16} className="mr-2" /> Cancel Edit
           </Button>
         )}
@@ -444,12 +446,12 @@ const B2CShipments = () => {
                </button>
              )}
           </div>
-          <div className="flex gap-2">
-            <Button onClick={handleVisualReport} variant="secondary" className="bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100" loading={isGeneratingVisual}>
+          <div className="flex flex-wrap sm:flex-nowrap gap-2 w-full md:w-auto">
+            <Button onClick={handleVisualReport} variant="secondary" className="bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100 flex-1 sm:flex-none" loading={isGeneratingVisual}>
               <Package size={16} className="mr-2" /> Visual Report
             </Button>
-            <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100" loading={isExporting}>
-              <Download size={16} className="mr-2" /> Export to Excel
+            <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100 flex-1 sm:flex-none" loading={isExporting}>
+              <Download size={16} className="mr-2" /> Export
             </Button>
           </div>
         </div>

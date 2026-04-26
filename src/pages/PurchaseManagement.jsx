@@ -181,7 +181,7 @@ const PurchaseManagement = () => {
           </div>
         </div>
 
-        <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-auto">
+        <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-auto overflow-x-auto no-scrollbar whitespace-nowrap">
           {[
             { id: 'entry', label: 'Purchase Entry', icon: PackagePlus },
             { id: 'history', label: 'History & QC', icon: History },

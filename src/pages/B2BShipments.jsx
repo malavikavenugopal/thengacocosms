@@ -210,14 +210,14 @@ const B2BShipments = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-gray-900">{isEditing ? 'Edit B2B Shipment' : 'B2B Shipments'}</h2>
           <p className="text-sm text-gray-500">Manage your business-to-business dispatches</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full sm:w-auto">
           {isEditing && (
-            <Button variant="ghost" onClick={handleCancel} className="text-rose-600 hover:bg-rose-50">
+            <Button variant="ghost" onClick={handleCancel} className="text-rose-600 hover:bg-rose-50 flex-1 sm:flex-none">
               <X size={16} className="mr-2" /> Cancel Edit
             </Button>
           )}
@@ -431,12 +431,12 @@ const B2BShipments = () => {
                </button>
              )}
           </div>
-          <div className="flex gap-2">
-            <Button onClick={handleVisualReport} variant="secondary" className="bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100" loading={isGeneratingVisual}>
+          <div className="flex flex-wrap sm:flex-nowrap gap-2 w-full md:w-auto">
+            <Button onClick={handleVisualReport} variant="secondary" className="bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100 flex-1 sm:flex-none" loading={isGeneratingVisual}>
               <Package size={16} className="mr-2" /> Visual Report
             </Button>
-            <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100" loading={isExporting}>
-              <Download size={16} className="mr-2" /> Export to Excel
+            <Button onClick={exportToExcel} variant="success" className="shadow-xl shadow-emerald-100 flex-1 sm:flex-none" loading={isExporting}>
+              <Download size={16} className="mr-2" /> Export
             </Button>
           </div>
         </div>

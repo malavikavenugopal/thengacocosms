@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Package, Truck, AlertTriangle, ClipboardList, BarChart3, Box, X, Layers, Users, Globe, RotateCcw, LogOut, ShoppingCart } from 'lucide-react';
+import { LayoutDashboard, Package, Truck, AlertTriangle, ClipboardList, BarChart3, Box, X, Layers, Users, Globe, RotateCcw, LogOut, ShoppingCart, Hammer } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 
 const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
@@ -9,6 +9,7 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
     { name: 'SKU Master', path: '/products', icon: <Layers size={20} /> },
     { name: 'Purchase Stock', path: '/purchases', icon: <ShoppingCart size={20} /> },
+    { name: 'Candle Manufacturing', path: '/manufacturing', icon: <Hammer size={20} /> },
     { name: 'Staff Management', path: '/staff', icon: <Users size={20} /> },
     { name: 'Channel Management', path: '/channels', icon: <Globe size={20} /> },
     { name: 'Courier Management', path: '/couriers', icon: <Truck size={20} /> },

@@ -88,8 +88,8 @@ const Staff = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg shrink-0">
           <Users size={24} />
         </div>
         <div>
