@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, Input, Select, SearchableSelect, MultiSelect, Button, Table } from '../components/ui';
 import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Truck, Package, Box } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -21,7 +21,8 @@ const B2BShipments = () => {
       clientName: saved?.clientName || '',
       courierName: saved?.courierName || '',
       boxes: saved?.boxes || '',
-      date: saved?.date || defaultDate
+      date: saved?.date || defaultDate,
+      status: saved?.status || 'Packed'
     };
   });
 
@@ -45,14 +46,19 @@ const B2BShipments = () => {
   const [searchTerm, setSearchTerm] = useState('');
 
   // Sync draft
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isEditing) {
       updateDraft('b2b', { formData, products });
     }
   }, [formData, products, isEditing]);
 
+  const [statusFilter, setStatusFilter] = useState('All');
+
   const filteredShipments = useMemo(() => {
     return shipments.filter(shipment => {
+      // Status Filter
+      if (statusFilter !== 'All' && shipment.status !== statusFilter) return false;
+
       // Date Filter
       let dateMatch = true;
       if (filterStartDate || filterEndDate) {
@@ -83,7 +89,7 @@ const B2BShipments = () => {
 
       return true;
     });
-  }, [shipments, filterStartDate, filterEndDate, searchTerm, stock]);
+  }, [shipments, filterStartDate, filterEndDate, searchTerm, stock, statusFilter]);
 
   const exportToExcel = async () => {
     setIsExporting(true);
@@ -178,7 +184,8 @@ const B2BShipments = () => {
       clientName: s.clientName,
       courierName: s.courierName,
       boxes: s.boxes,
-      date: s.date
+      date: s.date,
+      status: s.status || 'Dispatched'
     });
     setProducts(s.products.map((p, idx) => ({ ...p, id: Date.now() + idx })));
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -187,7 +194,7 @@ const B2BShipments = () => {
   const handleCancel = () => {
     setIsEditing(false);
     setEditingId(null);
-    setFormData({ whoParceled: [], clientName: '', courierName: '', boxes: '', date: new Date().toISOString().split('T')[0] });
+    setFormData({ whoParceled: [], clientName: '', courierName: '', boxes: '', date: new Date().toISOString().split('T')[0], status: 'Packed' });
     setProducts([{ id: Date.now(), name: '', quantity: '' }]);
   };
 
@@ -261,6 +268,13 @@ const B2BShipments = () => {
               type="date" 
               value={formData.date}
               onChange={(e) => setFormData({...formData, date: e.target.value})}
+              required
+            />
+            <Select 
+              label="Status"
+              options={['Packed', 'Dispatched']}
+              value={formData.status}
+              onChange={(e) => setFormData({...formData, status: e.target.value})}
               required
             />
           </div>
@@ -422,9 +436,21 @@ const B2BShipments = () => {
                   />
                 </div>
              </div>
-             {(filterStartDate || filterEndDate || searchTerm) && (
+             <div className="w-full md:w-auto">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">Status</label>
+                <select 
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 transition-all outline-none"
+                >
+                  <option value="All">All Status</option>
+                  <option value="Packed">Packed Only</option>
+                  <option value="Dispatched">Dispatched Only</option>
+                </select>
+             </div>
+             {(filterStartDate || filterEndDate || searchTerm || statusFilter !== 'All') && (
                <button 
-                onClick={() => { setFilterStartDate(''); setFilterEndDate(''); setSearchTerm(''); }}
+                onClick={() => { setFilterStartDate(''); setFilterEndDate(''); setSearchTerm(''); setStatusFilter('All'); }}
                 className="text-xs font-bold text-rose-500 hover:text-rose-600 underline flex items-center md:pt-6"
                >
                  Clear All
@@ -460,7 +486,12 @@ const B2BShipments = () => {
                 <td className="py-4 px-6 text-sm text-slate-800 whitespace-nowrap">{s.date}</td>
                 <td className="py-4 px-6 text-sm">
                   <div className="font-bold text-slate-900">{s.clientName}</div>
-                  <div className="text-[10px] uppercase font-bold text-indigo-500 mt-0.5">{s.courierName}</div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="text-[10px] uppercase font-bold text-indigo-500">{s.courierName}</span>
+                    <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${s.status === 'Packed' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                      {s.status || 'Dispatched'}
+                    </span>
+                  </div>
                   <div className="text-[9px] text-slate-400 mt-1">Parceled By: {Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : s.whoParceled}</div>
                 </td>
                 <td className="py-4 px-6 text-sm">
@@ -506,6 +537,22 @@ const B2BShipments = () => {
                         >
                           <Edit2 size={18} />
                         </button>
+                        {s.status === 'Packed' && (
+                          <button 
+                            onClick={async () => {
+                              try {
+                                await updateB2BShipment(s.id, { ...s, status: 'Dispatched' });
+                                toast.success('Shipment marked as Dispatched!');
+                              } catch (err) {
+                                toast.error('Failed to update status');
+                              }
+                            }}
+                            className="p-1.5 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-100"
+                            title="Mark as Dispatched"
+                          >
+                            <Truck size={18} />
+                          </button>
+                        )}
                         <button 
                           onClick={() => handleDelete(s.id)}
                           className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Card, Button } from '../components/ui';
 import { Search, DownloadCloud, Eye, Calendar, ArrowRightLeft, X, ShoppingCart, MapPin, ClipboardList, History, Zap, Package, TrendingUp, TrendingDown, Layers } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
@@ -90,9 +90,28 @@ const MonthlyStockCheck = () => {
 
   const getMovements = (monthStr) => {
     const sums = {};
-    stock.forEach(item => { if (!item.isComposite) sums[item.name] = { out: 0, returned: 0, damage: 0, purchased: 0, rejected: 0, replacement: 0, produced: 0, used: 0 }; });
+    stock.forEach(item => { if (!item.isComposite) sums[item.name] = { out: 0, packed: 0, returned: 0, damage: 0, purchased: 0, rejected: 0, replacement: 0, produced: 0, used: 0 }; });
     const isTargetMonth = (dateStr) => dateStr && dateStr.startsWith(monthStr);
-    b2bShipments.filter(s => isTargetMonth(s.date)).forEach(s => { s.products.forEach(p => { if (sums[p.name]) sums[p.name].out += (Number(p.quantity) || 0) * (Number(p.packSize) || 1); else { const bundle = stock.find(item => item.name === p.name); if (bundle?.isComposite && bundle.components) { bundle.components.forEach(comp => { if (sums[comp.name]) sums[comp.name].out += (Number(p.quantity) || 0) * (Number(comp.quantity) || 1); }); } } }); });
+    b2bShipments.filter(s => isTargetMonth(s.date)).forEach(s => { 
+      s.products.forEach(p => { 
+        const qty = (Number(p.quantity) || 0) * (Number(p.packSize) || 1); 
+        if (sums[p.name]) { 
+          if (s.status === 'Packed') sums[p.name].packed += qty;
+          else sums[p.name].out += qty;
+        } else { 
+          const bundle = stock.find(item => item.name === p.name); 
+          if (bundle?.isComposite && bundle.components) { 
+            bundle.components.forEach(comp => { 
+              const compQty = (Number(p.quantity) || 0) * (Number(comp.quantity) || 1); 
+              if (sums[comp.name]) { 
+                if (s.status === 'Packed') sums[comp.name].packed += compQty;
+                else sums[comp.name].out += compQty;
+              } 
+            }); 
+          } 
+        } 
+      }); 
+    });
     b2cShipments.filter(s => isTargetMonth(s.date)).forEach(s => { s.products.forEach(p => { if (sums[p.name]) sums[p.name].out += (Number(p.quantity) || 0) * (Number(p.packSize) || 1); else { const bundle = stock.find(item => item.name === p.name); if (bundle?.isComposite && bundle.components) { bundle.components.forEach(comp => { if (sums[comp.name]) sums[comp.name].out += (Number(p.quantity) || 0) * (Number(comp.quantity) || 1); }); } } }); });
     damageRecords.filter(r => isTargetMonth(r.date) && r.deducted !== false).forEach(r => { if (sums[r.productName]) sums[r.productName].damage += (Number(r.quantity) || 0) * (Number(r.packSize) || 1); });
     qcRecords.filter(r => isTargetMonth(r.date) && r.deducted).forEach(r => { if (sums[r.productName]) { sums[r.productName].damage += (Number(r.damaged) || 0) * (Number(r.packSize) || 1); sums[r.productName].rejected += (Number(r.rejected) || 0) * (Number(r.packSize) || 1); } });
@@ -105,8 +124,8 @@ const MonthlyStockCheck = () => {
 
   const monthlyMovements = useMemo(() => getMovements(selectedMonth), [selectedMonth, b2bShipments, b2cShipments, damageRecords, returnRecords, qcRecords, purchaseRecords, replacementRecords, productionRecords, stock]);
 
-  const calculateExpected = (opening, otherIn, purchased, produced, returned, out, replacement, damage, rejected, used) => 
-    Number(opening || 0) + Number(otherIn || 0) + Number(purchased || 0) + Number(produced || 0) + Number(returned || 0) - Number(out || 0) - Number(replacement || 0) - Number(damage || 0) - Number(rejected || 0) - Number(used || 0);
+  const calculateExpected = (opening, otherIn, purchased, produced, returned, out, packed, replacement, damage, rejected, used) => 
+    Number(opening || 0) + Number(otherIn || 0) + Number(purchased || 0) + Number(produced || 0) + Number(returned || 0) - Number(out || 0) - Number(packed || 0) - Number(replacement || 0) - Number(damage || 0) - Number(rejected || 0) - Number(used || 0);
 
   const handleCarryForward = async () => {
     const [year, month] = selectedMonth.split('-').map(Number);
@@ -120,8 +139,8 @@ const MonthlyStockCheck = () => {
       for (const item of prevMonthData) {
         const product = stock.find(s => s.id === item.productId);
         if (!product) continue;
-        const m = prevMovements[product.name] || { out: 0, returned: 0, damage: 0, purchased: 0, produced: 0, rejected: 0, replacement: 0, used: 0 };
-        const expected = calculateExpected(item.opening, item.in, m.purchased, m.produced, m.returned, m.out, m.replacement, m.damage, m.rejected, m.used);
+        const m = prevMovements[product.name] || { out: 0, packed: 0, returned: 0, damage: 0, purchased: 0, produced: 0, rejected: 0, replacement: 0, used: 0 };
+        const expected = calculateExpected(item.opening, item.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
         await saveMonthlyStock(selectedMonth, item.productId, { opening: expected });
       }
       toast.success('Balances carried forward!');
@@ -133,9 +152,9 @@ const MonthlyStockCheck = () => {
     try {
       const dataToExport = stock.filter(item => !item.isComposite).map(item => {
         const mData = monthlyStockData.find(d => d.month === selectedMonth && d.productId === item.id) || {};
-        const m = monthlyMovements[item.name] || { out: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-        const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.replacement, m.damage, m.rejected, m.used);
-        return { SKU: item.sku, Name: item.name, Month: selectedMonth, Opening: mData.opening || 0, 'Stock In': (Number(mData.in) || 0) + m.purchased + m.produced, Returns: m.returned, Dispatch: m.out, Replacement: m.replacement, Damage: m.damage, Rejected: m.rejected, Expected: expected, Physical: mData.physical || 0, Difference: (Number(mData.physical) || 0) - expected };
+        const m = monthlyMovements[item.name] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+        const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+        return { SKU: item.sku, Name: item.name, Month: selectedMonth, Opening: mData.opening || 0, 'Stock In': (Number(mData.in) || 0) + m.purchased + m.produced, Returns: m.returned, Dispatch: m.out, Packed: m.packed || 0, Replacement: m.replacement, Damage: m.damage, Rejected: m.rejected, Expected: expected, Physical: mData.physical || 0, Difference: (Number(mData.physical) || 0) - expected };
       });
       exportFormattedStockCheck(dataToExport, selectedMonth, `Monthly_Stock_${selectedMonth}.xlsx`);
     } finally { setIsExporting(false); }
@@ -180,6 +199,7 @@ const MonthlyStockCheck = () => {
                 <th className="py-4 px-2 text-center text-indigo-600 bg-slate-50">Stock In</th>
                 <th className="py-4 px-2 text-center text-emerald-600 bg-slate-50">Returns</th>
                 <th className="py-4 px-2 text-center text-amber-600 bg-slate-50">Out</th>
+                <th className="py-4 px-2 text-center text-orange-500 bg-slate-50">Packed</th>
                 <th className="py-4 px-2 text-center text-orange-500 bg-slate-50">Repl</th>
                 <th className="py-4 px-2 text-center text-red-600 bg-slate-50">Damage</th>
                 <th className="py-4 px-2 text-center text-rose-500 bg-slate-50">Rejected</th>
@@ -194,8 +214,8 @@ const MonthlyStockCheck = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredStock.map((item) => {
                 const mData = monthlyStockData.find(d => d.month === selectedMonth && d.productId === item.id) || {};
-                const m = monthlyMovements[item.name] || { out: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-                const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.replacement, m.damage, m.rejected, m.used);
+                const m = monthlyMovements[item.name] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+                const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
                 const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : null;
                 const diff = physical !== null ? physical - expected : null;
                 const [y, mNum] = selectedMonth.split('-').map(Number);
@@ -214,7 +234,8 @@ const MonthlyStockCheck = () => {
                     </td>
                     <td className="py-4 px-2 text-center text-indigo-600 text-xs font-bold">{(Number(mData.in) || 0) + m.purchased + m.produced}</td>
                     <td className="py-4 px-2 text-xs text-center text-emerald-600 font-bold">{m.returned || 0}</td>
-                    <td className="py-4 px-2 text-xs text-center text-amber-600 font-medium">{m.out || 0}</td>
+                    <td className="py-4 px-2 text-xs text-center text-amber-600 font-bold">{m.out || 0}</td>
+                    <td className="py-4 px-2 text-xs text-center text-orange-500 font-bold">{m.packed || 0}</td>
                     <td className="py-4 px-2 text-xs text-center text-orange-500 font-bold">{m.replacement || 0}</td>
                     <td className="py-4 px-2 text-xs text-center text-red-600 font-bold">{m.damage || 0}</td>
                     <td className="py-4 px-2 text-xs text-center text-rose-500 font-bold">{m.rejected || 0}</td>
@@ -249,8 +270,8 @@ const MonthlyStockCheck = () => {
       <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-4 pb-24 lg:pb-6">
         {filteredStock.map((item) => {
           const mData = monthlyStockData.find(d => d.month === selectedMonth && d.productId === item.id) || {};
-          const m = monthlyMovements[item.name] || { out: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-          const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.replacement, m.damage, m.rejected, m.used);
+          const m = monthlyMovements[item.name] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+          const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
           const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : null;
           const diff = physical !== null ? physical - expected : null;
           const [y, mNum] = selectedMonth.split('-').map(Number);
@@ -287,9 +308,16 @@ const MonthlyStockCheck = () => {
                </div>
 
                {/* Movements Row */}
-               <div className="px-4 py-3 bg-white grid grid-cols-4 gap-2">
+               <div className="px-4 py-3 bg-white grid grid-cols-5 gap-1">
                   <div className="text-center"><span className="text-[8px] text-slate-400 uppercase block">In</span><span className="text-xs font-bold text-indigo-600">{(Number(mData.in) || 0) + m.purchased + m.produced}</span></div>
-                  <div className="text-center"><span className="text-[8px] text-slate-400 uppercase block">Out</span><span className="text-xs font-bold text-amber-600">{m.out}</span></div>
+                  <div className="text-center">
+                    <span className="text-[8px] text-slate-400 uppercase block">Out</span>
+                    <span className="text-xs font-bold text-amber-600">{m.out}</span>
+                  </div>
+                  <div className="text-center">
+                    <span className="text-[8px] text-slate-400 uppercase block font-bold text-orange-500">Packed</span>
+                    <span className="text-xs font-bold text-orange-500">{m.packed}</span>
+                  </div>
                   <div className="text-center"><span className="text-[8px] text-slate-400 uppercase block">Damage</span><span className="text-xs font-bold text-red-500">{m.damage + m.rejected}</span></div>
                   <div className="text-center"><span className="text-[8px] text-slate-400 uppercase block">Used</span><span className="text-xs font-bold text-rose-600">{m.used}</span></div>
                </div>
