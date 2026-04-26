@@ -9,7 +9,7 @@ import Swal from 'sweetalert2';
 
 
 const Products = () => {
-  const { stock, addSKU, updateSKU, deleteSKU } = useGlobalState();
+  const { stock, addSKU, updateSKU, deleteSKU, getAvailableStock } = useGlobalState();
   const [newProduct, setNewProduct] = useState({ 
     name: '', sku: '', category: '', opening: 0, packSize: 1, 
     isComposite: false, components: [] 
@@ -572,7 +572,7 @@ const Products = () => {
                </div>
             </div>
           </div>
-          <Table headers={['Category', 'SKU Code', 'Product / SKU Name', 'Status', 'Pack', 'Opening', 'Actions']}>
+          <Table headers={['Category', 'SKU Code', 'Product / SKU Name', 'Status', 'Pack', 'Available Stock', 'Actions']}>
             {paginatedStock.map((product) => (
               <tr key={product.id} className="hover:bg-slate-50/80 transition-colors">
                 <td className="py-4 px-6 text-sm text-slate-600">
@@ -625,8 +625,11 @@ const Products = () => {
                 <td className="py-4 px-6 text-sm text-slate-500 font-bold">
                     <span className="text-indigo-600">x{product.packSize || 1}</span>
                 </td>
-                <td className="py-4 px-6 text-sm text-slate-500 text-center font-bold">
-                  {product.isComposite ? <span className="text-slate-300">—</span> : (product.opening || 0)}
+                <td className="py-4 px-6 text-sm text-center font-black">
+                  <span className={getAvailableStock(product.name) <= 0 ? 'text-rose-600' : 'text-emerald-600'}>
+                    {getAvailableStock(product.name)}
+                  </span>
+                  <div className="text-[8px] text-slate-400 font-medium">Opening: {product.opening || 0}</div>
                 </td>
                 <td className="py-4 px-6 text-sm whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-2">

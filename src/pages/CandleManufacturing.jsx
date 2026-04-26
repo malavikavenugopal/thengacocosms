@@ -16,6 +16,7 @@ const CandleManufacturing = () => {
       staffName: saved?.staffName || '',
       productName: saved?.productName || '',
       quantity: saved?.quantity || '',
+      location: saved?.location || '',
       date: saved?.date || defaultDate
     };
   });
@@ -38,6 +39,7 @@ const CandleManufacturing = () => {
       const term = searchTerm.toLowerCase();
       return r.productName.toLowerCase().includes(term) || 
              r.staffName.toLowerCase().includes(term) ||
+             (r.location || '').toLowerCase().includes(term) ||
              (r.rawMaterials || []).some(rm => rm.name.toLowerCase().includes(term));
     });
   }, [productionRecords, searchTerm]);
@@ -51,8 +53,8 @@ const CandleManufacturing = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.staffName || !formData.productName || !formData.quantity) {
-      toast.error("Please fill all manufacturing details");
+    if (!formData.staffName || !formData.productName || !formData.quantity || !formData.location) {
+      toast.error("Please fill all manufacturing details including location");
       return;
     }
 
@@ -77,7 +79,7 @@ const CandleManufacturing = () => {
       toast.success('Manufacturing record saved & stock updated!');
       
       // Reset form
-      setFormData({ staffName: '', productName: '', quantity: '', date: new Date().toISOString().split('T')[0] });
+      setFormData({ staffName: '', productName: '', quantity: '', location: '', date: new Date().toISOString().split('T')[0] });
       setRawMaterials([{ id: Date.now(), name: '', quantity: '' }]);
       clearDraft('production');
     } catch (error) {
@@ -133,7 +135,7 @@ const CandleManufacturing = () => {
               onChange={(e) => setFormData({...formData, staffName: e.target.value})}
               required
             />
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 space-y-1">
               <SearchableSelect 
                 label="Product Manufactured" 
                 options={stock.map(s => s.name)} 
@@ -141,6 +143,14 @@ const CandleManufacturing = () => {
                 onChange={(val) => setFormData({...formData, productName: val})}
                 required
               />
+              {formData.productName && (
+                <div className="flex items-center gap-1.5 px-2">
+                  <Package size={10} className="text-slate-400" />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                    Current Available: <span className="text-emerald-600 font-black">{getAvailableStock(formData.productName)}</span>
+                  </span>
+                </div>
+              )}
             </div>
             <Input 
               label="Quantity Produced" 
@@ -152,12 +162,19 @@ const CandleManufacturing = () => {
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input 
               label="Manufacturing Date" 
               type="date" 
               value={formData.date}
               onChange={(e) => setFormData({...formData, date: e.target.value})}
+              required
+            />
+            <Select 
+              label="Manufacturing Location"
+              options={['Palakkad', 'Thrissur']}
+              value={formData.location}
+              onChange={(e) => setFormData({...formData, location: e.target.value})}
               required
             />
           </div>
@@ -176,13 +193,21 @@ const CandleManufacturing = () => {
             <div className="space-y-3">
               {rawMaterials.map((rm) => (
                 <div key={rm.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-white/40 p-3 rounded-xl border border-indigo-50 relative group">
-                  <div className="md:col-span-8 lg:col-span-9">
+                  <div className="md:col-span-8 lg:col-span-9 space-y-1">
                     <SearchableSelect 
                       label={rawMaterials[0].id === rm.id ? "Select Raw Material" : undefined}
                       options={stock.map(s => s.name)}
                       value={rm.name}
                       onChange={(val) => updateRawMaterial(rm.id, 'name', val)}
                     />
+                    {rm.name && (
+                      <div className="flex items-center gap-1.5 px-2">
+                        <Box size={10} className="text-slate-400" />
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">
+                          Available: <span className="text-indigo-600 font-black">{getAvailableStock(rm.name)}</span>
+                        </span>
+                      </div>
+                    )}
                   </div>
                   <div className="md:col-span-3 lg:col-span-2">
                     <Input 
@@ -234,7 +259,7 @@ const CandleManufacturing = () => {
              />
           </div>
         </div>
-        <Table headers={['Date', 'Staff', 'Product Manufactured', 'Raw Materials Consumed', 'Action']}>
+        <Table headers={['Date', 'Staff', 'Location', 'Product Manufactured', 'Raw Materials Consumed', 'Action']}>
           {filteredRecords.length === 0 ? (
             <tr><td colSpan="5" className="py-16 text-center text-slate-400 font-medium">No manufacturing records found.</td></tr>
           ) : (
@@ -244,6 +269,7 @@ const CandleManufacturing = () => {
               <tr key={r.id} className="hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0">
                 <td className="py-4 px-6 text-sm text-slate-500 whitespace-nowrap">{r.date}</td>
                 <td className="py-4 px-6 text-sm font-bold text-slate-900">{r.staffName}</td>
+                <td className="py-4 px-6 text-sm font-medium text-slate-600 italic">{r.location || '-'}</td>
                 <td className="py-4 px-6">
                   <div className="flex flex-col">
                     <span className="font-bold text-slate-900">{r.productName}</span>

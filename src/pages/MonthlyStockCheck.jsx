@@ -32,7 +32,7 @@ const MonthlyStockCheck = () => {
   const getMovementsForMonth = (monthStr) => {
     const sums = {};
     stock.forEach(item => {
-      if (!item.isComposite) sums[item.name] = { out: 0, returned: 0, damage: 0, purchased: 0, rejected: 0, replacement: 0 };
+      if (!item.isComposite) sums[item.name] = { out: 0, returned: 0, damage: 0, purchased: 0, rejected: 0, replacement: 0, produced: 0, used: 0 };
     });
 
     const isTargetMonth = (dateStr) => dateStr && dateStr.startsWith(monthStr);
@@ -106,6 +106,20 @@ const MonthlyStockCheck = () => {
     replacementRecords.filter(r => isTargetMonth(r.date) && r.deducted).forEach(r => {
       if (sums[r.productName]) sums[r.productName].replacement += (Number(r.quantity) || 0) * (Number(r.packSize) || 1);
     });
+    
+    // Production
+    (useGlobalState().productionRecords || []).filter(r => isTargetMonth(r.date)).forEach(r => {
+      // 1. Finished Product
+      if (sums[r.productName]) {
+        sums[r.productName].produced += (Number(r.quantity) || 0) * (Number(r.packSize) || 1);
+      }
+      // 2. Raw Materials
+      (r.rawMaterials || []).forEach(rm => {
+        if (sums[rm.name]) {
+          sums[rm.name].used += (Number(rm.quantity) || 0) * (Number(rm.packSize) || 1);
+        }
+      });
+    });
 
     return sums;
   };
@@ -114,8 +128,8 @@ const MonthlyStockCheck = () => {
     return getMovementsForMonth(selectedMonth);
   }, [selectedMonth, b2bShipments, b2cShipments, damageRecords, returnRecords, qcRecords, purchaseRecords, replacementRecords, stock]);
 
-  const calculateExpected = (opening, production, returned, out, damage, rejected, replacement) => 
-    Number(opening || 0) + Number(production || 0) + Number(returned || 0) - Number(out || 0) - Number(damage || 0) - Number(rejected || 0) - Number(replacement || 0);
+  const calculateExpected = (opening, otherIn, purchased, produced, returned, out, replacement, damage, rejected, used) => 
+    Number(opening || 0) + Number(otherIn || 0) + Number(purchased || 0) + Number(produced || 0) + Number(returned || 0) - Number(out || 0) - Number(replacement || 0) - Number(damage || 0) - Number(rejected || 0) - Number(used || 0);
 
   const handleFinalize = async () => {
     setIsFinalizing(true);
@@ -190,13 +204,16 @@ const MonthlyStockCheck = () => {
           const movements = monthlyMovements[item.name] || { out: 0, returned: 0, damage: 0, purchased: 0, rejected: 0, replacement: 0 };
           
           const expected = calculateExpected(
-            mData.opening, 
-            (Number(mData.in) || 0) + movements.purchased, 
-            movements.returned, 
-            movements.out, 
+            mData.opening,
+            mData.in,
+            movements.purchased,
+            movements.produced,
+            movements.returned,
+            movements.out,
+            movements.replacement,
             movements.damage,
             movements.rejected,
-            movements.replacement
+            movements.used
           );
           const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : 0;
           
@@ -205,7 +222,8 @@ const MonthlyStockCheck = () => {
             SKU_Name: item.name,
             Month: selectedMonth,
             Opening: mData.opening || 0,
-            Production: (Number(mData.in) || 0) + movements.purchased, 
+            Production: (Number(mData.in) || 0) + movements.purchased + movements.produced, 
+            'Used in Production': movements.used,
             'Returned Items': movements.returned,
             Dispatch: movements.out,
             Replacement: movements.replacement,
@@ -281,6 +299,7 @@ const MonthlyStockCheck = () => {
                 <th className="py-4 px-2 text-center text-orange-500">Replacement</th>
                 <th className="py-4 px-2 text-center text-red-600">Damage</th>
                 <th className="py-4 px-2 text-center text-rose-400">Rejected</th>
+                <th className="py-4 px-2 text-center text-rose-600">Used</th>
                 <th className="py-4 px-2 text-center bg-slate-100/50">Expected</th>
                 <th className="py-4 px-2 text-center bg-indigo-50/50">Physical</th>
                 <th className="py-4 px-4 text-center">Diff</th>
@@ -299,13 +318,16 @@ const MonthlyStockCheck = () => {
                   const movements = monthlyMovements[item.name] || { out: 0, returned: 0, damage: 0, rejected: 0 };
                   
                   const expected = calculateExpected(
-                    mData.opening, 
-                    (Number(mData.in) || 0) + (movements.purchased || 0), 
-                    movements.returned, 
-                    movements.out, 
+                    mData.opening,
+                    mData.in,
+                    movements.purchased,
+                    movements.produced,
+                    movements.returned,
+                    movements.out,
+                    movements.replacement,
                     movements.damage,
                     movements.rejected,
-                    movements.replacement
+                    movements.used
                   );
                   
                   const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : null;
@@ -355,7 +377,7 @@ const MonthlyStockCheck = () => {
                       <td className="py-4 px-2 text-center text-indigo-600">
                         <div className="flex flex-col items-center">
                           <span className="text-sm font-bold">
-                            {(Number(mData.in) || 0) + movements.purchased}
+                            {(Number(mData.in) || 0) + movements.purchased + movements.produced}
                           </span>
                           <div className="flex items-center gap-1 mt-1">
                             <input 
@@ -369,6 +391,11 @@ const MonthlyStockCheck = () => {
                             {movements.purchased > 0 && (
                               <span className="text-[9px] font-bold text-indigo-400 bg-indigo-50 px-1 rounded" title="Automatically added from Purchases">
                                 P: {movements.purchased}
+                              </span>
+                            )}
+                            {movements.produced > 0 && (
+                              <span className="text-[9px] font-bold text-emerald-500 bg-emerald-50 px-1 rounded" title="Automatically added from Candle Manufacturing">
+                                M: {movements.produced}
                               </span>
                             )}
                           </div>
@@ -388,6 +415,9 @@ const MonthlyStockCheck = () => {
                       </td>
                       <td className="py-4 px-2 text-sm text-center text-rose-400 font-medium">
                         {movements.rejected || 0}
+                      </td>
+                      <td className="py-4 px-2 text-sm text-center text-rose-600 font-black" title="Used as raw material in production">
+                        {movements.used > 0 ? `-${movements.used}` : 0}
                       </td>
                       <td className="py-4 px-2 text-sm text-center font-bold bg-slate-50/50 border-x border-slate-100">
                         {expected}
@@ -591,21 +621,92 @@ const MonthlyStockCheck = () => {
                           </tr>
                        </thead>
                        <tbody className="divide-y divide-slate-50">
-                          {replacementRecords.filter(r => r.date.startsWith(selectedMonth) && r.productName === selectedProductDetails.name && r.deducted).length === 0 ? (
+                          {replacementRecords.filter(r => r.date.startsWith(selectedMonth) && (r.products?.some(p => p.name === selectedProductDetails.name) || r.productName === selectedProductDetails.name) && r.deducted).length === 0 ? (
                             <tr><td colSpan="4" className="py-8 text-center text-slate-400 italic">No replacements for this month.</td></tr>
                           ) : (
-                            replacementRecords.filter(r => r.date.startsWith(selectedMonth) && r.productName === selectedProductDetails.name && r.deducted).map(r => (
+                            replacementRecords.filter(r => r.date.startsWith(selectedMonth) && (r.products?.some(p => p.name === selectedProductDetails.name) || r.productName === selectedProductDetails.name) && r.deducted).map(r => {
+                              const qty = r.products?.find(p => p.name === selectedProductDetails.name)?.quantity || r.quantity;
+                              return (
+                                <tr key={r.id}>
+                                  <td className="py-3 px-4">{r.date}</td>
+                                  <td className="py-3 px-4">
+                                     <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${r.type === 'B2B' ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>
+                                        {r.type}
+                                     </span>
+                                  </td>
+                                  <td className="py-3 px-4 font-medium text-slate-900">
+                                    {r.type === 'B2B' ? r.clientName : r.channel}
+                                  </td>
+                                  <td className="py-3 px-4 text-right font-black text-orange-600">-{qty}</td>
+                                </tr>
+                              );
+                            })
+                          )}
+                       </tbody>
+                    </table>
+                 </div>
+              </section>
+
+              {/* Manufacturing Section */}
+              <section>
+                 <div className="flex items-center gap-2 mb-4 text-emerald-600">
+                    <CheckCircle2 size={18} className="shrink-0" />
+                    <h4 className="font-bold text-sm">Candle Manufacturing (Output)</h4>
+                 </div>
+                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                       <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr className="text-slate-500 font-bold uppercase tracking-tighter">
+                             <th className="py-2.5 px-4">Date</th>
+                             <th className="py-2.5 px-4">Staff</th>
+                             <th className="py-2.5 px-4">Location</th>
+                             <th className="py-2.5 px-4 text-right">Qty Produced</th>
+                          </tr>
+                       </thead>
+                       <tbody className="divide-y divide-slate-50">
+                          {productionRecords.filter(r => r.date.startsWith(selectedMonth) && r.productName === selectedProductDetails.name).length === 0 ? (
+                            <tr><td colSpan="4" className="py-8 text-center text-slate-400 italic">No manufacturing output for this month.</td></tr>
+                          ) : (
+                            productionRecords.filter(r => r.date.startsWith(selectedMonth) && r.productName === selectedProductDetails.name).map(r => (
                               <tr key={r.id}>
-                                <td className="py-3 px-4">{r.date}</td>
-                                <td className="py-3 px-4">
-                                   <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${r.type === 'B2B' ? 'bg-indigo-100 text-indigo-700' : 'bg-orange-100 text-orange-700'}`}>
-                                      {r.type}
-                                   </span>
+                                <td className="py-3 px-4 font-medium">{r.date}</td>
+                                <td className="py-3 px-4 font-bold text-slate-900">{r.staffName}</td>
+                                <td className="py-3 px-4 text-slate-500 italic">{r.location || '-'}</td>
+                                <td className="py-3 px-4 text-right font-black text-emerald-600">+{r.quantity}</td>
+                              </tr>
+                            ))
+                          )}
+                       </tbody>
+                    </table>
+                 </div>
+              </section>
+
+              {/* Material Consumption Section */}
+              <section>
+                 <div className="flex items-center gap-2 mb-4 text-rose-600">
+                    <Info size={18} className="shrink-0" />
+                    <h4 className="font-bold text-sm">Material Consumption (Input)</h4>
+                 </div>
+                 <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                    <table className="w-full text-left text-xs">
+                       <thead className="bg-slate-50 border-b border-slate-200">
+                          <tr className="text-slate-500 font-bold uppercase tracking-tighter">
+                             <th className="py-2.5 px-4">Date</th>
+                             <th className="py-2.5 px-4">Used For Product</th>
+                             <th className="py-2.5 px-4 text-right">Qty Consumed</th>
+                          </tr>
+                       </thead>
+                       <tbody className="divide-y divide-slate-50">
+                          {productionRecords.filter(r => r.date.startsWith(selectedMonth) && r.rawMaterials?.some(rm => rm.name === selectedProductDetails.name)).length === 0 ? (
+                            <tr><td colSpan="3" className="py-8 text-center text-slate-400 italic">No materials consumed for this month.</td></tr>
+                          ) : (
+                            productionRecords.filter(r => r.date.startsWith(selectedMonth) && r.rawMaterials?.some(rm => rm.name === selectedProductDetails.name)).map(r => (
+                              <tr key={r.id}>
+                                <td className="py-3 px-4 font-medium">{r.date}</td>
+                                <td className="py-3 px-4 font-bold text-slate-900">{r.productName}</td>
+                                <td className="py-3 px-4 text-right font-black text-rose-600">
+                                  -{r.rawMaterials.find(rm => rm.name === selectedProductDetails.name)?.quantity || 0}
                                 </td>
-                                <td className="py-3 px-4 font-medium text-slate-900">
-                                  {r.type === 'B2B' ? r.clientName : r.channel}
-                                </td>
-                                <td className="py-3 px-4 text-right font-black text-orange-600">-{r.quantity}</td>
                               </tr>
                             ))
                           )}
