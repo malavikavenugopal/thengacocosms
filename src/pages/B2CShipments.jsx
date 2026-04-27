@@ -599,38 +599,47 @@ const B2CShipments = () => {
           <p className="text-xs text-slate-500 mt-1 italic">Total units ordered across all filtered retail channels</p>
         </div>
         <div className="overflow-x-auto">
-          <Table headers={['SKU Code', 'Product Name', 'Total Orders', 'Total Units Sold']}>
-            {Object.entries(
-              filteredShipments.flatMap(s => s.products || []).reduce((acc, curr) => {
-                if (!acc[curr.name]) acc[curr.name] = { qty: 0, units: 0 };
-                acc[curr.name].qty += Number(curr.quantity) || 0;
-                acc[curr.name].units += (Number(curr.quantity) || 0) * (Number(curr.packSize) || 1);
+          <Table headers={['SKU Code', 'Component / Solo Product', 'Stock Out']}>
+            {(() => {
+              const summaryMap = filteredShipments.flatMap(s => s.products || []).reduce((acc, p) => {
+                const master = stock.find(item => item.name === p.name);
+                const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+                
+                if (master?.isComposite && master.components) {
+                  master.components.forEach(comp => {
+                    const compUnits = totalUnits * (Number(comp.quantity) || 1);
+                    if (!acc[comp.name]) acc[comp.name] = 0;
+                    acc[comp.name] += compUnits;
+                  });
+                } else {
+                  if (!acc[p.name]) acc[p.name] = 0;
+                  acc[p.name] += totalUnits;
+                }
                 return acc;
-              }, {})
-            ).length === 0 ? (
-              <tr><td colSpan="4" className="py-12 text-center text-slate-400 font-medium whitespace-nowrap">No summary data available.</td></tr>
-            ) : (
-              Object.entries(
-                filteredShipments.flatMap(s => s.products).reduce((acc, curr) => {
-                  if (!acc[curr.name]) acc[curr.name] = { qty: 0, units: 0 };
-                  acc[curr.name].qty += Number(curr.quantity) || 0;
-                  acc[curr.name].units += (Number(curr.quantity) || 0) * (Number(curr.packSize) || 1);
-                  return acc;
-                }, {})
-              ).map(([name, data], idx) => {
+              }, {});
+
+              const summaryEntries = Object.entries(summaryMap);
+
+              if (summaryEntries.length === 0) {
+                return <tr><td colSpan="4" className="py-12 text-center text-slate-400 font-medium whitespace-nowrap">No summary data available.</td></tr>;
+              }
+
+              return summaryEntries.map(([name, units], idx) => {
                 const masterSKU = stock.find(s => s.name === name);
+                const availableStock = getAvailableStock(name);
+                const isShort = availableStock < units;
+
                 return (
                   <tr key={idx} className="hover:bg-slate-50 border-b border-slate-50 last:border-0 font-medium font-semibold text-slate-900">
                     <td className="py-4 px-6 text-sm">
                       <span className="text-[10px] font-mono font-bold text-emerald-500 bg-emerald-50 px-1 rounded">{masterSKU?.sku || 'N/A'}</span>
                     </td>
                     <td className="py-4 px-6 text-sm">{name}</td>
-                    <td className="py-4 px-6 text-sm text-center font-bold text-slate-600">{data.qty} Orders</td>
-                    <td className="py-4 px-6 text-sm text-right font-black text-emerald-600 pr-12">{data.units} Units</td>
+                    <td className="py-4 px-6 text-sm text-right pr-12 font-black text-emerald-600">{units} Units</td>
                   </tr>
                 );
-              })
-            )}
+              });
+            })()}
           </Table>
         </div>
       </Card>

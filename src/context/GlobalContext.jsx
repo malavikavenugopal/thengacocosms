@@ -395,6 +395,25 @@ export const GlobalProvider = ({ children }) => {
     }
   };
 
+  const updatePurchaseRecord = async (id, updatedRecord) => {
+    if (!id) return;
+    const oldRecord = purchaseRecords.find(r => r.id === id);
+    if (!oldRecord) return;
+
+    // 1. Revert old stock
+    const oldTotalUnits = (Number(oldRecord.quantity) || 0) * (Number(oldRecord.packSize) || 1);
+    await updateFirestoreStock(oldRecord.productName, oldTotalUnits, 'sub', 'in');
+
+    // 2. Update record in DB
+    const masterSKU = stock.find(s => s.name === updatedRecord.productName);
+    const finalized = { ...updatedRecord, packSize: masterSKU?.packSize || 1 };
+    await updateDoc(doc(db, 'purchaseRecords', String(id)), finalized);
+
+    // 3. Add new stock
+    const newTotalUnits = (Number(updatedRecord.quantity) || 0) * (masterSKU?.packSize || 1);
+    await updateFirestoreStock(updatedRecord.productName, newTotalUnits, 'add', 'in');
+  };
+
   const addQCRecord = async (record, shouldDeduct) => {
     const masterSKU = stock.find(s => s.name === record.productName);
     const finalized = { ...record, packSize: masterSKU?.packSize || 1, deducted: shouldDeduct };
@@ -494,7 +513,7 @@ export const GlobalProvider = ({ children }) => {
       b2cShipments, addB2CShipment, deleteB2CShipment, updateB2CShipment,
       damageRecords, addDamageRecord, deleteDamageRecord, updateDamageRecord,
       returnRecords, addReturnRecord, deleteReturnRecord,
-      purchaseRecords, addPurchaseRecord, deletePurchaseRecord,
+      purchaseRecords, addPurchaseRecord, deletePurchaseRecord, updatePurchaseRecord,
       qcRecords, addQCRecord,
       replacementRecords, addReplacementRecord,
       productionRecords, addProductionRecord, updateProductionRecord, deleteProductionRecord,

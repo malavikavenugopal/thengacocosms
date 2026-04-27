@@ -56,36 +56,40 @@ const MonthlyStockCheck = () => {
   const [isCarryingForward, setIsCarryingForward] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const handleUseLastWeeklyLog = async () => {
+  const handleCarryPhysicalForward = async () => {
     setIsSyncing(true);
-    const toastId = toast.loading("Updating Monthly Physical from Latest Weekly Logs...");
+    const toastId = toast.loading("Carrying forward Physical Stock as Opening Balance...");
     try {
-      const [y, mNum] = selectedMonth.split('-').map(Number);
-      const monthWeeks = [5, 4, 3, 2, 1].map(wNum => {
-         const d = new Date(y, mNum - 1, (wNum - 1) * 7 + 1);
-         return d.getMonth() + 1 === mNum ? getWeekStr(d) : null;
-      }).filter(Boolean);
+      const [year, month] = selectedMonth.split('-').map(Number);
+      const prevDate = new Date(year, month - 2, 1);
+      const prevMonthStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+      
+      const prevMonthData = monthlyStockData.filter(d => d.month === prevMonthStr);
+      if (prevMonthData.length === 0) {
+        toast.error(`No data found for previous month (${prevMonthStr})`, { id: toastId });
+        return;
+      }
+
+      const prevMovements = getMovements(prevMonthStr);
 
       for (const item of stock) {
         if (item.isComposite) continue;
-        let latestValue = null;
-        for (const weekStr of monthWeeks) {
-          const wData = monthlyStockData.find(d => d.month === weekStr && d.productId === item.id);
-          if (wData && wData.physical !== undefined && wData.physical !== '') {
-            latestValue = Number(wData.physical);
-            break;
-          }
-        }
-        if (latestValue !== null) {
-          const mData = monthlyStockData.find(d => d.month === selectedMonth && d.productId === item.id) || {};
-          const m = monthlyMovements[item.name] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-          const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
-          await saveMonthlyStock(selectedMonth, item.id, { physical: latestValue, expected });
+        const pData = prevMonthData.find(d => d.productId === item.id);
+        if (pData) {
+          // Priority: Physical Stock > Expected Stock
+          const m = prevMovements[item.name] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+          const expected = calculateExpected(pData.opening, pData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+          
+          const valueToCarry = (pData.physical !== undefined && pData.physical !== '') ? Number(pData.physical) : expected;
+          
+          await saveMonthlyStock(selectedMonth, item.id, { opening: valueToCarry });
+          // Also ensure previous month's expected is saved for consistency
+          await saveMonthlyStock(prevMonthStr, item.id, { expected });
         }
       }
-      toast.success("Updated Monthly Physical from Weekly Logs!", { id: toastId });
+      toast.success(`Success! Carried forward balances from ${prevMonthStr}`, { id: toastId });
     } catch (error) {
-      toast.error("Update failed: " + error.message, { id: toastId });
+      toast.error("Process failed: " + error.message, { id: toastId });
     } finally {
       setIsSyncing(false);
     }
@@ -192,7 +196,7 @@ const MonthlyStockCheck = () => {
           <p className="text-[9px] md:text-[10px] text-slate-500 mt-0.5 uppercase tracking-wider font-medium">Inventory Reconciliation & Weekly Audits</p>
         </div>
         <div className="grid grid-cols-2 sm:flex sm:flex-wrap xl:flex-nowrap items-center gap-2 w-full xl:w-auto">
-          <Button onClick={handleUseLastWeeklyLog} variant="primary" loading={isSyncing} className="col-span-2 sm:col-auto bg-indigo-600 hover:bg-indigo-700 shadow-md whitespace-nowrap text-[10px] md:text-xs h-10 px-3 flex-shrink-0"><Zap size={16} className="mr-1" /> Use Last Weekly Log</Button>
+          <Button onClick={handleCarryPhysicalForward} variant="primary" loading={isSyncing} className="col-span-2 sm:col-auto bg-indigo-600 hover:bg-indigo-700 shadow-md whitespace-nowrap text-[10px] md:text-xs h-10 px-3 flex-shrink-0"><ArrowRightLeft size={16} className="mr-1" /> Use Prev Physical as Opening</Button>
           
           <div className="flex items-center gap-2 bg-white border border-slate-200 rounded-lg px-2 md:px-3 h-10 shadow-sm flex-shrink-0">
             <Calendar size={14} className="text-slate-400" />
