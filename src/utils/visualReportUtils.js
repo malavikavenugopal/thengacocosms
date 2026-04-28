@@ -114,14 +114,19 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
     body = shipments.map(s => [s.date, s.channel, s.isReusable ? 'GOOD' : 'DAMAGED', s.productName, s.quantity, s.reason]);
   } else if (type === 'Replacement') {
     headers = [['Date', 'Type', 'Target', 'Product', 'Qty', 'Reason']];
-    body = shipments.map(s => [
-      s.date, 
-      s.type, 
-      s.type === 'B2B' ? (s.clientName || 'B2B Order') : s.channel, 
-      s.productName, 
-      s.quantity, 
-      s.reason
-    ]);
+    shipments.forEach(s => {
+      const prods = s.products && s.products.length > 0 ? s.products : [{ name: s.productName || 'Unknown', quantity: s.quantity || 0 }];
+      prods.forEach(p => {
+        body.push([
+          s.date, 
+          s.type, 
+          s.type === 'B2B' ? (s.clientName || 'B2B Order') : s.channel, 
+          p.name, 
+          p.quantity, 
+          s.reason
+        ]);
+      });
+    });
   }
 
   autoTable(doc, {
@@ -260,7 +265,7 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
       <thead>
         <tr style="background-color: ${theme.color}; color: white; text-align: left;">
           <th style="padding: 12px; border: 1px solid #ddd;">Date</th>
-          <th style="padding: 12px; border: 1px solid #ddd;">${type === 'QC' ? 'Vendor' : type === 'Damage' ? 'Product' : type === 'B2B' ? 'Client' : 'Channel'}</th>
+          <th style="padding: 12px; border: 1px solid #ddd;">${type === 'QC' ? 'Vendor' : type === 'Damage' ? 'Product' : type === 'B2B' ? 'Client' : type === 'Replacement' ? 'Target' : 'Channel'}</th>
           <th style="padding: 12px; border: 1px solid #ddd;">Product Details</th>
           ${type === 'B2B' || type === 'B2C' ? `
             <th style="padding: 12px; border: 1px solid #ddd; text-align: center; width: 50px;">Qty</th>
@@ -310,13 +315,13 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
                     ? `Reason: ${s.reason}`
                     : type === 'Return'
                       ? `Product: ${s.productName}<br/>Condition: ${s.isReusable ? 'GOOD' : 'DAMAGED'}<br/>Reason: ${s.reason}`
-                      : type === 'Replacement'
-                        ? `Product: ${s.productName}<br/>Reason: ${s.reason}`
+                        : type === 'Replacement'
+                        ? `${s.products && s.products.length > 0 ? s.products.map(p => `• ${p.name} (Qty: ${p.quantity})`).join('<br/>') : `Product: ${s.productName}`}<br/><span style="color: #64748b; font-size: 11px;">Reason: ${s.reason}</span>`
                         : '-'
                 }
               </td>
               <td colspan="${type === 'B2B' || type === 'B2C' ? '3' : '1'}" style="padding: 12px; border: 1px solid #ddd; text-align: center; font-weight: bold;">
-                ${type === 'QC' ? (Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0)) : (type === 'Return' ? `+${s.quantity}` : (type === 'Replacement' ? `-${s.quantity}` : s.quantity))}
+                ${type === 'QC' ? (Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0)) : (type === 'Return' ? `+${s.quantity}` : (type === 'Replacement' ? `-${s.products && s.products.length > 0 ? s.products.reduce((acc, p) => acc + (Number(p.quantity) * (Number(p.packSize) || 1)), 0) : s.quantity}` : s.quantity))}
               </td>
             </tr>
           `;
@@ -412,8 +417,8 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
       <thead>
         <tr style="background-color: ${themeColor}; color: white; text-align: left;">
           <th style="padding: 10px; border: 1px solid #ddd;">Date</th>
-          <th style="padding: 10px; border: 1px solid #ddd;">${type === 'QC' ? 'Vendor' : (type === 'B2B' ? 'Client' : 'Channel')}</th>
-          <th style="padding: 10px; border: 1px solid #ddd;">${type === 'QC' ? 'Product' : (type === 'B2B' ? 'Courier' : 'Parceled By')}</th>
+          <th style="padding: 10px; border: 1px solid #ddd;">${type === 'QC' ? 'Vendor' : (type === 'B2B' ? 'Client' : type === 'Replacement' ? 'Target' : 'Channel')}</th>
+          <th style="padding: 10px; border: 1px solid #ddd;">${type === 'QC' ? 'Product' : (type === 'Replacement' ? 'Type' : (type === 'B2B' ? 'Courier' : 'Parceled By'))}</th>
           ${type === 'QC' ? `
             <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Checked</th>
             <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Rejected</th>
@@ -467,7 +472,7 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
                 ${type === 'B2B' ? s.clientName : type === 'B2C' ? s.channel : type === 'Damage' ? s.productName : type === 'Return' ? s.channel : type === 'Replacement' ? (s.type === 'B2B' ? s.clientName : s.channel) : s.vendorName}
               </td>
               <td style="padding: 10px; border: 1px solid #ddd;">
-                ${type === 'QC' ? s.productName : (type === 'B2B' ? (s.courierName || '-') : (type === 'B2C' ? (Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : (s.whoParceled || '-')) : '-'))}
+                ${type === 'QC' ? s.productName : (type === 'Replacement' ? s.type : (type === 'B2B' ? (s.courierName || '-') : (type === 'B2C' ? (Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : (s.whoParceled || '-')) : '-')))}
               </td>
               ${type === 'QC' ? `
                 <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${s.checked}</td>
@@ -476,10 +481,10 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
                 <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #059669;">${approved}</td>
               ` : `
                 <td style="padding: 10px; border: 1px solid #ddd;">
-                  ${type === 'Damage' ? `Reason: ${s.reason}` : type === 'Return' ? `Product: ${s.productName}` : type === 'Replacement' ? `Product: ${s.productName}` : '-'}
+                  ${type === 'Damage' ? `Reason: ${s.reason}` : type === 'Return' ? `Product: ${s.productName}` : type === 'Replacement' ? `${s.products && s.products.length > 0 ? s.products.map(p => `• ${p.name} (Qty: ${p.quantity})`).join('<br/>') : `Product: ${s.productName}`}<br/><span style="color: #64748b; font-size: 11px;">Reason: ${s.reason}</span>` : '-'}
                 </td>
                 <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold;">
-                   ${type === 'Return' ? `+${s.quantity}` : type === 'Replacement' ? `-${s.quantity}` : s.quantity}
+                   ${type === 'Return' ? `+${s.quantity}` : type === 'Replacement' ? `-${s.products && s.products.length > 0 ? s.products.reduce((acc, p) => acc + (Number(p.quantity) * (Number(p.packSize) || 1)), 0) : s.quantity}` : s.quantity}
                 </td>
               `}
             </tr>

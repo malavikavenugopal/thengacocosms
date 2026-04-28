@@ -473,21 +473,26 @@ const DamageTracking = () => {
              <p style="margin: 0 0 8px 0; font-size: 10px; font-weight: bold; color: #94a3b8; text-transform: uppercase;">Product Details</p>
              <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
                 <p style="margin: 0; font-size: 15px; font-weight: bold; color: #065f46;">${r.productName}</p>
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 10px; text-align: center;">
+                <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; text-align: center;">
                   <div style="background: #f1f5f9; padding: 8px; border-radius: 6px;">
-                    <p style="margin: 0; font-size: 18px; font-weight: 900; color: #1e293b;">${r.checked}</p>
-                    <p style="margin: 0; font-size: 9px; color: #64748b; text-transform: uppercase;">Checked</p>
+                    <p style="margin: 0; font-size: 16px; font-weight: 900; color: #1e293b;">${r.checked}</p>
+                    <p style="margin: 0; font-size: 8px; color: #64748b; text-transform: uppercase;">Checked</p>
                   </div>
                   <div style="background: #ecfdf5; padding: 8px; border-radius: 6px;">
-                    <p style="margin: 0; font-size: 18px; font-weight: 900; color: #059669;">${r.good}</p>
-                    <p style="margin: 0; font-size: 9px; color: #059669; text-transform: uppercase;">Good</p>
+                    <p style="margin: 0; font-size: 16px; font-weight: 900; color: #059669;">${r.good || (Number(r.checked) - Number(r.damaged || 0) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0))}</p>
+                    <p style="margin: 0; font-size: 8px; color: #059669; text-transform: uppercase;">Good</p>
                   </div>
                   <div style="background: #fff1f2; padding: 8px; border-radius: 6px;">
-                    <p style="margin: 0; font-size: 18px; font-weight: 900; color: #e11d48;">${r.damaged || 0}</p>
-                    <p style="margin: 0; font-size: 9px; color: #e11d48; text-transform: uppercase;">Damaged</p>
+                    <p style="margin: 0; font-size: 16px; font-weight: 900; color: #e11d48;">${r.damaged || 0}</p>
+                    <p style="margin: 0; font-size: 8px; color: #e11d48; text-transform: uppercase;">Damaged</p>
                   </div>
-                    <p style="margin: 0; font-size: 18px; font-weight: 900; color: #b91c1c;">${r.rejected || 0}</p>
-                    <p style="margin: 0; font-size: 9px; color: #b91c1c; text-transform: uppercase;">Rejected</p>
+                  <div style="background: #fef2f2; padding: 8px; border-radius: 6px;">
+                    <p style="margin: 0; font-size: 16px; font-weight: 900; color: #b91c1c;">${r.rejected || 0}</p>
+                    <p style="margin: 0; font-size: 8px; color: #b91c1c; text-transform: uppercase;">Rejected</p>
+                  </div>
+                  <div style="background: #f8fafc; padding: 8px; border-radius: 6px; border: 1px dashed #cbd5e1;">
+                    <p style="margin: 0; font-size: 16px; font-weight: 900; color: #64748b;">${r.baseless || 0}</p>
+                    <p style="margin: 0; font-size: 8px; color: #64748b; text-transform: uppercase;">Baseless</p>
                   </div>
                 </div>
                 ${r.rejectionReason ? `<p style="margin: 10px 0 0 0; font-size: 11px; color: #b91c1c;"><b>Reason:</b> ${r.rejectionReason}</p>` : ''}
@@ -534,7 +539,7 @@ const DamageTracking = () => {
       suggestionEn: r.suggestionEn || '',
       suggestionMl: r.suggestionMl || '',
       suggestionTa: r.suggestionTa || '',
-      products: [{ id: Date.now(), productName: r.productName, checked: r.checked, damaged: r.damaged, rejected: r.rejected || '', rejectionReason: r.rejectionReason || '' }]
+      products: [{ id: Date.now(), productName: r.productName, checked: r.checked, damaged: r.damaged, rejected: r.rejected || '', baseless: r.baseless || '', rejectionReason: r.rejectionReason || '' }]
     });
     setSelectedImages(r.images || []);
     window.scrollTo({ top: 0, behavior: 'smooth' });

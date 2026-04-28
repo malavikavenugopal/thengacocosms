@@ -425,6 +425,47 @@ export const GlobalProvider = ({ children }) => {
     }
   };
 
+  const deleteQCRecord = async (id) => {
+    if (!id) return;
+    const record = qcRecords.find(r => r.id === id);
+    await deleteDoc(doc(db, 'qcRecords', String(id)));
+    if (record && record.deducted) {
+      const issueQty = (Number(record.rejected) || 0) + (Number(record.damaged) || 0);
+      if (issueQty > 0) {
+        const totalUnits = issueQty * (Number(record.packSize) || 1);
+        await updateFirestoreStock(record.productName, totalUnits, 'sub', 'damage');
+      }
+    }
+  };
+
+  const updateQCRecord = async (id, updatedRecord, shouldAdjust) => {
+    const oldRecord = qcRecords.find(r => r.id === id);
+    if (!oldRecord) return;
+    
+    // 1. Revert old stock adjustment
+    if (oldRecord.deducted) {
+      const oldIssueQty = (Number(oldRecord.rejected) || 0) + (Number(oldRecord.damaged) || 0);
+      if (oldIssueQty > 0) {
+        const totalUnits = oldIssueQty * (Number(oldRecord.packSize) || 1);
+        await updateFirestoreStock(oldRecord.productName, totalUnits, 'sub', 'damage');
+      }
+    }
+    
+    // 2. Update record in DB
+    const masterSKU = stock.find(s => s.name === updatedRecord.productName);
+    const finalized = { ...updatedRecord, packSize: masterSKU?.packSize || 1, deducted: shouldAdjust };
+    await updateDoc(doc(db, 'qcRecords', String(id)), finalized);
+    
+    // 3. Apply new stock adjustment
+    if (shouldAdjust) {
+      const newIssueQty = (Number(updatedRecord.rejected) || 0) + (Number(updatedRecord.damaged) || 0);
+      if (newIssueQty > 0) {
+        const totalUnits = newIssueQty * (masterSKU?.packSize || 1);
+        await updateFirestoreStock(updatedRecord.productName, totalUnits, 'add', 'damage');
+      }
+    }
+  };
+
   const addReplacementRecord = async (record, shouldDeduct) => {
     const processedProducts = (record.products || []).map(p => {
       const master = stock.find(s => s.name === p.name);
@@ -514,7 +555,7 @@ export const GlobalProvider = ({ children }) => {
       damageRecords, addDamageRecord, deleteDamageRecord, updateDamageRecord,
       returnRecords, addReturnRecord, deleteReturnRecord,
       purchaseRecords, addPurchaseRecord, deletePurchaseRecord, updatePurchaseRecord,
-      qcRecords, addQCRecord,
+      qcRecords, addQCRecord, updateQCRecord, deleteQCRecord,
       replacementRecords, addReplacementRecord,
       productionRecords, addProductionRecord, updateProductionRecord, deleteProductionRecord,
       staff, addStaffMember, updateStaffMember, deleteStaffMember,
