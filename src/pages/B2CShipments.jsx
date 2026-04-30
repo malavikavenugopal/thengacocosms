@@ -39,6 +39,7 @@ const B2CShipments = () => {
     d.setDate(d.getDate() - 7);
     return d.toISOString().split('T')[0];
   });
+  
   const [filterEndDate, setFilterEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState('');
 

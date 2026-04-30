@@ -213,7 +213,7 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
   let tableHtml = `<table>`;
   
   // Row 1: Title
-  const totalColSpan = type === 'B2B' ? 9 : 8;
+  const totalColSpan = type === 'B2B' ? 11 : 8;
   tableHtml += `
     <tr>
       <th colspan="${totalColSpan}" class="header-main">${title}</th>
@@ -229,7 +229,7 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
 
   // Row 3: Headers
   const headers = type === 'B2B' 
-    ? ['Date', 'Client Name', 'Courier', 'Parceled By', 'Boxes', 'Product Name', 'Order Qty', 'Pack Size', 'Total Units']
+    ? ['Packed Date', 'Dispatch Date', 'Client Name', 'Courier', 'Parceled By', 'Boxes', 'Product Name', 'Order Qty', 'Pack Size', 'Total Units', 'Item Status']
     : ['Date', 'Sales Channel', 'Orders', 'Parceled By', 'Product Name', 'Order Qty', 'Pack Size', 'Total Units'];
   
   tableHtml += `<tr>`;
@@ -249,9 +249,18 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
     products.forEach((p, idx) => {
       tableHtml += `<tr>`;
       
+      // Product specific packed date (only B2B)
+      if (type === 'B2B') {
+        tableHtml += `<td>${p.packedDate || s.date}</td>`;
+      } else if (idx === 0) {
+        tableHtml += `<td rowspan="${rowCount}">${s.date}</td>`;
+      }
+
       // Shared Shipment columns (only on first row)
       if (idx === 0) {
-        tableHtml += `<td rowspan="${rowCount}">${s.date}</td>`;
+        if (type === 'B2B') {
+          tableHtml += `<td rowspan="${rowCount}">${s.dispatchDate || '-'}</td>`;
+        }
         if (type === 'B2C') {
           tableHtml += `<td rowspan="${rowCount}" class="channel-badge" style="background-color: ${channelColor}">${s.channel}</td>`;
           tableHtml += `<td rowspan="${rowCount}">${s.orderCount || '1'}</td>`;
@@ -282,17 +291,21 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
       tableHtml += `<td>${p.quantity}</td>`;
       tableHtml += `<td>${effectivePackSize}</td>`;
       tableHtml += `<td>${totalUnits}</td>`;
+      if (type === 'B2B') {
+        tableHtml += `<td>${p.isPacked !== false ? 'Packed' : 'Pending'}</td>`;
+      }
       
       tableHtml += `</tr>`;
     });
   });
 
   // Footer: Grand Total
-  const footerColSpan = type === 'B2B' ? 8 : 7;
+  const footerColSpan = type === 'B2B' ? 9 : 7;
   tableHtml += `
     <tr>
       <td colspan="${footerColSpan}" class="grand-total text-right">GRAND TOTAL</td>
       <td class="total-value">${grandTotalUnits}</td>
+      ${type === 'B2B' ? '<td></td>' : ''}
     </tr>
   `;
 

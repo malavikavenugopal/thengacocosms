@@ -22,12 +22,13 @@ const B2BShipments = () => {
       courierName: saved?.courierName || '',
       boxes: saved?.boxes || '',
       date: saved?.date || defaultDate,
-      status: saved?.status || 'Packed'
+      status: saved?.status || 'Dispatched',
+      dispatchDate: saved?.dispatchDate || defaultDate
     };
   });
 
   const [products, setProducts] = useState(() => {
-    return drafts.b2b?.products || [{ id: Date.now(), name: '', quantity: '' }];
+    return drafts.b2b?.products || [{ id: Date.now(), name: '', quantity: '', isPacked: true, packedDate: new Date().toISOString().split('T')[0] }];
   });
 
   const [isEditing, setIsEditing] = useState(false);
@@ -62,13 +63,26 @@ const B2BShipments = () => {
       // Date Filter
       let dateMatch = true;
       if (filterStartDate || filterEndDate) {
-        const shipmentDate = new Date(shipment.date);
+        const pDate = new Date(shipment.date);
+        const dDate = shipment.dispatchDate ? new Date(shipment.dispatchDate) : null;
         const start = filterStartDate ? new Date(filterStartDate) : null;
         const end = filterEndDate ? new Date(filterEndDate) : null;
         
-        if (start && end) dateMatch = shipmentDate >= start && shipmentDate <= end;
-        else if (start) dateMatch = shipmentDate >= start;
-        else if (end) dateMatch = shipmentDate <= end;
+        let matchP = true;
+        let matchD = false;
+
+        if (start && end) {
+           matchP = pDate >= start && pDate <= end;
+           if (dDate) matchD = dDate >= start && dDate <= end;
+        } else if (start) {
+           matchP = pDate >= start;
+           if (dDate) matchD = dDate >= start;
+        } else if (end) {
+           matchP = pDate <= end;
+           if (dDate) matchD = dDate <= end;
+        }
+        
+        dateMatch = matchP || matchD;
       }
       if (!dateMatch) return false;
 
@@ -121,7 +135,7 @@ const B2BShipments = () => {
     }
   };
 
-  const handleAddProduct = () => setProducts([...products, { id: Date.now() + products.length, name: '', quantity: '' }]);
+  const handleAddProduct = () => setProducts([...products, { id: Date.now() + products.length, name: '', quantity: '', isPacked: true, packedDate: new Date().toISOString().split('T')[0] }]);
   const handleRemoveProduct = (id) => setProducts(products.filter((p) => p.id !== id));
 
   const updateProduct = (id, field, value) => {
@@ -134,14 +148,13 @@ const B2BShipments = () => {
     
     try {
 
-        
-
-
       const finalizedProducts = products.map(p => {
         const masterSKU = stock.find(s => s.name === p.name);
         return {
           name: p.name,
           quantity: p.quantity,
+          isPacked: p.isPacked !== false,
+          packedDate: p.packedDate || (p.isPacked !== false ? (formData.date || new Date().toISOString().split('T')[0]) : null),
           packSize: (() => {
             let ps = masterSKU?.packSize || 1;
             if (ps === 1) {
@@ -155,6 +168,7 @@ const B2BShipments = () => {
 
       const shipmentData = {
         ...formData,
+        dispatchDate: formData.status === 'Dispatched' ? (formData.dispatchDate || new Date().toISOString().split('T')[0]) : null,
         products: finalizedProducts
       };
 
@@ -185,7 +199,8 @@ const B2BShipments = () => {
       courierName: s.courierName,
       boxes: s.boxes,
       date: s.date,
-      status: s.status || 'Dispatched'
+      status: s.status || 'Dispatched',
+      dispatchDate: s.dispatchDate || ''
     });
     setProducts(s.products.map((p, idx) => ({ ...p, id: Date.now() + idx })));
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -194,8 +209,9 @@ const B2BShipments = () => {
   const handleCancel = () => {
     setIsEditing(false);
     setEditingId(null);
-    setFormData({ whoParceled: [], clientName: '', courierName: '', boxes: '', date: new Date().toISOString().split('T')[0], status: 'Packed' });
-    setProducts([{ id: Date.now(), name: '', quantity: '' }]);
+    const today = new Date().toISOString().split('T')[0];
+    setFormData({ whoParceled: [], clientName: '', courierName: '', boxes: '', date: today, status: 'Dispatched', dispatchDate: today });
+    setProducts([{ id: Date.now(), name: '', quantity: '', isPacked: true, packedDate: today }]);
   };
 
   const handleDelete = (id) => {
@@ -264,7 +280,7 @@ const B2BShipments = () => {
               required
             />
             <Input 
-              label="Date" 
+              label="Packed Date" 
               type="date" 
               value={formData.date}
               onChange={(e) => setFormData({...formData, date: e.target.value})}
@@ -277,6 +293,15 @@ const B2BShipments = () => {
               onChange={(e) => setFormData({...formData, status: e.target.value})}
               required
             />
+            {formData.status === 'Dispatched' && (
+              <Input 
+                label="Dispatch Date" 
+                type="date" 
+                value={formData.dispatchDate || new Date().toISOString().split('T')[0]}
+                onChange={(e) => setFormData({...formData, dispatchDate: e.target.value})}
+                required
+              />
+            )}
           </div>
 
           <div className="border-t border-gray-100 pt-6">
@@ -320,7 +345,7 @@ const B2BShipments = () => {
                 return (
                   <div key={product.id} className="px-4 py-4 bg-slate-50 rounded-2xl border border-slate-100 relative group">
                     <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
-                      <div className="md:col-span-7">
+                      <div className="md:col-span-5">
                         <SearchableSelect 
                           label={products[0].id === product.id ? "Select Product / SKU" : undefined}
                           options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)}
@@ -342,9 +367,36 @@ const B2BShipments = () => {
                           required
                         />
                       </div>
+                      <div className="md:col-span-2 pt-8 flex justify-center border-l border-slate-200">
+                        <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700">
+                          <input 
+                            type="checkbox"
+                            checked={product.isPacked !== false}
+                            onChange={(e) => {
+                              updateProduct(product.id, 'isPacked', e.target.checked);
+                              updateProduct(product.id, 'packedDate', e.target.checked ? new Date().toISOString().split('T')[0] : null);
+                            }}
+                            className="w-4 h-4 text-emerald-600 border-slate-300 rounded focus:ring-emerald-500"
+                          />
+                          Packed
+                        </label>
+                      </div>
+                      {/* Per-product packed date */}
+                      {product.isPacked !== false && (
+                        <div className="md:col-span-2 border-l border-slate-200 px-2">
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight mb-1">Packed Date</p>
+                          <input
+                            type="date"
+                            className="w-full px-2 py-1.5 text-xs border border-slate-200 rounded-lg outline-none focus:border-indigo-400 bg-white"
+                            value={product.packedDate || ''}
+                            onChange={(e) => updateProduct(product.id, 'packedDate', e.target.value)}
+                          />
+                        </div>
+                      )}
+
                       <div className="md:col-span-2 py-3 text-center border-l border-slate-200">
                         <p className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-tighter">Inventory Deduction</p>
-                        <p className="font-bold text-indigo-600">
+                        <p className={`font-bold ${product.isPacked !== false ? 'text-indigo-600' : 'text-slate-400 line-through'}`}>
                           {product.quantity ? `${product.quantity} x ${packSize} = ${totalDeduction}` : '-'}
                         </p>
                       </div>
@@ -519,7 +571,12 @@ const B2BShipments = () => {
           ) : (
             filteredShipments.map(s => (
               <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
-                <td className="py-4 px-6 text-sm text-slate-800 whitespace-nowrap">{s.date}</td>
+                <td className="py-4 px-6 text-sm text-slate-800 whitespace-nowrap">
+                  <div><span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Packed</span>{s.date}</div>
+                  {s.dispatchDate && s.status === 'Dispatched' && (
+                    <div className="mt-1"><span className="text-[9px] text-emerald-500 font-bold uppercase tracking-wider block">Dispatched</span><span className="text-emerald-700 font-medium">{s.dispatchDate}</span></div>
+                  )}
+                </td>
                 <td className="py-4 px-6 text-sm">
                   <div className="font-bold text-slate-900">{s.clientName}</div>
                   <div className="flex items-center gap-2 mt-0.5">
@@ -533,11 +590,12 @@ const B2BShipments = () => {
                 <td className="py-4 px-6 text-sm">
                   <div className="min-w-[450px]">
                     {/* Internal Table Header */}
-                    <div className="grid grid-cols-[1fr,60px,60px,60px] gap-2 mb-2 px-2 py-1 bg-slate-50 rounded text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <div className="grid grid-cols-[1fr,60px,60px,60px,60px] gap-2 mb-2 px-2 py-1 bg-slate-50 rounded text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                       <span>Product</span>
                       <span className="text-center">Qty</span>
                       <span className="text-center">Pack</span>
                       <span className="text-center">Total</span>
+                      <span className="text-center">Status</span>
                     </div>
                     <div className="flex flex-col gap-2">
                       {(s.products || []).map((p, idx) => {
@@ -547,15 +605,19 @@ const B2BShipments = () => {
                            const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
                            if (match && match[1]) ps = Number(match[1]);
                          }
+                         const isPacked = p.isPacked !== false;
                          return (
-                          <div key={idx} className="grid grid-cols-[1fr,50px,50px,60px] gap-2 items-center px-2 py-2 border-b border-slate-100 last:border-0 hover:bg-white rounded transition-colors group">
+                          <div key={idx} className="grid grid-cols-[1fr,60px,60px,60px,60px] gap-2 items-center px-2 py-2 border-b border-slate-100 last:border-0 hover:bg-white rounded transition-colors group">
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="text-[9px] font-mono font-bold text-emerald-600 bg-emerald-50 px-1 rounded shrink-0 border border-emerald-100">{masterSKU?.sku || 'N/A'}</span>
-                              <span className="font-semibold text-slate-800 break-words line-clamp-2" title={p.name}>{p.name}</span>
+                              <span className={`font-semibold break-words line-clamp-2 ${isPacked ? 'text-slate-800' : 'text-slate-400'}`} title={p.name}>{p.name}</span>
                             </div>
                             <div className="text-center font-bold text-slate-900">{p.quantity}</div>
                             <div className="text-center text-slate-400 font-medium">{ps}</div>
                             <div className="text-center font-bold text-emerald-600 bg-emerald-50/50 py-0.5 rounded">{Number(p.quantity) * ps}</div>
+                            <div className="text-center">
+                              {isPacked ? <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Packed</span> : <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Pending</span>}
+                            </div>
                           </div>
                         );
                       })}
@@ -577,7 +639,7 @@ const B2BShipments = () => {
                           <button 
                             onClick={async () => {
                               try {
-                                await updateB2BShipment(s.id, { ...s, status: 'Dispatched' });
+                                await updateB2BShipment(s.id, { ...s, status: 'Dispatched', dispatchDate: new Date().toISOString().split('T')[0] });
                                 toast.success('Shipment marked as Dispatched!');
                               } catch (err) {
                                 toast.error('Failed to update status');
@@ -622,8 +684,8 @@ const B2BShipments = () => {
           <Table headers={['SKU Code', 'Component / Solo Product', 'Stock Out']}>
             {(() => {
               const summaryMap = filteredShipments
-                .filter(s => s.status !== 'Packed') // Only count Dispatched (Stock Out)
                 .flatMap(s => s.products || [])
+                .filter(p => p.isPacked !== false)
                 .reduce((acc, p) => {
                   const master = stock.find(item => item.name === p.name);
                   const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);

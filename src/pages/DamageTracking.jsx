@@ -12,7 +12,7 @@ import emailjs from 'emailjs-com';
 
 const DamageTracking = () => {
   const { stock, damageRecords, addDamageRecord, updateDamageRecord, deleteDamageRecord, qcRecords, addQCRecord, updateQCRecord, deleteQCRecord, drafts, updateDraft, clearDraft, purchaseRecords, vendors, uploadQCImages, getQCImageBase64 } = useGlobalState();
-  
+
   const REJECTION_REASONS = [
     "Crack / Chipping",
     "Polishing Issue",
@@ -22,17 +22,21 @@ const DamageTracking = () => {
     "Natural Defect",
     "Other"
   ];
-  
-  const sendQCEmail = (vendorName, date, products, images = [], recordId = null) => {
-    // EmailJS credentials hardcoded as requested
-    const SERVICE_ID = "service_wjn0j8t";
-    const TEMPLATE_ID = "template_fg6ypin";
-    const PUBLIC_KEY = "P2y2DvSD3VRiaAFoK";
 
+  const sendQCEmail = (vendorName, date, products, images = [], recordIds = []) => {
+    // EmailJS credentials hardcoded as requested
+    //   const SERVICE_ID = "service_wjn0j8t";
+    // const TEMPLATE_ID = "template_fg6ypin";
+    //const PUBLIC_KEY = "P2y2DvSD3VRiaAFoK";
+    //sushama.themga@gmail.com
+    const SERVICE_ID = "service_3oswmta";
+    const TEMPLATE_ID = "template_3py8m97";
+    const PUBLIC_KEY = "ZOxREJf15qCqFOcBq";
+    
     // Format product details with larger text and line-by-line metrics
     const productDetails = (products || []).map(p => `
       <div style="font-size: 16px; font-family: sans-serif; line-height: 1.5; margin-bottom: 20px; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #f8fafc;">
-        <b style="font-size: 20px; color: #065f46; display: block; margin-bottom: 10px;">${p.productName}</b>
+        <b style="font-size: 20px; color: #065f46; display: block; margin-bottom: 10px;">${p.productName} <span style="font-size: 14px; color: #64748b; font-weight: normal;">${p.vendorName && p.vendorName !== vendorName ? `(${p.vendorName})` : ''}</span></b>
         <div style="margin-left: 10px;">
           • Checked: <b>${p.checked}</b><br/>
           • Rejected: <b>${p.rejected || 0}</b> ${p.rejectionReason ? `(${p.rejectionReason})` : ''}<br/>
@@ -40,18 +44,26 @@ const DamageTracking = () => {
           • Baseless: <b>${p.baseless || 0}</b><br/>
           • Approved: <b style="color: #059669;">${Number(p.checked) - Number(p.damaged) - (Number(p.rejected) || 0) - (Number(p.baseless) || 0)}</b>
         </div>
+        ${p.suggestionEn || p.suggestionMl || p.suggestionTa ? `
+          <div style="margin-top: 15px; padding: 10px; border-left: 4px solid #fde68a; background-color: #fffbeb;">
+            <b style="color: #92400e; font-size: 14px; text-transform: uppercase;">Suggestions:</b><br/>
+            ${p.suggestionEn ? `<div style="font-size: 13px; margin-top: 5px;"><b>EN:</b> ${p.suggestionEn}</div>` : ''}
+            ${p.suggestionMl ? `<div style="font-size: 13px; margin-top: 4px;"><b>ML:</b> ${p.suggestionMl}</div>` : ''}
+            ${p.suggestionTa ? `<div style="font-size: 13px; margin-top: 4px;"><b>TA:</b> ${p.suggestionTa}</div>` : ''}
+          </div>
+        ` : ''}
       </div>
     `).join('');
 
     // Format images as HTML tags
-    const imageHtml = images && images.length > 0 
-      ? `<br/><br/><b style="font-size: 18px; color: #475569;">Inspection Photos:</b><br/>` + 
-        images.map(url => `<br/><img src="${url}" alt="QC Photo" style="max-width: 450px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;" />`).join('')
+    const imageHtml = images && images.length > 0
+      ? `<br/><br/><b style="font-size: 18px; color: #475569;">Inspection Photos:</b><br/>` +
+      images.map(url => `<br/><img src="${url}" alt="QC Photo" style="max-width: 450px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;" />`).join('')
       : '';
 
     // Combined recipients to avoid sending multiple separate emails
-    const recipients = "malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com";
-    
+    const recipients = "malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com"; 
+
     // Header with Title, Vendor, and Date
     const headerHtml = `
       <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #065f46;">
@@ -67,36 +79,32 @@ const DamageTracking = () => {
       to_email: recipients,
       vendor_name: vendorName || "N/A",
       date: date,
-      product_details: headerHtml + productDetails + `
-        ${qcForm.suggestionEn || qcForm.suggestionMl || qcForm.suggestionTa ? `
-          <div style="margin-top: 20px; padding: 15px; border: 2px solid #fde68a; border-radius: 10px; background-color: #fffbeb; font-family: sans-serif;">
-            <b style="color: #92400e; font-size: 16px; text-transform: uppercase;">Suggestions & Corrective Actions:</b><br/>
-            ${qcForm.suggestionEn ? `<div style="margin-top: 10px;"><b>English:</b> ${qcForm.suggestionEn}</div>` : ''}
-            ${qcForm.suggestionMl ? `<div style="margin-top: 8px;"><b>മലയാളം:</b> ${qcForm.suggestionMl}</div>` : ''}
-            ${qcForm.suggestionTa ? `<div style="margin-top: 8px;"><b>தமிழ்:</b> ${qcForm.suggestionTa}</div>` : ''}
-          </div>
-        ` : ''}
-      ` + imageHtml 
+      product_details: headerHtml + productDetails + imageHtml
     };
 
     emailjs.send(SERVICE_ID, TEMPLATE_ID, templateParams, PUBLIC_KEY)
       .then((res) => {
         console.log("Email sent successfully:", res.status);
         toast.success("QC Report emailed to accounts.");
-        
-        // If a specific recordId was provided (manual resend), update its status in Firestore
-        if (recordId) {
-          const record = qcRecords.find(r => r.id === recordId);
-          if (record) {
-            updateQCRecord(recordId, { ...record, emailSent: true }, record.deducted);
-          }
+
+        // If specific recordIds were provided, update their status in Firestore
+        if (recordIds && !Array.isArray(recordIds)) {
+          recordIds = [recordIds];
+        }
+        if (recordIds && recordIds.length > 0) {
+          recordIds.forEach(id => {
+            const record = qcRecords.find(r => r.id === id);
+            if (record) {
+              updateQCRecord(id, { ...record, emailSent: true }, record.deducted);
+            }
+          });
         }
       })
       .catch((err) => {
         console.error("Email send failure:", err);
       });
   };
-  const [activeTab, setActiveTab] = useState('qc'); 
+  const [activeTab, setActiveTab] = useState('qc');
   const [isExporting, setIsExporting] = useState(false);
   const [isGeneratingQCVisual, setIsGeneratingQCVisual] = useState(false);
   const [isGeneratingDamageVisual, setIsGeneratingDamageVisual] = useState(false);
@@ -133,29 +141,29 @@ const DamageTracking = () => {
       toast.error("No product data to generate report.");
       return null;
     }
-    
+
     // If it's a summary and imagesArray is empty, collect from all products
     let finalImages = [...imagesArray];
     if (products.length > 1 && finalImages.length === 0) {
-       products.forEach(p => {
-         if (p.images && p.images.length > 0) finalImages.push(...p.images);
-       });
+      products.forEach(p => {
+        if (p.images && p.images.length > 0) finalImages.push(...p.images);
+      });
     }
 
     const doc = new jsPDF();
     const isSummary = products.length > 1;
-    
+
     // Header (No images for stability)
     doc.setFont("times", "bold");
     doc.setFontSize(28);
     doc.setTextColor(5, 150, 105); // Emerald Green
     doc.text("ThengaCoco", 15, 22);
-    
+
     doc.setFont("helvetica", "normal");
     doc.setFontSize(14);
     doc.setTextColor(100);
     doc.text("Quality Assurance & Inspection Report", 15, 30);
-    
+
     doc.setFontSize(10);
     doc.text(`Date: ${new Date().toLocaleDateString()}`, 195, 20, { align: 'right' });
 
@@ -171,7 +179,7 @@ const DamageTracking = () => {
       doc.text(`Vendor: ${vendorFilter}`, 15, 45);
       doc.text(`Total Records: ${products.length}`, 15, 52);
     }
-    
+
     // Table
     const tableData = products.map((p, i) => [
       i + 1,
@@ -183,7 +191,7 @@ const DamageTracking = () => {
       p.rejected || 0,
       p.baseless || 0
     ]);
-    
+
     autoTable(doc, {
       startY: 60,
       head: [['#', 'Date', 'Product / Vendor', 'Checked', 'Good', 'Damaged', 'Rejected', 'Baseless']],
@@ -215,7 +223,7 @@ const DamageTracking = () => {
             // Determine format
             const format = imgBase64.includes('png') ? 'PNG' : 'JPEG';
             doc.addImage(imgBase64, format, x, y, imgWidth, imgHeight);
-            
+
             x += imgWidth + margin;
             if (x + imgWidth > 195) {
               x = 15;
@@ -236,7 +244,7 @@ const DamageTracking = () => {
     if (isShare) return doc;
     doc.save(isSummary ? `QC_History_Summary_${new Date().toISOString().split('T')[0]}.pdf` : `QC_Report_${vendorName}_${date}.pdf`);
   };
-  
+
   // Damage Form State
   const [damageForm, setDamageForm] = useState(() => {
     const defaultDate = new Date().toISOString().split('T')[0];
@@ -280,14 +288,14 @@ const DamageTracking = () => {
   const availableQCProducts = React.useMemo(() => {
     const soloProducts = stock.filter(s => !s.isComposite);
     if (!qcForm.vendorName) return soloProducts;
-    
+
     // Get products historically purchased from this vendor
     const vendorProdNames = new Set(
       (purchaseRecords || [])
         .filter(r => r.vendorName === qcForm.vendorName)
         .map(r => r.productName)
     );
-    
+
     const filtered = soloProducts.filter(s => vendorProdNames.has(s.name));
     // If no history found, show all solo products as fallback
     return filtered.length > 0 ? filtered : soloProducts;
@@ -340,7 +348,7 @@ const DamageTracking = () => {
 
   const handleQCSubmit = (e) => {
     e.preventDefault();
-    
+
     // Validation
     const invalid = qcForm.products.find(p => !p.productName || p.checked === '' || p.damaged === '');
     if (invalid) {
@@ -400,22 +408,22 @@ const DamageTracking = () => {
       }
     };
 
-  if (hasDamages) {
-    Swal.fire({
-      title: 'Deduct from Stock?',
-      text: `Deduct identified non-sellable units (Damaged + Rejected items) from stock?`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#4f46e5',
-      confirmButtonText: 'Yes, Deduct',
-      cancelButtonText: 'Log Only'
-    }).then((result) => {
-      processSubmission(result.isConfirmed);
-    });
-  } else {
-    processSubmission(false);
-  }
-};
+    if (hasDamages) {
+      Swal.fire({
+        title: 'Deduct from Stock?',
+        text: `Deduct identified non-sellable units (Damaged + Rejected items) from stock?`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#4f46e5',
+        confirmButtonText: 'Yes, Deduct',
+        cancelButtonText: 'Log Only'
+      }).then((result) => {
+        processSubmission(result.isConfirmed);
+      });
+    } else {
+      processSubmission(false);
+    }
+  };
 
   const addQCProduct = () => {
     setQcForm({
@@ -549,8 +557,8 @@ const DamageTracking = () => {
     setIsEditing(false);
     setEditingId(null);
     setDamageForm({ date: new Date().toISOString().split('T')[0], productName: '', quantity: '', reason: '' });
-    setQcForm({ 
-      date: new Date().toISOString().split('T')[0], 
+    setQcForm({
+      date: new Date().toISOString().split('T')[0],
       vendorName: '',
       suggestionEn: '',
       suggestionMl: '',
@@ -562,30 +570,30 @@ const DamageTracking = () => {
 
   return (
     <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
-              <AlertTriangle size={24} />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold tracking-tight text-slate-900">Damage & Quality Control</h2>
-              <p className="text-sm text-slate-500">Log damaged goods and track quality inspection logs</p>
-            </div>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-rose-100 text-rose-600 rounded-lg">
+            <AlertTriangle size={24} />
           </div>
-          
-          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto no-scrollbar whitespace-nowrap w-full sm:w-auto">
-           <button 
-             onClick={() => setActiveTab('qc')}
-             className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 flex-1 sm:flex-none ${activeTab === 'qc' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-           >
-             <ClipboardCheck size={16} /> Quality Control
-           </button>
-           <button 
-             onClick={() => setActiveTab('damage')}
-             className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 flex-1 sm:flex-none ${activeTab === 'damage' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-           >
-             <AlertTriangle size={16} /> Damage Logs
-           </button>
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900">Damage & Quality Control</h2>
+            <p className="text-sm text-slate-500">Log damaged goods and track quality inspection logs</p>
+          </div>
+        </div>
+
+        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 overflow-x-auto no-scrollbar whitespace-nowrap w-full sm:w-auto">
+          <button
+            onClick={() => setActiveTab('qc')}
+            className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 flex-1 sm:flex-none ${activeTab === 'qc' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <ClipboardCheck size={16} /> Quality Control
+          </button>
+          <button
+            onClick={() => setActiveTab('damage')}
+            className={`px-4 py-2 text-sm font-bold rounded-lg transition-all flex items-center gap-2 flex-1 sm:flex-none ${activeTab === 'damage' ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            <AlertTriangle size={16} /> Damage Logs
+          </button>
         </div>
       </div>
 
@@ -599,25 +607,25 @@ const DamageTracking = () => {
               </div>
               {isEditing && (
                 <Button variant="ghost" size="sm" onClick={handleCancel} className="text-rose-600">
-                   <X size={16} className="mr-1" /> Cancel Edit
+                  <X size={16} className="mr-1" /> Cancel Edit
                 </Button>
               )}
             </div>
             <form onSubmit={handleQCSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input 
-                  label="QC Check Date" 
+                <Input
+                  label="QC Check Date"
                   type="date"
                   value={qcForm.date}
-                  onChange={(e) => setQcForm({...qcForm, date: e.target.value})}
+                  onChange={(e) => setQcForm({ ...qcForm, date: e.target.value })}
                   required
                 />
-                <SearchableSelect 
-                  label="Vendor Name" 
-                  placeholder="Select Vendor" 
-                  options={vendorsList} 
+                <SearchableSelect
+                  label="Vendor Name"
+                  placeholder="Select Vendor"
+                  options={vendorsList}
                   value={qcForm.vendorName}
-                  onChange={(val) => setQcForm({...qcForm, vendorName: val})}
+                  onChange={(val) => setQcForm({ ...qcForm, vendorName: val })}
                   required
                 />
               </div>
@@ -636,9 +644,9 @@ const DamageTracking = () => {
                   {qcForm.products.map((p, index) => (
                     <div key={p.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-white/40 p-3 rounded-lg border border-indigo-50 relative group">
                       <div className="md:col-span-12 lg:col-span-5">
-                        <SearchableSelect 
-                          label="Product / SKU" 
-                          options={availableQCProducts.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)} 
+                        <SearchableSelect
+                          label="Product / SKU"
+                          options={availableQCProducts.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)}
                           value={p.productName ? (stock.find(s => s.name === p.productName) ? `[${stock.find(s => s.name === p.productName).sku || 'N/A'}] ${p.productName} (Pack: ${stock.find(s => s.name === p.productName).packSize || 1})` : '') : ''}
                           onChange={(val) => {
                             const selectedName = availableQCProducts.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
@@ -648,39 +656,39 @@ const DamageTracking = () => {
                         />
                       </div>
                       <div className="md:col-span-4 lg:col-span-2">
-                        <Input 
-                          label="Checked" 
-                          type="number" 
-                          min="1" 
+                        <Input
+                          label="Checked"
+                          type="number"
+                          min="1"
                           value={p.checked}
                           onChange={(e) => updateQCProductField(p.id, 'checked', e.target.value)}
                           required
                         />
                       </div>
                       <div className="md:col-span-4 lg:col-span-2">
-                        <Input 
-                          label="Damaged" 
-                          type="number" 
-                          min="0" 
+                        <Input
+                          label="Damaged"
+                          type="number"
+                          min="0"
                           value={p.damaged}
                           onChange={(e) => updateQCProductField(p.id, 'damaged', e.target.value)}
                           required
                         />
                       </div>
                       <div className="md:col-span-4 lg:col-span-1">
-                        <Input 
-                          label="Rejected" 
-                          type="number" 
-                          min="0" 
+                        <Input
+                          label="Rejected"
+                          type="number"
+                          min="0"
                           value={p.rejected}
                           onChange={(e) => updateQCProductField(p.id, 'rejected', e.target.value)}
                         />
                       </div>
                       <div className="md:col-span-4 lg:col-span-1">
-                        <Input 
-                          label="Baseless" 
-                          type="number" 
-                          min="0" 
+                        <Input
+                          label="Baseless"
+                          type="number"
+                          min="0"
                           value={p.baseless}
                           onChange={(e) => updateQCProductField(p.id, 'baseless', e.target.value)}
                         />
@@ -688,7 +696,7 @@ const DamageTracking = () => {
                       <div className="md:col-span-12 lg:col-span-2">
                         <div className="space-y-1.5">
                           <label className="text-xs font-bold text-slate-500 uppercase tracking-tight ml-1">Reason</label>
-                          <select 
+                          <select
                             className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all appearance-none"
                             value={p.rejectionReason || ''}
                             onChange={(e) => updateQCProductField(p.id, 'rejectionReason', e.target.value)}
@@ -701,15 +709,15 @@ const DamageTracking = () => {
                         </div>
                       </div>
                       <div className="md:col-span-4 lg:col-span-1 flex justify-end pb-2">
-                         {!isEditing && qcForm.products.length > 1 && (
-                           <button 
-                             type="button" 
-                             onClick={() => removeQCProduct(p.id)}
-                             className="p-2 text-rose-300 hover:text-rose-500 transition-colors"
-                           >
-                             <Trash2 size={18} />
-                           </button>
-                         )}
+                        {!isEditing && qcForm.products.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeQCProduct(p.id)}
+                            className="p-2 text-rose-300 hover:text-rose-500 transition-colors"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -724,29 +732,29 @@ const DamageTracking = () => {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">English Suggestion</label>
-                    <textarea 
+                    <textarea
                       className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all min-h-[80px]"
                       placeholder="Enter suggestion in English..."
                       value={qcForm.suggestionEn || ''}
-                      onChange={(e) => setQcForm({...qcForm, suggestionEn: e.target.value})}
+                      onChange={(e) => setQcForm({ ...qcForm, suggestionEn: e.target.value })}
                     />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Malayalam Suggestion (മലയാളം)</label>
-                    <textarea 
+                    <textarea
                       className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all min-h-[80px]"
                       placeholder="നിർദ്ദേശങ്ങൾ മലയാളത്തിൽ നൽകുക..."
                       value={qcForm.suggestionMl || ''}
-                      onChange={(e) => setQcForm({...qcForm, suggestionMl: e.target.value})}
+                      onChange={(e) => setQcForm({ ...qcForm, suggestionMl: e.target.value })}
                     />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Tamil Suggestion (தமிழ்)</label>
-                    <textarea 
+                    <textarea
                       className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all min-h-[80px]"
                       placeholder="பரிந்துரைகளை தமிழில் உள்ளிடவும்..."
                       value={qcForm.suggestionTa || ''}
-                      onChange={(e) => setQcForm({...qcForm, suggestionTa: e.target.value})}
+                      onChange={(e) => setQcForm({ ...qcForm, suggestionTa: e.target.value })}
                     />
                   </div>
                 </div>
@@ -757,16 +765,16 @@ const DamageTracking = () => {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2">
-                       <Camera size={14} /> Inspection Photos
+                      <Camera size={14} /> Inspection Photos
                     </h4>
                     <p className="text-[10px] text-slate-400 mt-0.5">Max 4 images • JPG/PNG • Galley/Photo</p>
                   </div>
                   <label className="cursor-pointer">
-                    <input 
-                      type="file" 
-                      multiple 
-                      accept="image/*" 
-                      className="hidden" 
+                    <input
+                      type="file"
+                      multiple
+                      accept="image/*"
+                      className="hidden"
                       onChange={handleImageSelect}
                       disabled={selectedImages.length >= 4 || isUploading}
                     />
@@ -779,13 +787,13 @@ const DamageTracking = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {selectedImages.map((file, idx) => (
                     <div key={idx} className="relative group aspect-video sm:aspect-square rounded-xl overflow-hidden border-2 border-indigo-100 bg-slate-50 shadow-sm">
-                      <img 
-                        src={typeof file === 'string' ? file : URL.createObjectURL(file)} 
-                        alt="preview" 
+                      <img
+                        src={typeof file === 'string' ? file : URL.createObjectURL(file)}
+                        alt="preview"
                         className="w-full h-full object-cover"
                       />
-                      <button 
-                        type="button" 
+                      <button
+                        type="button"
                         onClick={() => removeImage(idx)}
                         className="absolute top-1 right-1 p-1 bg-rose-500 text-white rounded-full shadow-lg"
                       >
@@ -803,27 +811,27 @@ const DamageTracking = () => {
               </div>
 
               <div className="flex flex-col sm:flex-row justify-between items-center bg-white/50 p-4 rounded-xl border border-indigo-100/50 gap-4">
-                 <div className="grid grid-cols-3 gap-4 w-full sm:w-auto">
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Total Good</p>
-                        <p className="text-xl font-black text-emerald-600">
-                          {qcForm.products.reduce((acc, p) => acc + (Number(p.checked) || 0) - (Number(p.damaged) || 0) - (Number(p.rejected) || 0), 0)}
-                        </p>
-                    </div>
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Rejected</p>
-                        <p className="text-xl font-black text-rose-400">
-                          {qcForm.products.reduce((acc, p) => acc + (Number(p.rejected) || 0), 0)}
-                        </p>
-                    </div>
-                    <div>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase">Damaged</p>
-                        <p className="text-xl font-black text-rose-600">
-                          {qcForm.products.reduce((acc, p) => acc + (Number(p.damaged) || 0), 0)}
-                        </p>
-                    </div>
-                 </div>
-                 <div className="flex gap-3 w-full sm:w-auto">
+                <div className="grid grid-cols-3 gap-4 w-full sm:w-auto">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Total Good</p>
+                    <p className="text-xl font-black text-emerald-600">
+                      {qcForm.products.reduce((acc, p) => acc + (Number(p.checked) || 0) - (Number(p.damaged) || 0) - (Number(p.rejected) || 0), 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Rejected</p>
+                    <p className="text-xl font-black text-rose-400">
+                      {qcForm.products.reduce((acc, p) => acc + (Number(p.rejected) || 0), 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Damaged</p>
+                    <p className="text-xl font-black text-rose-600">
+                      {qcForm.products.reduce((acc, p) => acc + (Number(p.damaged) || 0), 0)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3 w-full sm:w-auto">
                   <Button type="button" variant="secondary" onClick={handleCancel} className="flex-1 sm:flex-none">Cancel</Button>
                   <Button type="submit" loading={isSubmittingQC} className="flex-1 sm:flex-none">
                     {isSubmittingQC ? (
@@ -843,36 +851,36 @@ const DamageTracking = () => {
                 <History size={18} className="text-slate-400" />
                 QC Inspection History
               </h3>
-              
+
               <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
                 <div className="relative flex-1 sm:min-w-[200px]">
-                   <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                   <input 
-                    type="text" 
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
                     placeholder="Search Product..."
                     className="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
                     value={historySearch}
                     onChange={(e) => setHistorySearch(e.target.value)}
-                   />
+                  />
                 </div>
                 <div className="flex items-center gap-2">
-                  <input 
-                    type="date" 
+                  <input
+                    type="date"
                     className="px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
                     title="Start Date"
                   />
                   <span className="text-slate-400 text-xs">-</span>
-                  <input 
-                    type="date" 
+                  <input
+                    type="date"
                     className="px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
                     title="End Date"
                   />
                 </div>
-                <select 
+                <select
                   className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer"
                   value={vendorFilter}
                   onChange={(e) => setVendorFilter(e.target.value)}
@@ -880,33 +888,79 @@ const DamageTracking = () => {
                   <option>All Vendors</option>
                   {vendors.map(v => <option key={v.id} value={v.name}>{v.name}</option>)}
                 </select>
-                <Button 
-                   onClick={async () => {
-                     setIsGeneratingQCVisual(true);
-                     try {
-                        const filtered = qcRecords.filter(r => {
-                          const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) || 
-                                                (r.vendorName && r.vendorName.toLowerCase().includes(historySearch.toLowerCase()));
-                          const matchesVendor = vendorFilter === 'All Vendors' || r.vendorName === vendorFilter;
-                          const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
-                          return matchesSearch && matchesVendor && matchesDate;
-                        });
-                        const title = vendorFilter === 'All Vendors' ? "All Vendors QC History" : `${vendorFilter} QC History`;
-                        await generateVisualReport(filtered, 'QC', title, { startDate, endDate });
-                        toast.success('Visual report generated!');
-                     } catch (err) {
-                        console.error(err);
-                        toast.error('Failed to generate visual report');
-                     } finally {
-                        setIsGeneratingQCVisual(false);
-                     }
-                   }}
-                   variant="success" 
-                   size="sm"
-                   loading={isGeneratingQCVisual}
-                   className="text-[10px] h-8 px-2 bg-indigo-600 hover:bg-indigo-700 border-none shadow-md"
+                <Button
+                  onClick={async () => {
+                    setIsGeneratingQCVisual(true);
+                    try {
+                      const filtered = qcRecords.filter(r => {
+                        const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) ||
+                          (r.vendorName && r.vendorName.toLowerCase().includes(historySearch.toLowerCase()));
+                        const matchesVendor = vendorFilter === 'All Vendors' || r.vendorName === vendorFilter;
+                        const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
+                        return matchesSearch && matchesVendor && matchesDate;
+                      });
+                      const title = vendorFilter === 'All Vendors' ? "All Vendors QC History" : `${vendorFilter} QC History`;
+                      await generateVisualReport(filtered, 'QC', title, { startDate, endDate });
+                      toast.success('Visual report generated!');
+                    } catch (err) {
+                      console.error(err);
+                      toast.error('Failed to generate visual report');
+                    } finally {
+                      setIsGeneratingQCVisual(false);
+                    }
+                  }}
+                  variant="success"
+                  size="sm"
+                  loading={isGeneratingQCVisual}
+                  className="text-[10px] h-8 px-2 bg-indigo-600 hover:bg-indigo-700 border-none shadow-md"
                 >
-                   <Download size={14} className="mr-1" /> Visual Report
+                  <Download size={14} className="mr-1" /> Visual Report
+                </Button>
+                <Button
+                  onClick={() => {
+                    const filtered = qcRecords.filter(r => {
+                      const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) ||
+                        (r.vendorName && r.vendorName.toLowerCase().includes(historySearch.toLowerCase()));
+                      const matchesVendor = vendorFilter === 'All Vendors' || r.vendorName === vendorFilter;
+                      const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
+                      return matchesSearch && matchesVendor && matchesDate;
+                    });
+
+                    if (filtered.length === 0) {
+                      toast.error("No records found to email.");
+                      return;
+                    }
+
+                    Swal.fire({
+                      title: 'Email Consolidated Report?',
+                      text: `Send a single email with ${filtered.length} QC record(s) for the selected dates/vendor?`,
+                      icon: 'question',
+                      showCancelButton: true,
+                      confirmButtonColor: '#4f46e5',
+                      confirmButtonText: 'Yes, Send All'
+                    }).then((result) => {
+                      if (result.isConfirmed) {
+                        const vendorText = vendorFilter === 'All Vendors' ? 'Multiple Vendors' : vendorFilter;
+                        const dateText = startDate === endDate ? startDate : `${startDate} to ${endDate}`;
+
+                        let allImages = [];
+                        filtered.forEach(r => {
+                          if (r.images && r.images.length > 0) {
+                            allImages.push(...r.images);
+                          }
+                        });
+                        allImages = [...new Set(allImages)];
+
+                        const rIds = filtered.map(r => r.id);
+                        sendQCEmail(vendorText, dateText, filtered, allImages, rIds);
+                      }
+                    });
+                  }}
+                  variant="primary"
+                  size="sm"
+                  className="text-[10px] h-8 px-2 bg-blue-600 hover:bg-blue-700 border-none shadow-md text-white"
+                >
+                  <Mail size={14} className="mr-1" /> Email Daily Report
                 </Button>
               </div>
             </div>
@@ -915,8 +969,8 @@ const DamageTracking = () => {
               <Table headers={['Date', 'Product', 'Vendor', 'Checked', 'Damaged', 'Rejected', 'Baseless', 'Approved', 'Preview + Share', 'Actions']}>
                 {qcRecords
                   .filter(r => {
-                    const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) || 
-                                          (r.vendorName && r.vendorName.toLowerCase().includes(historySearch.toLowerCase()));
+                    const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) ||
+                      (r.vendorName && r.vendorName.toLowerCase().includes(historySearch.toLowerCase()));
                     const matchesVendor = vendorFilter === 'All Vendors' || r.vendorName === vendorFilter;
                     const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
                     return matchesSearch && matchesVendor && matchesDate;
@@ -926,146 +980,146 @@ const DamageTracking = () => {
                 ) : (
                   [...qcRecords]
                     .filter(r => {
-                      const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) || 
-                                            (r.vendorName && r.vendorName.toLowerCase().includes(historySearch.toLowerCase()));
+                      const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) ||
+                        (r.vendorName && r.vendorName.toLowerCase().includes(historySearch.toLowerCase()));
                       const matchesVendor = vendorFilter === 'All Vendors' || r.vendorName === vendorFilter;
                       const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
                       return matchesSearch && matchesVendor && matchesDate;
                     })
-                    .sort((a,b) => new Date(b.date) - new Date(a.date))
+                    .sort((a, b) => new Date(b.date) - new Date(a.date))
                     .map(r => (
-                    <tr key={r.id} className="hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors">
-                      <td className="py-4 px-6 text-sm text-slate-600 font-medium">{r.date}</td>
-                      <td className="py-4 px-6">
-                         <div className="flex flex-col">
+                      <tr key={r.id} className="hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors">
+                        <td className="py-4 px-6 text-sm text-slate-600 font-medium">{r.date}</td>
+                        <td className="py-4 px-6">
+                          <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-indigo-500 font-mono italic">{stock.find(s => s.name === r.productName)?.sku || 'N/A'}</span>
                             <span className="text-sm font-bold text-slate-900">{r.productName}</span>
-                         </div>
-                      </td>
-                      <td className="py-4 px-6 text-sm text-slate-600 font-semibold">{r.vendorName || 'N/A'}</td>
-                      <td className="py-4 px-6 text-sm font-bold text-slate-900">{r.checked}</td>
-                      <td className="py-4 px-6 text-sm font-bold text-rose-600">{r.damaged}</td>
-                      <td className="py-4 px-6 text-sm font-bold text-amber-600">{r.rejected || 0}</td>
-                      <td className="py-4 px-6 text-sm font-bold text-slate-500">{r.baseless || 0}</td>
-                      <td className="py-4 px-6 text-sm font-black text-emerald-600">
-                        {Number(r.checked) - Number(r.damaged) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0)}
-                      </td>
-                      <td className="py-4 px-6 text-sm">
-                         <div className="flex items-center gap-2">
+                          </div>
+                        </td>
+                        <td className="py-4 px-6 text-sm text-slate-600 font-semibold">{r.vendorName || 'N/A'}</td>
+                        <td className="py-4 px-6 text-sm font-bold text-slate-900">{r.checked}</td>
+                        <td className="py-4 px-6 text-sm font-bold text-rose-600">{r.damaged}</td>
+                        <td className="py-4 px-6 text-sm font-bold text-amber-600">{r.rejected || 0}</td>
+                        <td className="py-4 px-6 text-sm font-bold text-slate-500">{r.baseless || 0}</td>
+                        <td className="py-4 px-6 text-sm font-black text-emerald-600">
+                          {Number(r.checked) - Number(r.damaged) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0)}
+                        </td>
+                        <td className="py-4 px-6 text-sm">
+                          <div className="flex items-center gap-2">
                             {r.images && r.images.length > 0 && (
-                               <div className="flex -space-x-2 mr-2">
-                                  {r.images.map((url, i) => (
-                                     <div 
-                                        key={i} 
-                                        className={`w-6 h-6 rounded-full border-2 border-white overflow-hidden bg-slate-100 shadow-sm cursor-pointer hover:scale-110 transition-transform ${i >= 3 ? 'hidden' : 'inline-block'}`}
-                                        onClick={() => {
-                                          Swal.fire({
-                                            imageUrl: url,
-                                            imageAlt: 'QC Inspection Photo',
-                                            showCloseButton: true,
-                                            showConfirmButton: false,
-                                            background: 'transparent',
-                                            backdrop: `rgba(0,0,0,0.8)`
-                                          });
-                                        }}
-                                      >
-                                        <img src={url} alt="qc" className="w-full h-full object-cover" />
-                                     </div>
-                                  ))}
-                                  {r.images.length > 3 && (
-                                     <button 
-                                      type="button"
-                                      onClick={() => {
-                                         Swal.fire({
-                                           title: 'Inspection Photos',
-                                           html: `<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                              <div className="flex -space-x-2 mr-2">
+                                {r.images.map((url, i) => (
+                                  <div
+                                    key={i}
+                                    className={`w-6 h-6 rounded-full border-2 border-white overflow-hidden bg-slate-100 shadow-sm cursor-pointer hover:scale-110 transition-transform ${i >= 3 ? 'hidden' : 'inline-block'}`}
+                                    onClick={() => {
+                                      Swal.fire({
+                                        imageUrl: url,
+                                        imageAlt: 'QC Inspection Photo',
+                                        showCloseButton: true,
+                                        showConfirmButton: false,
+                                        background: 'transparent',
+                                        backdrop: `rgba(0,0,0,0.8)`
+                                      });
+                                    }}
+                                  >
+                                    <img src={url} alt="qc" className="w-full h-full object-cover" />
+                                  </div>
+                                ))}
+                                {r.images.length > 3 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      Swal.fire({
+                                        title: 'Inspection Photos',
+                                        html: `<div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
                                               ${r.images.map(url => `<img src="${url}" style="width: 100%; border-radius: 8px; cursor: pointer" onclick="window.open('${url}', '_blank')"/>`).join('')}
                                            </div>`,
-                                           width: '600px',
-                                           showConfirmButton: false
-                                         });
-                                      }}
-                                      className="w-6 h-6 rounded-full border-2 border-white bg-indigo-500 text-white text-[8px] flex items-center justify-center font-bold hover:bg-indigo-600 transition-colors"
-                                     >
-                                        +{r.images.length - 3}
-                                     </button>
-                                  )}
-                               </div>
+                                        width: '600px',
+                                        showConfirmButton: false
+                                      });
+                                    }}
+                                    className="w-6 h-6 rounded-full border-2 border-white bg-indigo-500 text-white text-[8px] flex items-center justify-center font-bold hover:bg-indigo-600 transition-colors"
+                                  >
+                                    +{r.images.length - 3}
+                                  </button>
+                                )}
+                              </div>
                             )}
-                            <button 
+                            <button
                               onClick={async (e) => {
-                                  e.preventDefault();
-                                  const toastId = toast.loading("Preparing report... please wait");
-                                  try {
-                                    const title = `QC Report: ${r.productName}`;
-                                    const imageFile = await shareVisualReport([r], 'QC', title);
-                                    toast.dismiss(toastId);
+                                e.preventDefault();
+                                const toastId = toast.loading("Preparing report... please wait");
+                                try {
+                                  const title = `QC Report: ${r.productName}`;
+                                  const imageFile = await shareVisualReport([r], 'QC', title);
+                                  toast.dismiss(toastId);
 
-                                    if (!imageFile) {
-                                      toast.error("Failed to generate report.");
-                                      return;
+                                  if (!imageFile) {
+                                    toast.error("Failed to generate report.");
+                                    return;
+                                  }
+
+                                  // 2. Share via Native API (Mobile - Supports Android/iOS)
+                                  const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
+                                  if (navigator.share) {
+                                    try {
+                                      await navigator.share({
+                                        files: [imageFile]
+                                      });
+                                      return; // Success on Mobile App
+                                    } catch (e) {
+                                      console.log("Native share failed", e);
                                     }
+                                  }
 
-                                    // 2. Share via Native API (Mobile - Supports Android/iOS)
-                                    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-                                    
-                                    if (navigator.share) {
-                                      try {
-                                        await navigator.share({
-                                          files: [imageFile]
-                                        });
-                                        return; // Success on Mobile App
-                                      } catch (e) { 
-                                        console.log("Native share failed", e); 
-                                      }
-                                    }
+                                  // 3. Fallback Logic
+                                  const vendor = vendors.find(v => v.name === r.vendorName);
+                                  const phone = (vendor?.whatsappName || "").replace(/\D/g, "");
 
-                                    // 3. Fallback Logic
-                                    const vendor = vendors.find(v => v.name === r.vendorName);
-                                    const phone = (vendor?.whatsappName || "").replace(/\D/g, "");
+                                  if (isMobile) {
+                                    // Mobile Fallback: Try to open the WhatsApp contact list
+                                    const link = document.createElement('a');
+                                    link.href = URL.createObjectURL(imageFile);
+                                    link.download = imageFile.name;
+                                    link.click();
 
-                                    if (isMobile) {
-                                      // Mobile Fallback: Try to open the WhatsApp contact list
+                                    // If phone exists, go to that contact. Otherwise, go to generic send.
+                                    const whatsappUrl = phone
+                                      ? `https://wa.me/${phone}?text=${encodeURIComponent("Please see the attached QC Report image.")}`
+                                      : `https://api.whatsapp.com/send?text=${encodeURIComponent("Please see the attached QC Report image.")}`;
+                                    window.open(whatsappUrl, "_blank");
+                                  } else {
+                                    // Desktop: Copy to Clipboard + Open WhatsApp Contact Picker
+                                    try {
+                                      const data = [new ClipboardItem({ [imageFile.type]: imageFile })];
+                                      await navigator.clipboard.write(data);
+                                      toast.success("Image copied! Choose a contact and Paste (Ctrl+V).");
+                                    } catch (clipboardErr) {
                                       const link = document.createElement('a');
                                       link.href = URL.createObjectURL(imageFile);
                                       link.download = imageFile.name;
                                       link.click();
-                                      
-                                      // If phone exists, go to that contact. Otherwise, go to generic send.
-                                      const whatsappUrl = phone 
-                                        ? `https://wa.me/${phone}?text=${encodeURIComponent("Please see the attached QC Report image.")}`
-                                        : `https://api.whatsapp.com/send?text=${encodeURIComponent("Please see the attached QC Report image.")}`;
-                                      window.open(whatsappUrl, "_blank");
-                                    } else {
-                                      // Desktop: Copy to Clipboard + Open WhatsApp Contact Picker
-                                      try {
-                                        const data = [new ClipboardItem({ [imageFile.type]: imageFile })];
-                                        await navigator.clipboard.write(data);
-                                        toast.success("Image copied! Choose a contact and Paste (Ctrl+V).");
-                                      } catch (clipboardErr) {
-                                        const link = document.createElement('a');
-                                        link.href = URL.createObjectURL(imageFile);
-                                        link.download = imageFile.name;
-                                        link.click();
-                                        toast.success("Report downloaded. Attach it in WhatsApp.");
-                                      }
-                                      
-                                      // Using /send with text forces the contact selection screen on WhatsApp Web
-                                      window.open(`https://web.whatsapp.com/send?text=${encodeURIComponent("Please see the attached QC Report.")}`, "_blank");
+                                      toast.success("Report downloaded. Attach it in WhatsApp.");
                                     }
-                                  } catch (err) {
-                                    toast.dismiss();
-                                    toast.error("Error sharing report.");
+
+                                    // Using /send with text forces the contact selection screen on WhatsApp Web
+                                    window.open(`https://web.whatsapp.com/send?text=${encodeURIComponent("Please see the attached QC Report.")}`, "_blank");
                                   }
-                               }}
+                                } catch (err) {
+                                  toast.dismiss();
+                                  toast.error("Error sharing report.");
+                                }
+                              }}
                               className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg border border-transparent hover:border-emerald-200 transition-all shadow-sm"
                               title="Share QC via WhatsApp (Images + Text)"
                             >
-                               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
-                                 <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/>
-                               </svg>
+                              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z" />
+                              </svg>
                             </button>
-                            <button 
+                            <button
                               onClick={() => {
                                 if (r.emailSent) return;
                                 Swal.fire({
@@ -1087,7 +1141,7 @@ const DamageTracking = () => {
                             >
                               <Mail size={18} />
                             </button>
-                            <button 
+                            <button
                               onClick={async () => {
                                 try {
                                   await generatePDFReport(r.vendorName, r.date, [r], r.images);
@@ -1101,26 +1155,26 @@ const DamageTracking = () => {
                             >
                               <Download size={18} />
                             </button>
-                         </div>
-                      </td>
-                       <td className="py-4 px-6 text-center">
-                         {isRecordEditable(r.date) ? (
+                          </div>
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          {isRecordEditable(r.date) ? (
                             <div className="flex items-center justify-center gap-1.5">
-                              <button 
+                              <button
                                 onClick={() => handleViewQC(r)}
                                 className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-all"
                                 title="View Details"
                               >
                                 <Eye size={18} />
                               </button>
-                              <button 
+                              <button
                                 onClick={() => handleEditQC(r)}
                                 className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
                                 title="Edit Record"
                               >
                                 <Edit2 size={16} />
                               </button>
-                              <button 
+                              <button
                                 onClick={() => {
                                   Swal.fire({
                                     title: 'Delete QC Record?',
@@ -1135,20 +1189,20 @@ const DamageTracking = () => {
                                       toast.success('Record deleted.');
                                     }
                                   });
-                                }} 
+                                }}
                                 className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
                               >
                                 <Trash2 size={18} />
                               </button>
                             </div>
-                         ) : (
-                           <div className="flex justify-center p-1.5 text-slate-200" title="Records older than 5 days cannot be deleted">
+                          ) : (
+                            <div className="flex justify-center p-1.5 text-slate-200" title="Records older than 5 days cannot be deleted">
                               <Lock size={14} />
-                           </div>
-                         )}
-                       </td>
-                    </tr>
-                  ))
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))
                 )}
               </Table>
             </div>
@@ -1157,57 +1211,57 @@ const DamageTracking = () => {
       ) : (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
           <Card className="border-rose-100 bg-rose-50/20">
-             <div className="mb-4 flex items-center justify-between">
+            <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2 text-rose-600 font-bold">
                 <AlertTriangle size={18} />
                 {isEditing ? 'Edit Damage Record' : 'Log New Damaged Goods'}
               </div>
               {isEditing && (
                 <Button variant="ghost" size="sm" onClick={handleCancel} className="text-rose-600">
-                   <X size={16} className="mr-1" /> Cancel Edit
+                  <X size={16} className="mr-1" /> Cancel Edit
                 </Button>
               )}
             </div>
-            
+
             <form onSubmit={handleDamageSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input 
-                  label="Date Occurred" 
-                  type="date" 
+                <Input
+                  label="Date Occurred"
+                  type="date"
                   value={damageForm.date}
-                  onChange={(e) => setDamageForm({...damageForm, date: e.target.value})}
+                  onChange={(e) => setDamageForm({ ...damageForm, date: e.target.value })}
                   required
                 />
-                <SearchableSelect 
-                  label="Product Name" 
-                  options={stock.map(s => s.name)} 
+                <SearchableSelect
+                  label="Product Name"
+                  options={stock.map(s => s.name)}
                   value={damageForm.productName}
-                  onChange={(val) => setDamageForm({...damageForm, productName: val})}
+                  onChange={(val) => setDamageForm({ ...damageForm, productName: val })}
                   required
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Input 
-                  label="Quantity" 
-                  type="number" 
+                <Input
+                  label="Quantity"
+                  type="number"
                   min="1"
                   value={damageForm.quantity}
-                  onChange={(e) => setDamageForm({...damageForm, quantity: e.target.value})}
+                  onChange={(e) => setDamageForm({ ...damageForm, quantity: e.target.value })}
                   required
                 />
-                <Input 
-                  label="Reason / Remarks" 
+                <Input
+                  label="Reason / Remarks"
                   placeholder="e.g. Broken in transit, expired, etc."
                   value={damageForm.reason}
-                  onChange={(e) => setDamageForm({...damageForm, reason: e.target.value})}
+                  onChange={(e) => setDamageForm({ ...damageForm, reason: e.target.value })}
                   required
                 />
               </div>
-               <div className="flex justify-end gap-3">
+              <div className="flex justify-end gap-3">
                 {isEditing && <Button type="button" variant="secondary" onClick={handleCancel}>Cancel</Button>}
-                  <Button type="submit" variant="danger" loading={isSubmittingDamage}>
-                    <Save size={16} className="mr-2" /> {isEditing ? 'Update Log' : 'Save Log Entry'}
-                  </Button>
+                <Button type="submit" variant="danger" loading={isSubmittingDamage}>
+                  <Save size={16} className="mr-2" /> {isEditing ? 'Update Log' : 'Save Log Entry'}
+                </Button>
               </div>
             </form>
           </Card>
@@ -1220,59 +1274,59 @@ const DamageTracking = () => {
               </h3>
 
               <div className="relative w-full sm:w-64">
-                 <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                 <input 
-                  type="text" 
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
                   placeholder="Search Product..."
                   className="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 outline-none transition-all"
                   value={historySearch}
                   onChange={(e) => setHistorySearch(e.target.value)}
-                 />
+                />
               </div>
               <div className="flex items-center gap-2">
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   className="px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-rose-500/20 outline-none cursor-pointer"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
                   title="Start Date"
                 />
                 <span className="text-slate-400 text-xs">-</span>
-                <input 
-                  type="date" 
+                <input
+                  type="date"
                   className="px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-rose-500/20 outline-none cursor-pointer"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
                   title="End Date"
                 />
               </div>
-              <Button 
+              <Button
                 onClick={async () => {
-                   setIsGeneratingDamageVisual(true);
-                   try {
-                      const filtered = damageRecords.filter(r => {
-                        const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase());
-                        const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
-                        return matchesSearch && matchesDate;
-                      });
-                      const title = startDate || endDate 
-                        ? `Damage Log (${startDate || 'Start'} to ${endDate || 'End'})`
-                        : "Full Damage History Log";
-                      await generateVisualReport(filtered, 'Damage', title, { startDate, endDate });
-                      toast.success('Visual report generated!');
-                   } catch (err) {
-                      console.error(err);
-                      toast.error('Failed to generate visual report');
-                   } finally {
-                      setIsGeneratingDamageVisual(false);
-                   }
+                  setIsGeneratingDamageVisual(true);
+                  try {
+                    const filtered = damageRecords.filter(r => {
+                      const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase());
+                      const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
+                      return matchesSearch && matchesDate;
+                    });
+                    const title = startDate || endDate
+                      ? `Damage Log (${startDate || 'Start'} to ${endDate || 'End'})`
+                      : "Full Damage History Log";
+                    await generateVisualReport(filtered, 'Damage', title, { startDate, endDate });
+                    toast.success('Visual report generated!');
+                  } catch (err) {
+                    console.error(err);
+                    toast.error('Failed to generate visual report');
+                  } finally {
+                    setIsGeneratingDamageVisual(false);
+                  }
                 }}
-                variant="success" 
+                variant="success"
                 size="sm"
                 loading={isGeneratingDamageVisual}
                 className="text-[10px] h-8 px-2 bg-rose-600 hover:bg-rose-700 border-none shadow-md"
               >
-                 <Download size={14} className="mr-1" /> Visual Report
+                <Download size={14} className="mr-1" /> Visual Report
               </Button>
             </div>
 
@@ -1293,64 +1347,64 @@ const DamageTracking = () => {
                     return matchesSearch && matchesDate;
                   })
                   .map(r => (
-                  <tr key={r.id} className="hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 font-medium">
-                    <td className="py-4 px-6 text-sm text-slate-500">{r.date}</td>
-                    <td className="py-4 px-6">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-mono font-bold text-rose-500 uppercase tracking-tighter">{stock.find(s => s.name === r.productName)?.sku || 'N/A'}</span>
-                        <span className="font-bold text-slate-900">{r.productName}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-sm text-slate-900 font-black">{r.quantity}</td>
-                    <td className="py-4 px-6 text-sm">
-                       {r.deducted ? (
-                         <span className="inline-flex items-center px-2 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold italic">YES (-{r.quantity})</span>
-                       ) : (
-                         <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-bold">NO</span>
-                       )}
-                    </td>
-                    <td className="py-4 px-6 text-sm text-slate-500 italic">"{r.reason}"</td>
-                     <td className="py-4 px-6 text-center">
-                       {isRecordEditable(r.date) ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <button 
-                            onClick={() => handleEditDamage(r)}
-                            className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-rose-50 rounded-lg transition-all"
-                            title="Edit Record"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button 
-                            onClick={() => {
-                              Swal.fire({
-                                title: 'Delete Damage Entry?',
-                                text: r.deducted ? 'This will restore the deducted quantity back to your stock.' : 'This will remove the log record (No stock change).',
-                                icon: 'warning',
-                                showCancelButton: true,
-                                confirmButtonColor: '#e11d48',
-                                cancelButtonColor: '#cbd5e1',
-                                confirmButtonText: 'Yes, delete it',
-                                cancelButtonText: 'Cancel'
-                              }).then((result) => {
-                                if (result.isConfirmed) {
-                                  deleteDamageRecord(r.id);
-                                  toast.success('Stock restored.');
-                                }
-                              });
-                            }} 
-                            className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                    <tr key={r.id} className="hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 font-medium">
+                      <td className="py-4 px-6 text-sm text-slate-500">{r.date}</td>
+                      <td className="py-4 px-6">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-mono font-bold text-rose-500 uppercase tracking-tighter">{stock.find(s => s.name === r.productName)?.sku || 'N/A'}</span>
+                          <span className="font-bold text-slate-900">{r.productName}</span>
                         </div>
-                       ) : (
-                         <div className="flex justify-center p-1.5 text-slate-200" title="Records older than 5 days cannot be deleted">
+                      </td>
+                      <td className="py-4 px-6 text-sm text-slate-900 font-black">{r.quantity}</td>
+                      <td className="py-4 px-6 text-sm">
+                        {r.deducted ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold italic">YES (-{r.quantity})</span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-bold">NO</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-6 text-sm text-slate-500 italic">"{r.reason}"</td>
+                      <td className="py-4 px-6 text-center">
+                        {isRecordEditable(r.date) ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleEditDamage(r)}
+                              className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-rose-50 rounded-lg transition-all"
+                              title="Edit Record"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                Swal.fire({
+                                  title: 'Delete Damage Entry?',
+                                  text: r.deducted ? 'This will restore the deducted quantity back to your stock.' : 'This will remove the log record (No stock change).',
+                                  icon: 'warning',
+                                  showCancelButton: true,
+                                  confirmButtonColor: '#e11d48',
+                                  cancelButtonColor: '#cbd5e1',
+                                  confirmButtonText: 'Yes, delete it',
+                                  cancelButtonText: 'Cancel'
+                                }).then((result) => {
+                                  if (result.isConfirmed) {
+                                    deleteDamageRecord(r.id);
+                                    toast.success('Stock restored.');
+                                  }
+                                });
+                              }}
+                              className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex justify-center p-1.5 text-slate-200" title="Records older than 5 days cannot be deleted">
                             <Lock size={14} />
-                         </div>
-                       )}
-                     </td>
-                  </tr>
-                ))
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))
               )}
             </Table>
           </Card>

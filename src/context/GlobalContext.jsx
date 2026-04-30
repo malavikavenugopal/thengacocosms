@@ -66,14 +66,14 @@ export const GlobalProvider = ({ children }) => {
             .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
         
         out: (b2bShipments || []).filter(s => isTargetMonth(s.date) && (!s.status || s.status === 'Dispatched'))
-            .reduce((s, sh) => s + (sh.products || []).filter(p => p.name === productName)
+            .reduce((s, sh) => s + (sh.products || []).filter(p => p.name === productName && p.isPacked !== false)
             .reduce((s2, p) => s2 + (Number(p.quantity) * Number(p.packSize || 1)), 0), 0) +
             (b2cShipments || []).filter(s => isTargetMonth(s.date))
             .reduce((s, sh) => s + (sh.products || []).filter(p => p.name === productName)
             .reduce((s2, p) => s2 + (Number(p.quantity) * Number(p.packSize || 1)), 0), 0),
 
         packed: (b2bShipments || []).filter(s => isTargetMonth(s.date) && s.status === 'Packed')
-            .reduce((s, sh) => s + (sh.products || []).filter(p => p.name === productName)
+            .reduce((s, sh) => s + (sh.products || []).filter(p => p.name === productName && p.isPacked !== false)
             .reduce((s2, p) => s2 + (Number(p.quantity) * Number(p.packSize || 1)), 0), 0),
 
         returned: (returnRecords || []).filter(r => r.productName === productName && r.isReusable && isTargetMonth(r.date))
@@ -256,8 +256,10 @@ export const GlobalProvider = ({ children }) => {
   const addB2BShipment = async (shipment) => {
     await addDoc(collection(db, 'b2bShipments'), shipment);
     for (const p of shipment.products) {
-      const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
-      await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
+      if (p.isPacked !== false) {
+        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+        await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
+      }
     }
   };
 
@@ -267,8 +269,10 @@ export const GlobalProvider = ({ children }) => {
     await deleteDoc(doc(db, 'b2bShipments', String(id)));
     if (shipment) {
       for (const p of shipment.products) {
-        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
-        await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+        if (p.isPacked !== false) {
+          const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+          await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+        }
       }
     }
   };
@@ -277,13 +281,17 @@ export const GlobalProvider = ({ children }) => {
     const oldShipment = b2bShipments.find(s => s.id === id);
     if (!oldShipment) return;
     for (const p of oldShipment.products) {
-      const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
-      await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+      if (p.isPacked !== false) {
+        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+        await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+      }
     }
     await updateDoc(doc(db, 'b2bShipments', String(id)), updatedShipment);
     for (const p of updatedShipment.products) {
-      const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
-      await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
+      if (p.isPacked !== false) {
+        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+        await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
+      }
     }
   };
 
