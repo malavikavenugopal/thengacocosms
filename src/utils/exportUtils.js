@@ -516,20 +516,20 @@ export const exportFormattedStockCheck = (data, period, fileName = 'Stock_Check.
   // Row 1: Title
   tableHtml += `
     <tr>
-      <th colspan="14" class="header-main">${title}</th>
+      <th colspan="16" class="header-main">${title}</th>
     </tr>
   `;
 
   // Row 2: Metadata
   tableHtml += `
     <tr>
-      <th colspan="14" class="header-sub">Generated: ${timestamp}</th>
+      <th colspan="16" class="header-sub">Generated: ${timestamp}</th>
     </tr>
   `;
 
   // Row 3: Headers
   const headers = [
-    'SKU Code', 'SKU Name', 'Period', 'Opening', 'Stock In', 'Produced', 'Used (Raw)', 'Returns', 'Dispatch', 'Replacement', 'Damage', 'Expected', 'Physical', 'Difference'
+    'SKU Code', 'SKU Name', 'Period', 'Opening', 'Stock In', 'Returns', 'Out', 'Packed', 'Dispatched', 'Replacement', 'Damage', 'Rejected', 'Used', 'Expected', 'Physical', 'Difference'
   ];
   
   tableHtml += `<tr>`;
@@ -540,23 +540,25 @@ export const exportFormattedStockCheck = (data, period, fileName = 'Stock_Check.
 
   // Body
   data.forEach(row => {
-    const diff = Number(row.Difference) || 0;
+    const diff = row.Difference !== undefined ? Number(row.Difference) : (Number(row.Physical || 0) - Number(row.Expected || 0));
     let diffClass = 'diff-match';
     if (diff < 0) diffClass = 'diff-neg';
     else if (diff > 0) diffClass = 'diff-pos';
 
     tableHtml += `<tr>`;
-    tableHtml += `<td>${row.SKU_Code || row.SKU || '-'}</td>`;
-    tableHtml += `<td class="product-name">${row.SKU_Name || row.Name}</td>`;
-    tableHtml += `<td>${row.Month || row.Week || period}</td>`;
+    tableHtml += `<td>${row.SKU || row.SKU_Code || '-'}</td>`;
+    tableHtml += `<td class="product-name">${row.Name || row.SKU_Name}</td>`;
+    tableHtml += `<td>${row.Period || period}</td>`;
     tableHtml += `<td>${row.Opening || 0}</td>`;
-    tableHtml += `<td>${row.Production || 0}</td>`;
-    tableHtml += `<td>${row.Produced || 0}</td>`;
-    tableHtml += `<td>${row['Used in Production'] || row['Used In Production'] || 0}</td>`;
-    tableHtml += `<td>${row['Returned Items'] || row.Returns || 0}</td>`;
-    tableHtml += `<td>${row.Dispatch || 0}</td>`;
+    tableHtml += `<td>${row['Stock In'] || row.StockIn || 0}</td>`;
+    tableHtml += `<td>${row.Returns || 0}</td>`;
+    tableHtml += `<td>${row.Dispatch || row.Out || 0}</td>`;
+    tableHtml += `<td>${row.Packed || 0}</td>`;
+    tableHtml += `<td>${row.Dispatched || 0}</td>`;
     tableHtml += `<td>${row.Replacement || 0}</td>`;
     tableHtml += `<td>${row.Damage || 0}</td>`;
+    tableHtml += `<td>${row.Rejected || 0}</td>`;
+    tableHtml += `<td>${row.Used || 0}</td>`;
     tableHtml += `<td class="expected-col">${row.Expected || 0}</td>`;
     tableHtml += `<td class="num-bold">${row.Physical || 0}</td>`;
     tableHtml += `<td class="${diffClass}">${diff > 0 ? `+${diff}` : diff}</td>`;

@@ -120,11 +120,15 @@ const MonthlyStockCheck = () => {
 
         const classify = (target) => {
           if (noPacking && dispatchedThisWeek) {
-            // Scenario 1: No packing step, dispatched this week → Out
+            // Scenario 1: No packing step, dispatched this week → Out & Dispatched
             target.out += qty;
+            target.dispatchedDeduct += qty;
+            target.dispatched += qty;
           } else if (packedThisWeek && dispatchedThisWeek) {
-            // Scenario 2: Packed AND dispatched same week → Out
+            // Scenario 2: Packed AND dispatched same week → Out & Dispatched
             target.out += qty;
+            target.dispatchedDeduct += qty;
+            target.dispatched += qty;
           } else if (packedThisWeek && !dispatchedThisWeek) {
             // Scenario 3: Packed this week, not yet dispatched → Packed
             target.packed += qty;
@@ -145,8 +149,12 @@ const MonthlyStockCheck = () => {
                 // Same logic for bundle components
                 if (noPacking && dispatchedThisWeek) {
                   sums[comp.name].out += compQty;
+                  sums[comp.name].dispatchedDeduct += compQty;
+                  sums[comp.name].dispatched += compQty;
                 } else if (packedThisWeek && dispatchedThisWeek) {
                   sums[comp.name].out += compQty;
+                  sums[comp.name].dispatchedDeduct += compQty;
+                  sums[comp.name].dispatched += compQty;
                 } else if (packedThisWeek) {
                   sums[comp.name].packed += compQty;
                 } else if (packedPrevWeek && dispatchedThisWeek) {
@@ -218,9 +226,26 @@ const MonthlyStockCheck = () => {
     try {
       const dataToExport = stock.filter(item => !item.isComposite).map(item => {
         const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
-        const m = monthlyMovements[item.name] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+        const m = monthlyMovements[item.name] || { out: 0, packed: 0, dispatched: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
         const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
-        return { SKU: item.sku, Name: item.name, Period: activePeriod, Opening: mData.opening || 0, 'Stock In': (Number(mData.in) || 0) + m.purchased + m.produced, Returns: m.returned, Dispatch: m.out, Packed: m.packed || 0, Replacement: m.replacement, Damage: m.damage, Rejected: m.rejected, Expected: expected, Physical: mData.physical || 0, Difference: (Number(mData.physical) || 0) - expected };
+        return { 
+          SKU: item.sku, 
+          Name: item.name, 
+          Period: activePeriod, 
+          Opening: mData.opening || 0, 
+          'Stock In': (Number(mData.in) || 0) + m.purchased + m.produced, 
+          Returns: m.returned, 
+          Dispatch: m.out, 
+          Packed: m.packed || 0, 
+          Dispatched: m.dispatched || 0,
+          Replacement: m.replacement, 
+          Damage: m.damage, 
+          Rejected: m.rejected, 
+          Used: m.used || 0,
+          Expected: expected, 
+          Physical: mData.physical || 0, 
+          Difference: (Number(mData.physical) || 0) - expected 
+        };
       });
       exportFormattedStockCheck(dataToExport, activePeriod, `Stock_Check_${activePeriod}.xlsx`);
     } finally { setIsExporting(false); }
