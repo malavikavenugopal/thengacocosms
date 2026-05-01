@@ -243,7 +243,7 @@ const MonthlyStockCheck = () => {
         <div className="flex flex-wrap items-center gap-2 md:gap-4 w-full md:w-auto">
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2 md:px-3 h-10 flex-shrink-0">
             <Calendar size={14} className="text-slate-400" />
-            <input type="week" className="text-[10px] md:text-xs font-bold text-slate-700 outline-none w-32 bg-transparent" value={activePeriod} onChange={(e) => setActivePeriod(e.target.value)} />
+            <input type="week" className="text-[10px] md:text-xs font-bold text-slate-700 outline-none w-32 bg-transparent" value={activePeriod} onChange={(e) => setSelectedWeek(e.target.value)} />
           </div>
 
           <div className="relative flex-1 sm:min-w-[150px]">

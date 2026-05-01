@@ -100,7 +100,6 @@ const B2BShipments = () => {
         });
         return clientMatch || courierMatch || staffMatch || productMatch;
       }
-
       return true;
     });
   }, [shipments, filterStartDate, filterEndDate, searchTerm, stock, statusFilter]);
