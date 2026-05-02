@@ -20,6 +20,6 @@ export const isRecordEditable = (dateStr) => {
   // Convert time to days
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
-  // Editable if record is today or within the last 5 days
-  return diffDays <= 5;
+  // Unlocked: Allow editing/deletion for all records regardless of date
+  return true;
 };

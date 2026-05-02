@@ -560,9 +560,7 @@ const B2CShipments = () => {
                   </div>
                 </td>
                 <td className="py-4 px-6 text-sm text-center">
-                  <div className="flex items-center justify-center gap-2">
-                    {isRecordEditable(s.date) ? (
-                      <>
+                    <div className="flex items-center justify-center gap-2">
                         <button 
                           onClick={() => handleEdit(s)}
                           className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100"
@@ -577,14 +575,7 @@ const B2CShipments = () => {
                         >
                           <Trash2 size={18} />
                         </button>
-                      </>
-                    ) : (
-                      <span className="p-1.5 text-slate-300 flex items-center gap-1 cursor-not-allowed" title="Records older than 5 days cannot be edited">
-                        <Lock size={16} />
-                        <span className="text-[10px] uppercase font-bold tracking-tighter">Locked</span>
-                      </span>
-                    )}
-                  </div>
+                    </div>
                 </td>
               </tr>
             ))

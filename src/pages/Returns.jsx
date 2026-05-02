@@ -610,12 +610,8 @@ const Returns = () => {
                     <td className="py-4 px-6 text-sm text-slate-500 max-w-xs truncate">{r.reason || '-'}</td>
                     <td className="py-4 px-6 text-right">
                       <div className="flex justify-end gap-1">
-                        {isRecordEditable(r.date) && (
-                          <>
-                            <button onClick={() => handleEdit(r, 'returns')} className="p-1 text-indigo-400 hover:text-indigo-600 shadow-sm rounded p-1 hover:bg-indigo-50"><Edit2 size={16} /></button>
-                            <button onClick={() => handleDelete(r, 'returns')} className="p-1 text-slate-400 hover:text-rose-600 shadow-sm rounded p-1 hover:bg-rose-50"><Trash2 size={16} /></button>
-                          </>
-                        )}
+                          <button onClick={() => handleEdit(r, 'returns')} className="p-1 text-indigo-400 hover:text-indigo-600 shadow-sm rounded p-1 hover:bg-indigo-50"><Edit2 size={16} /></button>
+                          <button onClick={() => handleDelete(r, 'returns')} className="p-1 text-slate-400 hover:text-rose-600 shadow-sm rounded p-1 hover:bg-rose-50"><Trash2 size={16} /></button>
                       </div>
                     </td>
                   </tr>
@@ -660,12 +656,8 @@ const Returns = () => {
                     <td className="py-4 px-6 text-sm text-slate-500 max-w-xs truncate">{r.reason || '-'}</td>
                     <td className="py-4 px-6 text-right">
                       <div className="flex justify-end gap-1">
-                        {isRecordEditable(r.date) && (
-                          <>
-                            <button onClick={() => handleEdit(r, 'replacements')} className="p-1 text-indigo-400 hover:text-indigo-600 shadow-sm rounded p-1 hover:bg-indigo-50"><Edit2 size={16} /></button>
-                            <button onClick={() => handleDelete(r, 'replacements')} className="p-1 text-slate-400 hover:text-rose-600 shadow-sm rounded p-1 hover:bg-rose-50"><Trash2 size={16} /></button>
-                          </>
-                        )}
+                          <button onClick={() => handleEdit(r, 'replacements')} className="p-1 text-indigo-400 hover:text-indigo-600 shadow-sm rounded p-1 hover:bg-indigo-50"><Edit2 size={16} /></button>
+                          <button onClick={() => handleDelete(r, 'replacements')} className="p-1 text-slate-400 hover:text-rose-600 shadow-sm rounded p-1 hover:bg-rose-50"><Trash2 size={16} /></button>
                       </div>
                     </td>
                   </tr>

@@ -411,7 +411,6 @@ const PurchaseManagement = () => {
                           </span>
                         </td>
                         <td className="py-4 px-6 text-center">
-                          {isRecordEditable(r.date) ? (
                               <div className="flex items-center justify-center gap-2">
                                 <button onClick={() => handleEdit(r)} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
                                   <Edit2 size={18} />
@@ -420,11 +419,6 @@ const PurchaseManagement = () => {
                                   <Trash2 size={18} />
                                 </button>
                               </div>
-                          ) : (
-                            <div className="flex justify-center p-1.5 text-slate-200" title="Records older than 5 days cannot be deleted">
-                                <Lock size={16} />
-                            </div>
-                          )}
                         </td>
                       </tr>
                     ))

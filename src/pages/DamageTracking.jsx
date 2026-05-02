@@ -1158,7 +1158,6 @@ const DamageTracking = () => {
                           </div>
                         </td>
                         <td className="py-4 px-6 text-center">
-                          {isRecordEditable(r.date) ? (
                             <div className="flex items-center justify-center gap-1.5">
                               <button
                                 onClick={() => handleViewQC(r)}
@@ -1195,11 +1194,6 @@ const DamageTracking = () => {
                                 <Trash2 size={18} />
                               </button>
                             </div>
-                          ) : (
-                            <div className="flex justify-center p-1.5 text-slate-200" title="Records older than 5 days cannot be deleted">
-                              <Lock size={14} />
-                            </div>
-                          )}
                         </td>
                       </tr>
                     ))
@@ -1365,7 +1359,6 @@ const DamageTracking = () => {
                       </td>
                       <td className="py-4 px-6 text-sm text-slate-500 italic">"{r.reason}"</td>
                       <td className="py-4 px-6 text-center">
-                        {isRecordEditable(r.date) ? (
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => handleEditDamage(r)}
@@ -1397,11 +1390,6 @@ const DamageTracking = () => {
                               <Trash2 size={18} />
                             </button>
                           </div>
-                        ) : (
-                          <div className="flex justify-center p-1.5 text-slate-200" title="Records older than 5 days cannot be deleted">
-                            <Lock size={14} />
-                          </div>
-                        )}
                       </td>
                     </tr>
                   ))

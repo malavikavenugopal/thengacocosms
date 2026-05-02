@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
-import { Plus, Trash2, Save, Hammer, History, Lock, Download, Filter, Package, Box, Layers, User, Search } from 'lucide-react';
+import { Plus, Trash2, Save, Hammer, History, Lock, Download, Filter, Package, Box, Layers, User, Search, Edit, X } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import { isRecordEditable } from '../utils/dateUtils';
 
 const CandleManufacturing = () => {
-  const { stock, staff, productionRecords, addProductionRecord, deleteProductionRecord, drafts, updateDraft, clearDraft, getAvailableStock } = useGlobalState();
+  const { stock, staff, productionRecords, addProductionRecord, updateProductionRecord, deleteProductionRecord, drafts, updateDraft, clearDraft, getAvailableStock } = useGlobalState();
+  const [editingId, setEditingId] = useState(null);
   
   const [formData, setFormData] = useState(() => {
     const defaultDate = new Date().toISOString().split('T')[0];
@@ -30,8 +31,10 @@ const CandleManufacturing = () => {
 
   // Sync draft
   React.useEffect(() => {
-    updateDraft('production', { formData, rawMaterials });
-  }, [formData, rawMaterials]);
+    if (!editingId) {
+      updateDraft('production', { formData, rawMaterials });
+    }
+  }, [formData, rawMaterials, editingId]);
 
   const filteredRecords = useMemo(() => {
     return (productionRecords || []).filter(r => {
@@ -72,22 +75,48 @@ const CandleManufacturing = () => {
           quantity: rm.quantity,
           packSize: stock.find(s => s.name === rm.name)?.packSize || 1
         })),
-        timestamp: Date.now()
+        timestamp: editingId ? productionRecords.find(r => r.id === editingId).timestamp : Date.now()
       };
 
-      await addProductionRecord(recordData);
-      toast.success('Manufacturing record saved & stock updated!');
+      if (editingId) {
+        await updateProductionRecord(editingId, recordData);
+        toast.success('Manufacturing record updated!');
+      } else {
+        await addProductionRecord(recordData);
+        toast.success('Manufacturing record saved & stock updated!');
+      }
       
-      // Reset form
-      setFormData({ staffName: '', productName: '', quantity: '', location: '', date: new Date().toISOString().split('T')[0] });
-      setRawMaterials([{ id: Date.now(), name: '', quantity: '' }]);
-      clearDraft('production');
+      handleReset();
     } catch (error) {
       console.error(error);
-      toast.error('Failed to save manufacturing record');
+      toast.error(editingId ? 'Failed to update record' : 'Failed to save record');
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleReset = () => {
+    setFormData({ staffName: '', productName: '', quantity: '', location: '', date: new Date().toISOString().split('T')[0] });
+    setRawMaterials([{ id: Date.now(), name: '', quantity: '' }]);
+    setEditingId(null);
+    clearDraft('production');
+  };
+
+  const handleEdit = (record) => {
+    setEditingId(record.id);
+    setFormData({
+      staffName: record.staffName,
+      productName: record.productName,
+      quantity: record.quantity,
+      location: record.location || '',
+      date: record.date
+    });
+    setRawMaterials(record.rawMaterials.map((rm, idx) => ({
+      id: Date.now() + idx,
+      name: rm.name,
+      quantity: rm.quantity
+    })));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDelete = (id) => {
@@ -122,9 +151,16 @@ const CandleManufacturing = () => {
       </div>
 
       <Card className="border-indigo-100 bg-indigo-50/10">
-        <div className="flex items-center gap-2 text-indigo-600 font-bold mb-6">
-          <Hammer size={18} />
-          Log Manufacturing Process
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2 text-indigo-600 font-bold">
+            <Hammer size={18} />
+            {editingId ? 'Edit Manufacturing Entry' : 'Log Manufacturing Process'}
+          </div>
+          {editingId && (
+            <Button type="button" variant="ghost" onClick={handleReset} className="text-slate-500 hover:text-slate-700">
+              <X size={16} className="mr-1" /> Cancel Edit
+            </Button>
+          )}
         </div>
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -138,7 +174,7 @@ const CandleManufacturing = () => {
             <div className="lg:col-span-2 space-y-1">
               <SearchableSelect 
                 label="Product Manufactured" 
-                options={stock.map(s => s.name)} 
+                options={stock.filter(s => !s.isComposite).map(s => s.name)} 
                 value={formData.productName}
                 onChange={(val) => setFormData({...formData, productName: val})}
                 required
@@ -196,7 +232,7 @@ const CandleManufacturing = () => {
                   <div className="md:col-span-8 lg:col-span-9 space-y-1">
                     <SearchableSelect 
                       label={rawMaterials[0].id === rm.id ? "Select Raw Material" : undefined}
-                      options={stock.map(s => s.name)}
+                      options={stock.filter(s => !s.isComposite).map(s => s.name)}
                       value={rm.name}
                       onChange={(val) => updateRawMaterial(rm.id, 'name', val)}
                     />
@@ -236,7 +272,7 @@ const CandleManufacturing = () => {
 
           <div className="flex justify-end pt-4 border-t border-indigo-100">
             <Button type="submit" variant="primary" loading={isSubmitting} className="w-full sm:w-auto shadow-xl shadow-indigo-100 px-8">
-              <Save size={18} className="mr-2" /> Save Manufacturing Entry
+              <Save size={18} className="mr-2" /> {editingId ? 'Update Manufacturing Entry' : 'Save Manufacturing Entry'}
             </Button>
           </div>
         </form>
@@ -286,7 +322,14 @@ const CandleManufacturing = () => {
                   </div>
                 </td>
                 <td className="py-4 px-6 text-center">
-                  {isRecordEditable(r.date) ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <button 
+                      onClick={() => handleEdit(r)} 
+                      className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                      title="Edit Record"
+                    >
+                      <Edit size={18} />
+                    </button>
                     <button 
                       onClick={() => handleDelete(r.id)} 
                       className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
@@ -294,11 +337,7 @@ const CandleManufacturing = () => {
                     >
                       <Trash2 size={18} />
                     </button>
-                  ) : (
-                    <div className="flex justify-center p-1.5 text-slate-200" title="Locked (Older than 5 days)">
-                      <Lock size={14} />
-                    </div>
-                  )}
+                  </div>
                 </td>
               </tr>
             ))
