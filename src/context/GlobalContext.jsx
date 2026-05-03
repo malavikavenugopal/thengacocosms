@@ -2,16 +2,17 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { db, auth, storage } from '../firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { ref, uploadBytes, getDownloadURL, getBlob } from 'firebase/storage';
-import { 
-  collection, 
-  onSnapshot, 
-  setDoc, 
-  addDoc, 
-  deleteDoc, 
-  doc, 
+import {
+  collection,
+  onSnapshot,
+  setDoc,
+  addDoc,
+  deleteDoc,
+  doc,
   updateDoc,
+  getDoc,
   query,
-  orderBy 
+  orderBy
 } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 
@@ -42,7 +43,7 @@ export const GlobalProvider = ({ children }) => {
     if (!productName || !stock) return 0;
     const item = stock.find(s => s.name === productName);
     if (!item) return 0;
-    
+
     if (item.isComposite) {
       if (!item.components || item.components.length === 0) return 0;
       const componentStocks = item.components.map(comp => {
@@ -54,62 +55,108 @@ export const GlobalProvider = ({ children }) => {
       // Monthly-Aware Calculation
       const now = new Date();
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      
+
       const isTargetMonth = (dateStr) => dateStr && dateStr.startsWith(currentMonth);
-      
+
       // 1. Get Opening Balance for this month
       const mData = monthlyStockData?.find(d => d.month === currentMonth && d.productId === item.id);
-      
+
       // 2. Filter movements for this month only
       const movements = {
         in: (purchaseRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date))
-            .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
-        
+          .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
+
         out: (b2bShipments || []).filter(s => isTargetMonth(s.date) && (!s.status || s.status === 'Dispatched'))
-            .reduce((s, sh) => s + (sh.products || []).filter(p => p.name === productName && p.isPacked !== false)
-            .reduce((s2, p) => s2 + (Number(p.quantity) * Number(p.packSize || 1)), 0), 0) +
-            (b2cShipments || []).filter(s => isTargetMonth(s.date))
-            .reduce((s, sh) => s + (sh.products || []).filter(p => p.name === productName)
-            .reduce((s2, p) => s2 + (Number(p.quantity) * Number(p.packSize || 1)), 0), 0),
+          .reduce((total, sh) => {
+            return total + (sh.products || []).reduce((shTotal, p) => {
+              let usage = 0;
+              if (p.name === productName) {
+                usage = (Number(p.quantity) * Number(p.packSize || 1));
+              } else {
+                const bundle = (stock || []).find(item => item.name === p.name);
+                if (bundle?.isComposite && bundle.components) {
+                  const comp = bundle.components.find(c => c.name === productName);
+                  if (comp) {
+                    usage = (Number(p.quantity) * Number(p.packSize || 1) * Number(comp.quantity || 1));
+                  }
+                }
+              }
+              return shTotal + usage;
+            }, 0);
+          }, 0) +
+          (b2cShipments || []).filter(s => isTargetMonth(s.date))
+          .reduce((total, sh) => {
+            return total + (sh.products || []).reduce((shTotal, p) => {
+              let usage = 0;
+              if (p.name === productName) {
+                usage = (Number(p.quantity) * Number(p.packSize || 1));
+              } else {
+                const bundle = (stock || []).find(item => item.name === p.name);
+                if (bundle?.isComposite && bundle.components) {
+                  const comp = bundle.components.find(c => c.name === productName);
+                  if (comp) {
+                    usage = (Number(p.quantity) * Number(p.packSize || 1) * Number(comp.quantity || 1));
+                  }
+                }
+              }
+              return shTotal + usage;
+            }, 0);
+          }, 0),
 
         packed: (b2bShipments || []).filter(s => isTargetMonth(s.date) && s.status === 'Packed')
-            .reduce((s, sh) => s + (sh.products || []).filter(p => p.name === productName && p.isPacked !== false)
-            .reduce((s2, p) => s2 + (Number(p.quantity) * Number(p.packSize || 1)), 0), 0),
+          .reduce((total, sh) => {
+            return total + (sh.products || []).reduce((shTotal, p) => {
+              if (p.isPacked === false) return shTotal;
+              let usage = 0;
+              if (p.name === productName) {
+                usage = (Number(p.quantity) * Number(p.packSize || 1));
+              } else {
+                const bundle = (stock || []).find(item => item.name === p.name);
+                if (bundle?.isComposite && bundle.components) {
+                  const comp = bundle.components.find(c => c.name === productName);
+                  if (comp) {
+                    usage = (Number(p.quantity) * Number(p.packSize || 1) * Number(comp.quantity || 1));
+                  }
+                }
+              }
+              return shTotal + usage;
+            }, 0);
+          }, 0),
 
         returned: (returnRecords || []).filter(r => r.productName === productName && r.isReusable && isTargetMonth(r.date))
-            .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
+          .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
 
         damage: (damageRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date))
-            .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0) +
-            (qcRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date) && r.deducted)
+          .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0) +
+          (qcRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date) && r.deducted)
             .reduce((s, r) => s + (Number(r.damaged) * Number(r.packSize || 1)), 0),
 
         rejected: (qcRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date) && r.deducted)
-            .reduce((s, r) => s + (Number(r.rejected) * Number(r.packSize || 1)), 0),
+          .reduce((s, r) => s + (Number(r.rejected) * Number(r.packSize || 1)), 0),
 
         replacement: (replacementRecords || []).filter(r => isTargetMonth(r.date) && r.deducted)
-            .reduce((s, r) => {
-              if (r.products) {
-                return s + r.products
-                  .filter(p => p.name === productName)
-                  .reduce((s2, p) => s2 + (Number(p.quantity) * (Number(p.packSize) || 1)), 0);
-              }
-              return s + (r.productName === productName ? (Number(r.quantity) * (Number(r.packSize) || 1)) : 0);
-            }, 0),
+          .reduce((s, r) => {
+            if (r.products) {
+              return s + r.products
+                .filter(p => p.name === productName)
+                .reduce((s2, p) => s2 + (Number(p.quantity) * (Number(p.packSize) || 1)), 0);
+            }
+            return s + (r.productName === productName ? (Number(r.quantity) * (Number(r.packSize) || 1)) : 0);
+          }, 0),
 
         produced: (productionRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date))
-            .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
-        
+          .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
+
         usedInProduction: (productionRecords || []).filter(r => isTargetMonth(r.date))
-            .reduce((s, r) => s + (r.rawMaterials || [])
-              .filter(rm => rm.name === productName)
-              .reduce((s2, rm) => s2 + (Number(rm.quantity) * (Number(rm.packSize) || 1)), 0), 0)
+          .reduce((s, r) => s + (r.rawMaterials || [])
+            .filter(rm => rm.name === productName)
+            .reduce((s2, rm) => s2 + (Number(rm.quantity) * (Number(rm.packSize) || 1)), 0), 0)
       };
 
       if (!mData) {
         const legacyReplacements = (replacementRecords || []).filter(r => !r.products && r.productName === productName && r.deducted)
           .reduce((s, r) => s + (Number(r.quantity) * (Number(r.packSize) || 1)), 0);
-        
+
         const multiReplacements = (replacementRecords || []).filter(r => r.products && r.deducted)
           .reduce((s, r) => s + (r.products || [])
             .filter(p => p.name === productName)
@@ -130,7 +177,7 @@ export const GlobalProvider = ({ children }) => {
       return (Number(mData.opening) || 0) + totalIn - totalOut;
     }
   };
-  
+
   // Form Drafts for Persistence
   const [drafts, setDrafts] = useState(() => {
     const saved = localStorage.getItem('thenga_form_drafts');
@@ -157,7 +204,7 @@ export const GlobalProvider = ({ children }) => {
 
   // Auth Listener
   useEffect(() => {
-    const unsubAuth = onAuthStateChanged(auth, (user) => {
+    const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const loginTime = localStorage.getItem('thenga_login_timestamp');
         const fifteenDaysInMs = 15 * 24 * 60 * 60 * 1000;
@@ -166,15 +213,37 @@ export const GlobalProvider = ({ children }) => {
           signOut(auth);
           localStorage.removeItem('thenga_login_timestamp');
           setCurrentUser(null);
+          setAuthLoading(false);
         } else {
           if (!loginTime) localStorage.setItem('thenga_login_timestamp', now.toString());
-          setCurrentUser(user);
+          
+          try {
+            const userDoc = await getDoc(doc(db, 'users', user.uid));
+            let role = 'staff';
+            
+            if (userDoc.exists()) {
+              role = userDoc.data().role || 'staff';
+            } else if (user.email === 'admin@thengacoco.com') {
+              role = 'admin';
+              await setDoc(doc(db, 'users', user.uid), {
+                email: user.email,
+                role: 'admin',
+                createdAt: new Date().toISOString()
+              });
+            }
+            
+            setCurrentUser({ ...user, role });
+          } catch (error) {
+            console.error("Error fetching user role:", error);
+            setCurrentUser({ ...user, role: 'staff' });
+          }
+          setAuthLoading(false);
         }
       } else {
         setCurrentUser(null);
         localStorage.removeItem('thenga_login_timestamp');
+        setAuthLoading(false);
       }
-      setAuthLoading(false);
     });
     return () => unsubAuth();
   }, []);
@@ -227,7 +296,7 @@ export const GlobalProvider = ({ children }) => {
     });
 
     return () => {
-      unsubStock(); unsubB2B(); unsubB2C(); unsubDamage(); 
+      unsubStock(); unsubB2B(); unsubB2C(); unsubDamage();
       unsubReturns(); unsubQC(); unsubStaff(); unsubChannels(); unsubCouriers();
       unsubMonthly(); unsubPurchases(); unsubVendors(); unsubReplacements(); unsubProduction();
     };
@@ -449,7 +518,7 @@ export const GlobalProvider = ({ children }) => {
   const updateQCRecord = async (id, updatedRecord, shouldAdjust) => {
     const oldRecord = qcRecords.find(r => r.id === id);
     if (!oldRecord) return;
-    
+
     // 1. Revert old stock adjustment
     if (oldRecord.deducted) {
       const oldIssueQty = (Number(oldRecord.rejected) || 0) + (Number(oldRecord.damaged) || 0);
@@ -458,12 +527,12 @@ export const GlobalProvider = ({ children }) => {
         await updateFirestoreStock(oldRecord.productName, totalUnits, 'sub', 'damage');
       }
     }
-    
+
     // 2. Update record in DB
     const masterSKU = stock.find(s => s.name === updatedRecord.productName);
     const finalized = { ...updatedRecord, packSize: masterSKU?.packSize || 1, deducted: shouldAdjust };
     await updateDoc(doc(db, 'qcRecords', String(id)), finalized);
-    
+
     // 3. Apply new stock adjustment
     if (shouldAdjust) {
       const newIssueQty = (Number(updatedRecord.rejected) || 0) + (Number(updatedRecord.damaged) || 0);
@@ -498,7 +567,7 @@ export const GlobalProvider = ({ children }) => {
     for (const rm of (record.rawMaterials || [])) {
       const rmSKU = stock.find(s => s.name === rm.name);
       const usedUnits = (Number(rm.quantity) || 0) * (rmSKU?.packSize || 1);
-      await updateFirestoreStock(rm.name, usedUnits, 'add', 'used'); 
+      await updateFirestoreStock(rm.name, usedUnits, 'add', 'used');
     }
   };
 

@@ -22,9 +22,8 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
   ];
 
-  const sidebarClasses = `w-64 bg-slate-900 text-slate-300 flex flex-col h-screen fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
-    mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-  }`;
+  const sidebarClasses = `w-64 bg-slate-900 text-slate-300 flex flex-col h-screen fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+    }`;
 
   return (
     <aside className={sidebarClasses}>
@@ -41,7 +40,7 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
           <X size={20} />
         </button>
       </div>
-      
+
       <nav className="flex-1 px-2 py-3 flex flex-col gap-0.5 overflow-y-auto">
         {links.map((link) => (
           <NavLink
@@ -49,10 +48,9 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
             to={link.path}
             onClick={() => setMobileMenuOpen(false)}
             className={({ isActive }) =>
-              `flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-medium transition-all duration-200 text-xs sm:text-sm group ${
-                isActive
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/20'
-                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              `flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-medium transition-all duration-200 text-xs sm:text-sm group ${isActive
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/20'
+                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
               }`
             }
           >
@@ -61,9 +59,9 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
           </NavLink>
         ))}
       </nav>
-      
+
       <div className="p-3 bg-slate-950/30 border-t border-slate-800 space-y-2">
-        <button 
+        <button
           onClick={logout}
           className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg font-medium text-slate-400 hover:bg-rose-500/10 hover:text-rose-400 transition-all duration-200 text-sm"
         >
@@ -75,8 +73,8 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
           <div className="text-sm">
             <p className="font-medium text-white">Stock System v2.0</p>
             <p className="text-xs text-indigo-400 mt-0.5 flex items-center gap-1">
-               <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>
-               Cloud Sync Active
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500 inline-block"></span>
+              Cloud Sync Active
             </p>
           </div>
         </div>

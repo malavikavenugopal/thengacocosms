@@ -10,7 +10,7 @@ const Layout = () => {
   const location = useLocation();
 
   const getPageTitle = () => {
-    switch(location.pathname) {
+    switch (location.pathname) {
       case '/': return 'Dashboard Overview';
       case '/products': return 'SKU Master';
       case '/purchases': return 'Purchase Management';
@@ -33,7 +33,7 @@ const Layout = () => {
   return (
     <div className="min-h-screen bg-[#f8fafc] flex font-sans">
       <Sidebar mobileMenuOpen={mobileMenuOpen} setMobileMenuOpen={setMobileMenuOpen} />
-      
+
       <main className="flex-1 lg:ml-64 flex flex-col min-h-screen transition-all duration-200 min-w-0 overflow-x-hidden">
         {/* Top Navbar */}
         <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 flex items-center justify-between px-4 lg:px-8 sticky top-0 z-40 shadow-sm">
@@ -45,24 +45,24 @@ const Layout = () => {
               {getPageTitle()}
             </h1>
           </div>
-          
+
           <div className="flex items-center gap-3 sm:gap-5">
             <div className="relative hidden xl:block w-80">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input 
-                type="text" 
-                placeholder="Search resources..." 
+              <input
+                type="text"
+                placeholder="Search resources..."
                 className="w-full pl-10 pr-4 py-2 bg-slate-100 border-transparent focus:border-indigo-500 rounded-full text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:bg-white transition-all text-slate-700"
               />
             </div>
-            
+
             <div className="flex items-center gap-3 pl-2 sm:pl-4 border-l border-slate-100">
               <div className="hidden sm:flex flex-col items-end">
                 <p className="text-[10px] sm:text-xs font-bold text-slate-900 leading-none">{currentUser?.email?.split('@')[0] || 'User'}</p>
                 <p className="text-[8px] sm:text-[10px] font-medium text-slate-500 mt-1">Administrator</p>
               </div>
-              
-              <button 
+
+              <button
                 onClick={logout}
                 className="flex items-center gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-rose-50 border border-rose-100 text-rose-600 hover:bg-rose-100 transition-all duration-200"
                 title="Log Out"
@@ -80,7 +80,7 @@ const Layout = () => {
 
         <div className="p-3 sm:p-4 lg:p-8 flex-1 overflow-x-hidden">
           <div className="max-w-7xl mx-auto animate-in fade-in duration-300 slide-in-from-bottom-4">
-             <Outlet />
+            <Outlet />
           </div>
         </div>
       </main>
