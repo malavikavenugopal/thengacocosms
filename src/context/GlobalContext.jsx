@@ -206,53 +206,42 @@ export const GlobalProvider = ({ children }) => {
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const loginTime = localStorage.getItem('thenga_login_timestamp');
-        const fifteenDaysInMs = 15 * 24 * 60 * 60 * 1000;
-        const now = Date.now();
-        if (loginTime && now - parseInt(loginTime) > fifteenDaysInMs) {
-          signOut(auth);
-          localStorage.removeItem('thenga_login_timestamp');
-          setCurrentUser(null);
-          setAuthLoading(false);
-        } else {
-          if (!loginTime) localStorage.setItem('thenga_login_timestamp', now.toString());
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          let role = 'staff';
           
-          try {
-            const userDoc = await getDoc(doc(db, 'users', user.uid));
-            let role = 'staff';
-            
-            if (userDoc.exists()) {
-              role = userDoc.data().role || 'staff';
-            } else if (user.email === 'admin@thengacoco.com') {
-              role = 'admin';
-              await setDoc(doc(db, 'users', user.uid), {
-                email: user.email,
-                role: 'admin',
-                createdAt: new Date().toISOString()
-              });
-            }
-            
-            setCurrentUser({ ...user, role });
-          } catch (error) {
-            console.error("Error fetching user role:", error);
-            setCurrentUser({ ...user, role: 'staff' });
+          if (userDoc.exists()) {
+            role = userDoc.data().role || 'staff';
+          } else if (user.email === 'admin@thengacoco.com') {
+            role = 'admin';
+            await setDoc(doc(db, 'users', user.uid), {
+              email: user.email,
+              role: 'admin',
+              createdAt: new Date().toISOString()
+            });
           }
-          setAuthLoading(false);
+          
+          setCurrentUser({ ...user, role });
+        } catch (error) {
+          console.error("Error fetching user role:", error);
+          setCurrentUser({ ...user, role: 'staff' });
         }
       } else {
         setCurrentUser(null);
-        localStorage.removeItem('thenga_login_timestamp');
-        setAuthLoading(false);
       }
+      setAuthLoading(false);
     });
     return () => unsubAuth();
   }, []);
+
+  const logout = () => signOut(auth);
 
   // Real-time Listeners
   useEffect(() => {
     if (!currentUser) return;
     const unsubStock = onSnapshot(collection(db, 'stock'), (snapshot) => {
       setStock(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      setLoading(false); // Stock is the core data, once it's here, we can show the UI
     });
     const unsubB2B = onSnapshot(query(collection(db, 'b2bShipments'), orderBy('date', 'desc')), (snapshot) => {
       setB2bShipments(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
@@ -292,17 +281,20 @@ export const GlobalProvider = ({ children }) => {
     });
     const unsubProduction = onSnapshot(query(collection(db, 'productionRecords'), orderBy('date', 'desc')), (snapshot) => {
       setProductionRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
-      setLoading(false);
     });
 
+    // Fallback: If data takes too long (e.g. empty database), stop loading after 3 seconds
+    const timeout = setTimeout(() => setLoading(false), 3000);
+
     return () => {
+      clearTimeout(timeout);
       unsubStock(); unsubB2B(); unsubB2C(); unsubDamage();
       unsubReturns(); unsubQC(); unsubStaff(); unsubChannels(); unsubCouriers();
       unsubMonthly(); unsubPurchases(); unsubVendors(); unsubReplacements(); unsubProduction();
     };
   }, [currentUser]);
 
-  const logout = () => signOut(auth);
+
 
   // API Methods
   const updateFirestoreStock = async (productName, quantity, operation = 'add', type = 'out') => {
@@ -692,12 +684,7 @@ export const GlobalProvider = ({ children }) => {
         }
       }
     }}>
-      {currentUser && loading && stock.length === 0 ? (
-        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
-          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-slate-600 font-medium tracking-wide">Syncing data...</p>
-        </div>
-      ) : children}
+      {children}
     </GlobalContext.Provider>
   );
 };

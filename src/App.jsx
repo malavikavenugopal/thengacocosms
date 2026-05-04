@@ -38,6 +38,14 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+const AdminRoute = ({ children }) => {
+  const { currentUser } = useGlobalState();
+  if (currentUser?.role === 'staff') {
+    return <Navigate to="/" replace />;
+  }
+  return children;
+};
+
 function App() {
   return (
     <GlobalProvider>
@@ -61,7 +69,7 @@ function App() {
             <Route path="b2b" element={<B2BShipments />} />
             <Route path="b2c" element={<B2CShipments />} />
             <Route path="damage" element={<DamageTracking />} />
-            <Route path="stock" element={<MonthlyStockCheck />} />
+            <Route path="stock" element={<AdminRoute><MonthlyStockCheck /></AdminRoute>} />
             <Route path="rop" element={<ReorderPoint />} />
             <Route path="manufacturing" element={<CandleManufacturing />} />
             <Route path="reports" element={<Reports />} />

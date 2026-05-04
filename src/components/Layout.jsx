@@ -59,7 +59,9 @@ const Layout = () => {
             <div className="flex items-center gap-3 pl-2 sm:pl-4 border-l border-slate-100">
               <div className="hidden sm:flex flex-col items-end">
                 <p className="text-[10px] sm:text-xs font-bold text-slate-900 leading-none">{currentUser?.email?.split('@')[0] || 'User'}</p>
-                <p className="text-[8px] sm:text-[10px] font-medium text-slate-500 mt-1">Administrator</p>
+                <p className="text-[8px] sm:text-[10px] font-medium text-slate-500 mt-1">
+                  {currentUser?.role === 'admin' ? 'Administrator' : 'Staff Member'}
+                </p>
               </div>
 
               <button

@@ -68,6 +68,21 @@ const Login = () => {
     }
   };
 
+  const handleForgotPassword = async () => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail) {
+      toast.error("Please enter your email address (e.g. admin@thengacoco.com) in the Email field first!");
+      return;
+    }
+    const { sendPasswordResetEmail } = await import('firebase/auth');
+    try {
+      await sendPasswordResetEmail(auth, trimmedEmail);
+      toast.success("Password reset email sent! Check your inbox.");
+    } catch (error) {
+      toast.error("Failed to send reset email: " + error.message);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f8fafc] overflow-hidden relative">
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/5 rounded-full blur-3xl"></div>
@@ -101,7 +116,16 @@ const Login = () => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-semibold text-slate-700 ml-1">Password</label>
+              <div className="flex justify-between items-center ml-1">
+                <label className="text-sm font-semibold text-slate-700">Password</label>
+                <button 
+                  type="button" 
+                  onClick={handleForgotPassword}
+                  className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 transition-colors"
+                >
+                  Forgot Password?
+                </button>
+              </div>
               <div className="relative group">
                 <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-indigo-500 transition-colors">
                   <Lock size={18} />

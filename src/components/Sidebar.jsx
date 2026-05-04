@@ -4,7 +4,7 @@ import { LayoutDashboard, Package, Truck, AlertTriangle, ClipboardList, BarChart
 import { useGlobalState } from '../context/GlobalContext';
 
 const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
-  const { logout } = useGlobalState();
+  const { logout, currentUser } = useGlobalState();
   const links = [
     { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
     { name: 'SKU Master', path: '/products', icon: <Layers size={20} /> },
@@ -20,7 +20,10 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
     { name: 'Reorder Points', path: '/rop', icon: <Package size={20} /> },
     { name: 'Stock Check', path: '/stock', icon: <ClipboardList size={20} /> },
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
-  ];
+  ].filter(link => {
+    if (link.name === 'Stock Check' && currentUser?.role === 'staff') return false;
+    return true;
+  });
 
   const sidebarClasses = `w-64 bg-slate-900 text-slate-300 flex flex-col h-screen fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
     }`;
