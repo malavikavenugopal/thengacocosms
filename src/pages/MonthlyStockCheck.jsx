@@ -55,6 +55,11 @@ const MonthlyStockCheck = () => {
 
   const activePeriod = selectedWeek;
 
+  const isTarget = (dateStr, targetPeriod = activePeriod) => {
+    if (!dateStr || !targetPeriod) return false;
+    return getWeekStr(dateStr) === targetPeriod;
+  };
+
   const handleCarryPhysicalForward = async () => {
     setIsSyncing(true);
     const toastId = toast.loading(`Carrying forward Physical Stock to ${activePeriod}...`);
@@ -77,8 +82,8 @@ const MonthlyStockCheck = () => {
         if (item.isComposite) continue;
         const pData = prevData.find(d => d.productId === item.id);
         if (pData) {
-          const m = prevMovements[item.id] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-          const expected = calculateExpected(pData.opening, pData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+          const m = prevMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+          const expected = calculateExpected(pData.opening, pData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used);
           
           const valueToCarry = (pData.physical !== undefined && pData.physical !== '') ? Number(pData.physical) : expected;
           
@@ -96,114 +101,259 @@ const MonthlyStockCheck = () => {
 
   const getMovements = (periodStr) => {
     const sums = {};
-    const nameToId = {};
-    
-    // Initialize for all products
-    stock.forEach(item => { 
-      sums[item.id] = { 
-        out: 0, directOut: 0, compOut: 0,
-        packed: 0, directPacked: 0, compPacked: 0,
-        dispatched: 0, dispatchedDeduct: 0, 
-        returned: 0, damage: 0, purchased: 0, rejected: 0, 
-        replacement: 0, produced: 0, used: 0 
-      }; 
-      nameToId[item.name] = item.id;
-    });
-    
-    const isTarget = (dateStr) => {
-      if (!dateStr || !periodStr) return false;
-      return getWeekStr(dateStr) === periodStr;
+    const compareNames = (n1, n2) => {
+      if (!n1 || !n2) return false;
+      const clean = (s) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+      return clean(n1) === clean(n2);
     };
 
+    stock.forEach(item => { 
+      sums[item.id] = { out: 0, b2cOut: 0, b2bOut: 0, packed: 0, stockDeduction: 0, returned: 0, damage: 0, purchased: 0, rejected: 0, replacement: 0, produced: 0, used: 0 }; 
+    });
+    
     b2bShipments.forEach(s => { 
+      if (!s.products) return;
       s.products.forEach(p => { 
-        const packedDate  = p.packedDate || s.date;
-        const dispatchDate = s.dispatchDate || s.date;
-        const noPacking   = p.isPacked === false;
+        const pName = p.name || p.productName;
+        const packedDate = p.packedDate || s.packedDate || s.date;
+        const dispatchDate = s.dispatchDate || (s.status === 'Dispatched' ? s.date : null);
+        const noPacking = s.isPacked === false;
 
-        const packedThisWeek     = !noPacking && isTarget(packedDate);
-        const dispatchedThisWeek = s.status === 'Dispatched' && isTarget(dispatchDate);
-        const packedPrevWeek     = !noPacking && !isTarget(packedDate);
+        const packedThisWeek = !noPacking && isTarget(packedDate, periodStr);
+        const dispatchedThisWeek = isTarget(dispatchDate, periodStr);
+        const packedPrevWeek = !noPacking && packedDate && !isTarget(packedDate, periodStr) && getWeekStr(packedDate) < periodStr;
 
-        if (!packedThisWeek && !dispatchedThisWeek) return;
+        const dispatchedPrevWeek = dispatchDate && !isTarget(dispatchDate, periodStr) && getWeekStr(dispatchDate) < periodStr;
+        const qty = (Number(p.quantity) || 0);
+        const master = stock.find(item => compareNames(item.name, pName));
 
-        const qty = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
-        const masterId = nameToId[p.name];
-        const master = stock.find(item => item.id === masterId);
+        const applyB2B = (id, amount) => {
+          if (!sums[id]) return;
+          const t = sums[id];
+          
+          // 1. UI Columns: Show what physically happened this week
+          if (dispatchedThisWeek) {
+            if (packedPrevWeek) {
+              t.dispatched = (t.dispatched || 0) + amount; // Last week packed, this week dispatched
+            } else {
+              t.b2bOut += amount; // Packed and dispatched this week
+            }
+          }
+          // Only show as packed if it hasn't been dispatched at all (not this week, not previous weeks)
+          if (packedThisWeek && !dispatchedThisWeek && !dispatchedPrevWeek) {
+            t.packed += amount;
+          }
 
-        const applyMovements = (targetId, amount, isComponentUsage = false) => {
-          if (!sums[targetId]) return;
-          const target = sums[targetId];
-          if (noPacking && dispatchedThisWeek) {
-            target.out += amount;
-            if (isComponentUsage) target.compOut += amount; else target.directOut += amount;
-            target.dispatchedDeduct += amount;
-            target.dispatched += amount;
-          } else if (packedThisWeek && dispatchedThisWeek) {
-            target.out += amount;
-            if (isComponentUsage) target.compOut += amount; else target.directOut += amount;
-            target.dispatchedDeduct += amount;
-            target.dispatched += amount;
-          } else if (packedThisWeek && !dispatchedThisWeek) {
-            target.packed += amount;
-            if (isComponentUsage) target.compPacked += amount; else target.directPacked += amount;
-          } else if (packedPrevWeek && dispatchedThisWeek) {
-            target.dispatched += amount;
+          // 2. Math: Deduct exactly once
+          if (dispatchedThisWeek && (noPacking || packedThisWeek)) {
+            t.stockDeduction += amount;
+          } else if (packedThisWeek && !dispatchedThisWeek && !dispatchedPrevWeek) {
+            t.stockDeduction += amount;
           }
         };
 
         if (master?.isComposite && master.components) {
           master.components.forEach(comp => {
-            const compId = nameToId[comp.name];
-            if (compId) {
-              const compQty = qty * (Number(comp.quantity) || 1);
-              applyMovements(compId, compQty, true);
-            }
+            const compMaster = stock.find(m => m.id === comp.productId || compareNames(m.name, comp.name));
+            if (compMaster) { applyB2B(compMaster.id, qty * (Number(comp.quantity) || 1)); }
           });
         }
-        
-        if (masterId) {
-          applyMovements(masterId, qty, false);
-        }
+        if (master) { applyB2B(master.id, qty); }
       }); 
     });
 
-    b2cShipments.filter(s => isTarget(s.date)).forEach(s => { 
+    b2cShipments.filter(s => isTarget(s.date, periodStr)).forEach(s => { 
       s.products.forEach(p => { 
-        const qty = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
-        const masterId = nameToId[p.name];
-        const master = stock.find(item => item.id === masterId);
+        const pName = p.name || p.productName;
+        const master = stock.find(item => compareNames(item.name, pName));
+        
+        let effectivePackSize = Number(p.packSize) || 1;
+        
+        const qty = (Number(p.quantity) || 0) * effectivePackSize;
+
+        const applyB2C = (id, amount) => {
+          if (!sums[id]) return;
+          sums[id].b2cOut += amount;
+          sums[id].stockDeduction += amount; // B2C is always immediate deduction
+        };
 
         if (master?.isComposite && master.components) {
           master.components.forEach(comp => {
-            const compId = nameToId[comp.name];
-            if (compId && sums[compId]) {
-              const compQty = qty * (Number(comp.quantity) || 1);
-              sums[compId].out += compQty;
-              sums[compId].compOut += compQty;
+            const compMaster = stock.find(m => m.id === comp.productId || compareNames(m.name, comp.name));
+            let multiplier = Number(comp.quantity) || 1;
+            if (effectivePackSize > 1 && multiplier > 1 && effectivePackSize === multiplier) {
+               multiplier = 1; 
             }
+            if (compMaster) { applyB2C(compMaster.id, qty * multiplier); }
           });
         }
-        
-        if (masterId && sums[masterId]) {
-          sums[masterId].out += qty;
-          sums[masterId].directOut += qty;
-        }
+        if (master) { applyB2C(master.id, qty); }
       }); 
     });
-    damageRecords.filter(r => isTarget(r.date) && r.deducted !== false).forEach(r => { if (sums[r.productName]) sums[r.productName].damage += (Number(r.quantity) || 0) * (Number(r.packSize) || 1); });
-    qcRecords.filter(r => isTarget(r.date) && r.deducted).forEach(r => { if (sums[r.productName]) { sums[r.productName].damage += (Number(r.damaged) || 0) * (Number(r.packSize) || 1); sums[r.productName].rejected += (Number(r.rejected) || 0) * (Number(r.packSize) || 1); } });
-    returnRecords.filter(r => isTarget(r.date) && r.isReusable && r.deducted !== false).forEach(r => { if (sums[r.productName]) sums[r.productName].returned += (Number(r.quantity) || 0) * (Number(r.packSize) || 1); });
-    purchaseRecords.filter(r => isTarget(r.date)).forEach(r => { if (sums[r.productName]) sums[r.productName].purchased += (Number(r.quantity) || 0) * (Number(r.packSize) || 1); });
-    replacementRecords.filter(r => isTarget(r.date) && r.deducted).forEach(r => { const prods = r.products || [{ name: r.productName, quantity: r.quantity, packSize: r.packSize }]; prods.forEach(p => { if (sums[p.name]) sums[p.name].replacement += (Number(p.quantity) || 0) * (Number(p.packSize) || 1); }); });
-    (productionRecords || []).filter(r => isTarget(r.date)).forEach(r => { if (sums[r.productName]) sums[r.productName].produced += (Number(r.quantity) || 0) * (Number(r.packSize) || 1); (r.rawMaterials || []).forEach(rm => { if (sums[rm.name]) sums[rm.name].used += (Number(rm.quantity) || 0) * (Number(rm.packSize) || 1); }); });
+
+    damageRecords.filter(r => isTarget(r.date)).forEach(r => { 
+      const master = stock.find(s => compareNames(s.name, r.productName));
+      if (master && sums[master.id]) { sums[master.id].damage += (Number(r.quantity) || 0) * (Number(r.packSize) || 1); }
+    });
+    qcRecords.filter(r => isTarget(r.date) && r.deducted).forEach(r => { 
+      const master = stock.find(s => compareNames(s.name, r.productName));
+      if (master && sums[master.id]) { 
+        sums[master.id].damage += (Number(r.damaged) || 0) * (Number(r.packSize) || 1); 
+        sums[master.id].rejected += (Number(r.rejected) || 0) * (Number(r.packSize) || 1); 
+      } 
+    });
+    returnRecords.filter(r => isTarget(r.date) && r.isReusable && r.deducted !== false).forEach(r => { 
+      const master = stock.find(s => compareNames(s.name, r.productName));
+      if (master && sums[master.id]) { sums[master.id].returned += (Number(r.quantity) || 0) * (Number(r.packSize) || 1); }
+    });
+    purchaseRecords.filter(r => isTarget(r.date)).forEach(r => { 
+      const master = stock.find(s => compareNames(s.name, r.productName));
+      if (master && sums[master.id]) { sums[master.id].purchased += (Number(r.quantity) || 0) * (Number(r.packSize) || 1); }
+    });
+    replacementRecords.filter(r => isTarget(r.date) && r.deducted).forEach(r => { 
+      const prods = r.products || [{ name: r.productName, quantity: r.quantity, packSize: r.packSize }]; 
+      prods.forEach(p => { 
+        const master = stock.find(s => compareNames(s.name, p.name));
+        if (master && sums[master.id]) { sums[master.id].replacement += (Number(p.quantity) || 0) * (Number(p.packSize) || 1); }
+      }); 
+    });
+    (productionRecords || []).filter(r => isTarget(r.date)).forEach(r => { 
+      const master = stock.find(s => compareNames(s.name, r.productName));
+      if (master && sums[master.id]) { sums[master.id].produced += (Number(r.quantity) || 0) * (Number(r.packSize) || 1); }
+      (r.rawMaterials || []).forEach(rm => { 
+        const rmMaster = stock.find(s => compareNames(s.name, rm.name));
+        if (rmMaster && sums[rmMaster.id]) { sums[rmMaster.id].used += (Number(rm.quantity) || 0) * (Number(rm.packSize) || 1); }
+      }); 
+    });
+
+    // Final UI cleanup: Out = B2C + B2B Dispatched
+    Object.keys(sums).forEach(id => {
+      sums[id].out = sums[id].b2cOut + sums[id].b2bOut;
+    });
+
     return sums;
+  };
+
+  const getProductMovements = (product, period) => {
+    const results = { in: [], b2bOut: [], b2cOut: [], packed: [], sent: [], onHold: [], adjustments: [] };
+    if (!product) return results;
+
+    const compareNames = (n1, n2) => {
+      if (!n1 || !n2) return false;
+      const clean = (s) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+      return clean(n1) === clean(n2);
+    };
+
+    // B2B Shipments
+    b2bShipments.forEach(s => {
+      if (!s.products || !Array.isArray(s.products)) return;
+
+      const dDate = s.dispatchDate || (s.status === 'Dispatched' ? s.date : null);
+      const noPacking = s.isPacked === false;
+
+      s.products.forEach(p => {
+        const pDate = p.packedDate || s.packedDate || s.date;
+        const dispatchedThisWeek = isTarget(dDate, period);
+        const packedThisWeek = !noPacking && isTarget(pDate, period);
+        const packedPrevWeek = !noPacking && pDate && !isTarget(pDate, period) && getWeekStr(pDate) < (period || activePeriod);
+        let matchQty = 0;
+        const pName = p.name || p.productName;
+        
+        if (compareNames(product.name, pName)) {
+          matchQty = Number(p.quantity) || 0;
+        } else {
+          const parentProduct = stock.find(st => compareNames(st.name, pName) && st.isComposite);
+          if (parentProduct) {
+            const component = (parentProduct.components || []).find(c => {
+              return compareNames(c.name, product.name) || c.productId === product.id;
+            });
+            if (component) matchQty = (Number(p.quantity) || 0) * (Number(component.quantity) || 1);
+          }
+        }
+
+        if (matchQty > 0) {
+          const viaText = `VIA: ${pName} (QTY: ${p.quantity || 0}, PACK: ${p.packSize || 1})`.toUpperCase();
+          const item = { 
+            id: `${s.id}-${pName}`, 
+            label: s.clientName || s.customerName || 'B2B Order', 
+            impact: matchQty, 
+            sublabel: `${s.date}${pName !== product.name ? ` (via ${pName})` : ''}`,
+            detail: viaText
+          };
+          
+          const dispatchedPrevWeek = dDate && !isTarget(dDate, period) && getWeekStr(dDate) < (period || activePeriod);
+
+          if (dispatchedThisWeek) {
+            if (noPacking || packedThisWeek) results.b2bOut.push(item);
+            else results.sent.push(item);
+          } else if (packedThisWeek && !dispatchedPrevWeek) {
+             results.packed.push(item);
+          }
+        }
+      });
+    });
+
+    // B2C Shipments
+    b2cShipments.filter(s => isTarget(s.date, period)).forEach(s => {
+      s.products.forEach(p => {
+        const master = stock.find(item => compareNames(item.name, p.name));
+        
+        let effectivePackSize = Number(p.packSize) || 1;
+        const qty = (Number(p.quantity) || 0) * effectivePackSize;
+        
+        let impact = 0;
+        if (compareNames(p.name, product.name)) impact = qty;
+        else if (master?.isComposite) {
+          const comp = master.components?.find(c => compareNames(c.name, product.name));
+          if (comp) {
+            let multiplier = Number(comp.quantity) || 1;
+            if (effectivePackSize > 1 && multiplier > 1 && effectivePackSize === multiplier) {
+               multiplier = 1; 
+            }
+            impact = qty * multiplier;
+          }
+        }
+
+        if (impact > 0) {
+          const viaText = `VIA: ${p.name} (QTY: ${p.quantity || 0}, PACK: ${p.packSize || 1})`.toUpperCase();
+          results.b2cOut.push({
+            id: `${s.id}-${p.name}`,
+            label: s.channel || 'B2C Order',
+            sublabel: s.date,
+            detail: viaText,
+            impact
+          });
+        }
+      });
+    });
+
+    // Other Records
+    purchaseRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name)).forEach(r => {
+      results.in.push({ id: r.id, label: `Purchase: ${r.vendorName}`, impact: r.quantity * (r.packSize || 1), color: 'emerald' });
+    });
+    productionRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name)).forEach(r => {
+      results.in.push({ id: r.id, label: `Mfg: ${r.location}`, impact: r.quantity * (r.packSize || 1), color: 'indigo' });
+    });
+    returnRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name) && r.isReusable && r.deducted !== false).forEach(r => {
+      results.in.push({ id: r.id, label: `Return: ${r.channel}`, impact: r.quantity * (r.packSize || 1), color: 'blue' });
+    });
+    damageRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name)).forEach(r => {
+      results.adjustments.push({ id: r.id, label: 'Damage/Loss', impact: r.quantity * (r.packSize || 1), color: 'red' });
+    });
+    qcRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name)).forEach(r => {
+      if (r.rejected) results.adjustments.push({ id: `${r.id}-rej`, label: 'QC Rejected', impact: r.rejected * (r.packSize || 1), color: 'rose' });
+      if (r.damaged) results.adjustments.push({ id: `${r.id}-dmg`, label: 'QC Damaged', impact: r.damaged * (r.packSize || 1), color: 'rose' });
+    });
+
+    return results;
   };
 
   const monthlyMovements = useMemo(() => getMovements(activePeriod), [activePeriod, b2bShipments, b2cShipments, damageRecords, returnRecords, qcRecords, purchaseRecords, replacementRecords, productionRecords, stock]);
 
-  const calculateExpected = (opening, otherIn, purchased, produced, returned, out, packed, replacement, damage, rejected, used) => 
-    Number(opening || 0) + Number(otherIn || 0) + Number(purchased || 0) + Number(produced || 0) + Number(returned || 0) - Number(out || 0) - Number(packed || 0) - Number(replacement || 0) - Number(damage || 0) - Number(rejected || 0) - Number(used || 0);
+  const productMovements = useMemo(() => getProductMovements(selectedProductDetails, activePeriod), [selectedProductDetails, activePeriod, b2bShipments, b2cShipments, purchaseRecords, productionRecords, returnRecords, damageRecords, qcRecords, stock]);
+
+  const calculateExpected = (opening, otherIn, purchased, produced, returned, stockDeduction, replacement, damage, rejected, used) => 
+    Number(opening || 0) + Number(otherIn || 0) + Number(purchased || 0) + Number(produced || 0) + Number(returned || 0) - Number(stockDeduction || 0) - Number(replacement || 0) - Number(damage || 0) - Number(rejected || 0) - Number(used || 0);
 
   useEffect(() => {
     if (!monthlyMovements || stock.length === 0) return;
@@ -211,8 +361,8 @@ const MonthlyStockCheck = () => {
       stock.forEach(item => {
         if (item.isComposite) return;
         const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
-        const m = monthlyMovements[item.name] || { out: 0, packed: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-        const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+        const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+        const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used);
         if (mData.expected !== expected) {
           saveMonthlyStock(activePeriod, item.id, { expected });
         }
@@ -236,8 +386,8 @@ const MonthlyStockCheck = () => {
       for (const item of prevData) {
         const product = stock.find(s => s.id === item.productId);
         if (!product) continue;
-        const m = prevMovements[product.name] || { out: 0, packed: 0, returned: 0, damage: 0, purchased: 0, produced: 0, rejected: 0, replacement: 0, used: 0 };
-        const expected = calculateExpected(item.opening, item.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+        const m = prevMovements[product.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, purchased: 0, produced: 0, rejected: 0, replacement: 0, used: 0 };
+        const expected = calculateExpected(item.opening, item.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used);
         await saveMonthlyStock(activePeriod, item.productId, { opening: expected });
         await saveMonthlyStock(prevPeriodStr, item.productId, { expected });
       }
@@ -250,8 +400,8 @@ const MonthlyStockCheck = () => {
     try {
       const dataToExport = stock.filter(item => !item.isComposite).map(item => {
         const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
-        const m = monthlyMovements[item.name] || { out: 0, packed: 0, dispatched: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-        const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+        const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, dispatched: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+        const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used);
         return { 
           SKU: item.sku, 
           Name: item.name, 
@@ -336,8 +486,8 @@ const MonthlyStockCheck = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredStock.map((item) => {
                 const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
-                const m = monthlyMovements[item.id] || { out: 0, packed: 0, dispatched: 0, dispatchedDeduct: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-                const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+                const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+                const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used);
                 const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : null;
                 const diff = physical !== null ? physical - expected : null;
                 
@@ -349,8 +499,8 @@ const MonthlyStockCheck = () => {
                     <td className="py-3 px-1 text-center">
                       <input type="number" className="w-14 mx-auto block px-1 py-1 text-center text-xs border border-slate-200 rounded outline-none" value={mData.opening || ''} onChange={(e) => {
                         const val = e.target.value === '' ? '' : Number(e.target.value);
-                        const m = monthlyMovements[item.id] || { out: 0, packed: 0, dispatchedDeduct: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-                        const expected = calculateExpected(val, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+                      const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+                      const expected = calculateExpected(val, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used);
                         saveMonthlyStock(activePeriod, item.id, { opening: val, expected });
                       }} />
                     </td>
@@ -368,8 +518,8 @@ const MonthlyStockCheck = () => {
                       <div className="flex items-center gap-1">
                         <input type="number" className="w-16 mx-auto block px-2 py-1 text-center text-sm border border-slate-300 rounded outline-none font-bold bg-white focus:border-indigo-500" value={mData.physical || ''} onChange={(e) => {
                           const val = e.target.value === '' ? '' : Number(e.target.value);
-                          const m = monthlyMovements[item.id] || { out: 0, packed: 0, dispatchedDeduct: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-                          const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+                          const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+                          const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used);
                           saveMonthlyStock(activePeriod, item.id, { physical: val, expected });
                         }} placeholder="--" />
                         {(mData.physical !== undefined && mData.physical !== '') && <button onClick={() => saveMonthlyStock(activePeriod, item.id, { physical: '' })} className="p-0.5 text-slate-400 hover:text-red-500"><X size={12} /></button>}
@@ -398,8 +548,8 @@ const MonthlyStockCheck = () => {
       <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-4 pb-24 lg:pb-6">
         {filteredStock.map((item) => {
           const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
-          const m = monthlyMovements[item.id] || { out: 0, packed: 0, dispatched: 0, dispatchedDeduct: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-          const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+          const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+          const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used);
           const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : null;
           const diff = physical !== null ? physical - expected : null;
 
@@ -429,8 +579,8 @@ const MonthlyStockCheck = () => {
                     <div className="relative">
                       <input type="number" className="w-full px-3 py-2 text-base font-black bg-indigo-50/30 border-2 border-indigo-200 rounded-lg outline-none text-indigo-700 focus:border-indigo-500" value={mData.physical || ''} onChange={(e) => {
                         const val = e.target.value === '' ? '' : Number(e.target.value);
-                        const m = monthlyMovements[item.id] || { out: 0, packed: 0, dispatchedDeduct: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-                        const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used);
+                      const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+                      const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used);
                         saveMonthlyStock(activePeriod, item.id, { physical: val, expected });
                       }} placeholder="Enter Count" />
                       {(mData.physical !== undefined && mData.physical !== '') && <button onClick={() => saveMonthlyStock(activePeriod, item.id, { physical: '' })} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-300"><X size={14}/></button>}
@@ -458,109 +608,161 @@ const MonthlyStockCheck = () => {
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
             <div className="px-6 py-4 bg-slate-900 text-white flex items-center justify-between">
-               <div className="flex items-center gap-3"><Layers className="text-indigo-400" size={24}/><div><h3 className="text-lg font-bold">Transaction History</h3><p className="text-[10px] text-slate-400 uppercase tracking-widest">{selectedProductDetails.name} • {activePeriod}</p></div></div>
+               <div className="flex items-center gap-3">
+                 <Layers className="text-indigo-400" size={24}/>
+                 <div>
+                   <h3 className="text-lg font-bold">Transaction History</h3>
+                   <p className="text-[10px] text-slate-400 uppercase tracking-widest">{selectedProductDetails.name} • {activePeriod}</p>
+                 </div>
+               </div>
                <button onClick={() => setSelectedProductDetails(null)} className="p-1.5 hover:bg-white/10 rounded-lg transition-colors"><X size={20} /></button>
             </div>
+            
             <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 bg-slate-50/50">
-               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                    <div className="flex items-center gap-2 mb-4 text-emerald-600"><TrendingUp size={20}/><h4 className="font-bold">Inventory In</h4></div>
-                    <ul className="space-y-2">
-                      {purchaseRecords.filter(r => getWeekStr(r.date) === activePeriod && r.productName === selectedProductDetails.name).map(r => <li key={r.id} className="flex justify-between items-center text-xs p-2 bg-slate-50 rounded-lg"><span className="font-medium text-slate-500">Purchase Order</span><span className="font-bold text-emerald-600">+{r.quantity}</span></li>)}
-                      {productionRecords.filter(r => getWeekStr(r.date) === activePeriod && r.productName === selectedProductDetails.name).map(r => <li key={r.id} className="flex justify-between items-center text-xs p-2 bg-slate-50 rounded-lg"><span className="font-medium text-slate-500">Manufacturing</span><span className="font-bold text-indigo-600">+{r.quantity}</span></li>)}
-                      <li className="pt-2 mt-2 border-t border-slate-100 flex justify-between items-center font-bold text-xs"><span>Total Additions</span><span>+{(Number(monthlyStockData.find(d => d.month === activePeriod && d.productId === selectedProductDetails.id)?.in) || 0) + (monthlyMovements[selectedProductDetails.id]?.purchased || 0) + (monthlyMovements[selectedProductDetails.id]?.produced || 0)}</span></li>
-                    </ul>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Card 1: Inventory In */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full">
+                  <div className="flex items-center gap-2 mb-4 text-emerald-600">
+                    <TrendingUp size={20}/>
+                    <h4 className="font-bold uppercase tracking-tight text-sm">Inventory In</h4>
                   </div>
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm md:col-span-2">
-                    <div className="flex items-center gap-2 mb-4 text-amber-600"><TrendingDown size={20}/><h4 className="font-bold">Inventory Out / Deductions</h4></div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <ul className="space-y-2">
-                        {b2cShipments.filter(s => getWeekStr(s.date) === activePeriod && s.products.some(p => {
-                          if (p.name === selectedProductDetails.name) return true;
-                          const bundle = stock.find(item => item.name === p.name);
-                          return bundle?.isComposite && bundle.components?.some(c => c.name === selectedProductDetails.name);
-                        })).map(s => {
-                          const directP = s.products.find(p => p.name === selectedProductDetails.name);
-                          let directQty = directP ? (Number(directP.quantity) || 0) * (Number(directP.packSize) || 1) : 0;
-                          let bundleQty = 0;
-                          let bundleNames = [];
-                          
-                          s.products.forEach(sp => {
-                            if (sp.name === selectedProductDetails.name) return;
-                            const bundle = stock.find(item => item.name === sp.name);
-                            if (bundle?.isComposite) {
-                              const comp = bundle.components.find(c => c.name === selectedProductDetails.name);
-                              if (comp) {
-                                const bQty = (Number(sp.quantity) || 0) * (Number(sp.packSize) || 1) * (Number(comp.quantity) || 1);
-                                bundleQty += bQty;
-                                bundleNames.push(`${sp.name} (-${bQty})`);
-                              }
-                            }
-                          });
+                  <ul className="space-y-2 flex-1 max-h-[250px] overflow-y-auto pr-2 scrollbar-thin">
+                    {productMovements.in.map(item => (
+                      <li key={item.id} className={`flex justify-between items-center text-xs p-2 bg-${item.color}-50/50 rounded border-l-2 border-${item.color}-400`}>
+                        <span className="font-medium text-slate-600">{item.label}</span>
+                        <span className={`font-black text-${item.color}-600`}>+{item.impact}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center font-black text-sm text-slate-900">
+                    <span>Total In</span>
+                    <span className="text-emerald-600">
+                      +{ (Number(monthlyStockData.find(d => d.month === activePeriod && d.productId === selectedProductDetails.id)?.in) || 0) + 
+                         (monthlyMovements[selectedProductDetails.id]?.purchased || 0) + 
+                         (monthlyMovements[selectedProductDetails.id]?.produced || 0) + 
+                         (monthlyMovements[selectedProductDetails.id]?.returned || 0) }
+                    </span>
+                  </div>
+                </div>
 
-                          return (
-                            <li key={s.id} className="text-xs p-2 bg-slate-50 rounded-lg space-y-1">
-                              <div className="flex justify-between items-center">
-                                <span className="font-medium text-slate-500">{s.channel || 'B2C'} Order ({s.date.split('T')[0]})</span>
-                                <span className="font-bold text-orange-600">-{directQty + bundleQty}</span>
-                              </div>
-                              {(directQty > 0 || bundleQty > 0) && (
-                                <div className="text-[9px] text-slate-400">
-                                  {directQty > 0 && <span>Direct Sale: -{directQty} </span>}
-                                  {bundleNames.length > 0 && <span>| In Bundle: {bundleNames.join(', ')}</span>}
-                                </div>
-                              )}
-                            </li>
-                          );
-                        })}
-                        <li className="pt-2 mt-2 border-t border-slate-100 flex justify-between items-center font-bold text-xs text-slate-900">
-                          <span>Total Out</span>
-                          <span>-{monthlyMovements[selectedProductDetails.id]?.out || 0}</span>
+                {/* Card 2: B2C Out */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full">
+                  <div className="flex items-center gap-2 mb-4 text-amber-600">
+                    <ShoppingCart size={20}/>
+                    <h4 className="font-bold uppercase tracking-tight text-sm">B2C Shipments</h4>
+                  </div>
+                  <ul className="space-y-2 flex-1 max-h-[250px] overflow-y-auto pr-2 scrollbar-thin">
+                    {productMovements.b2cOut.map(item => (
+                      <li key={item.id} className="flex justify-between items-center text-xs p-2 bg-amber-50/50 rounded border-l-2 border-amber-400">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-slate-700">{item.label}</span>
+                          <span className="text-[10px] text-slate-400">{item.sublabel}</span>
+                          {item.detail && <span className="text-[9px] font-bold text-emerald-600 mt-0.5">{item.detail}</span>}
+                        </div>
+                        <span className="font-black text-amber-600">-{item.impact}</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center font-black text-sm text-slate-900">
+                    <span>B2C Total</span>
+                    <span className="text-amber-600">-{monthlyMovements[selectedProductDetails.id]?.b2cOut || 0}</span>
+                  </div>
+                </div>
+
+                {/* Card 3: B2B Activity */}
+                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full">
+                  <div className="flex items-center gap-2 mb-4 text-orange-600">
+                    <Package size={20}/>
+                    <h4 className="font-bold uppercase tracking-tight text-sm">B2B Activity (Dispatched)</h4>
+                  </div>
+                  <ul className="space-y-2 flex-1 max-h-[250px] overflow-y-auto pr-2 scrollbar-thin">
+                    {productMovements.b2bOut.map(item => (
+                      <li key={item.id} className="flex justify-between items-center text-xs p-2 bg-orange-50/50 rounded border-l-2 border-orange-400">
+                        <div className="flex flex-col">
+                          <span className="font-bold text-slate-700">{item.label}</span>
+                          <span className="text-[10px] text-slate-400">{item.sublabel}</span>
+                          {item.detail && <span className="text-[9px] font-bold text-emerald-600 mt-0.5">{item.detail}</span>}
+                        </div>
+                        <span className="font-black text-orange-600">-{item.impact}</span>
+                      </li>
+                    ))}
+                    {productMovements.sent.map(item => (
+                      <li key={item.id} className="flex justify-between items-center text-xs p-2 bg-slate-50 rounded border-l-2 border-slate-200 opacity-80">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-slate-500">{item.label}</span>
+                          <span className="text-[10px] text-slate-400">{item.sublabel} (Prev. Packed)</span>
+                          {item.detail && <span className="text-[9px] font-bold text-emerald-600 mt-0.5">{item.detail}</span>}
+                        </div>
+                        <span className="font-bold text-slate-400">{item.impact}*</span>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center font-black text-sm text-slate-900">
+                    <div className="flex flex-col">
+                      <span>B2B Total Deducted</span>
+                      <span className="text-[9px] text-slate-400 font-normal">*Prev. packed items not deducted again</span>
+                    </div>
+                    <span className="text-orange-600">-{monthlyMovements[selectedProductDetails.id]?.b2bOut || 0}</span>
+                  </div>
+                </div>
+
+                {/* Bottom Row Grid */}
+                <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Packed & Pending */}
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col h-full">
+                    <h4 className="font-bold text-[10px] text-slate-400 uppercase tracking-widest mb-3">Packed & Pending</h4>
+                    <div className="space-y-4 flex-1">
+                      {productMovements.packed.map(item => (
+                        <li key={item.id} className="flex justify-between items-center text-xs p-2 bg-amber-50/50 rounded border-l-2 border-amber-300 list-none">
+                          <div className="flex flex-col">
+                            <span className="font-medium text-slate-600">{item.label}</span>
+                            <span className="text-[10px] text-slate-400">{item.sublabel}</span>
+                            {item.detail && <span className="text-[9px] font-bold text-emerald-600 mt-0.5">{item.detail}</span>}
+                          </div>
+                          <span className="font-bold text-amber-600">-{item.impact}</span>
                         </li>
-                      </ul>
-                      <ul className="space-y-2">
-                        <li className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-2">B2B Packed (Pending Dispatch)</li>
-                        {b2bShipments.filter(s => {
-                          const p = s.products.find(prod => prod.name === selectedProductDetails.name);
-                          if (!p || p.isPacked === false) return false;
-                          const isPackedThisWeek = getWeekStr(p.packedDate || s.date) === activePeriod;
-                          const isDispatchedThisWeek = s.status === 'Dispatched' && getWeekStr(s.dispatchDate || s.date) === activePeriod;
-                          return isPackedThisWeek && !isDispatchedThisWeek;
-                        }).map(s => <li key={s.id} className="flex justify-between items-center text-xs p-2 bg-slate-50 rounded-lg"><span className="font-medium text-slate-500">{s.clientName} (Packed)</span><span className="font-bold text-orange-500">-{s.products.find(p => p.name === selectedProductDetails.name).quantity}</span></li>)}
-                        <li className="pt-2 mt-2 border-t border-slate-100 flex justify-between items-center font-bold text-xs text-slate-900"><span>Total Packed</span><span>-{monthlyMovements[selectedProductDetails.id]?.packed || 0}</span></li>
-                      </ul>
-                      <ul className="space-y-2 md:col-span-2">
-                        <li className="font-bold text-[10px] text-slate-400 uppercase tracking-wider mb-2">B2B Dispatched (Deducted This Week)</li>
-                        {b2bShipments.filter(s => {
-                          const p = s.products.find(prod => prod.name === selectedProductDetails.name);
-                          if (!p || s.status !== 'Dispatched') return false;
-                          const isPackedPrevWeek = getWeekStr(p.packedDate || s.date) !== activePeriod;
-                          const isDispatchedThisWeek = getWeekStr(s.dispatchDate || s.date) === activePeriod;
-                          return isPackedPrevWeek && isDispatchedThisWeek;
-                        }).map(s => <li key={s.id} className="flex justify-between items-center text-xs p-2 bg-blue-50 rounded-lg"><span className="font-medium text-blue-600">{s.clientName} (Dispatch)</span><span className="font-bold text-blue-700">-{s.products.find(p => p.name === selectedProductDetails.name).quantity}</span></li>)}
-                        <li className="pt-2 mt-2 border-t border-slate-100 flex justify-between items-center font-bold text-xs text-slate-900">
-                          <span>Weekly Impact</span>
-                          <span>-{(monthlyMovements[selectedProductDetails.id]?.out || 0) + (monthlyMovements[selectedProductDetails.id]?.packed || 0)}</span>
+                      ))}
+                      {productMovements.onHold.map(item => (
+                        <li key={item.id} className="flex justify-between items-center text-xs p-2 bg-slate-50 rounded border-l-2 border-slate-200 opacity-60 list-none">
+                          <span className="font-medium text-slate-400">{item.label}</span>
+                          <span className="font-bold text-slate-400">-{item.impact}*</span>
                         </li>
-                      </ul>
+                      ))}
+                    </div>
+                    <div className="mt-4 pt-2 border-t border-slate-100 flex justify-between items-center font-bold text-xs">
+                      <span className="text-slate-400">Reserved (This Week)</span>
+                      <span className="text-slate-600">-{monthlyMovements[selectedProductDetails.id]?.packed || 0}</span>
                     </div>
                   </div>
+
+                  {/* Adjustments */}
                   <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm md:col-span-2">
-                    <div className="flex items-center gap-2 mb-4 text-blue-500"><TrendingUp size={20} className="rotate-90"/><h4 className="font-bold">Dispatched (Packed Previous Weeks)</h4></div>
-                    <ul className="space-y-2">
-                      {b2bShipments.filter(s => {
-                        const p = s.products.find(prod => prod.name === selectedProductDetails.name);
-                        if (!p || s.status !== 'Dispatched') return false;
-                        const isPackedThisWeek = p.isPacked !== false && getWeekStr(p.packedDate || s.date) === activePeriod;
-                        const isDispatchedThisWeek = getWeekStr(s.dispatchDate || s.date) === activePeriod;
-                        return !isPackedThisWeek && isDispatchedThisWeek;
-                      }).map(s => <li key={s.id} className="flex justify-between items-center text-xs p-2 bg-blue-50 rounded-lg"><span className="font-medium text-slate-600">{s.clientName} (Dispatched)</span><span className="font-bold text-blue-600">{s.products.find(p => p.name === selectedProductDetails.name).quantity} Units</span></li>)}
-                      <li className="pt-2 mt-2 border-t border-slate-100 flex justify-between items-center font-bold text-xs text-slate-900"><span>Total Past Dispatches</span><span>{(monthlyMovements[selectedProductDetails.id]?.dispatched || 0) - (monthlyMovements[selectedProductDetails.id]?.dispatchedDeduct || 0)}</span></li>
-                    </ul>
+                    <h4 className="font-bold text-[10px] text-slate-400 uppercase tracking-widest mb-3">Other Adjustments</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <ul className="space-y-2">
+                        {productMovements.adjustments.map(item => (
+                          <li key={item.id} className={`flex justify-between items-center text-xs p-2 bg-${item.color}-50/50 rounded border-l-2 border-${item.color}-400`}>
+                            <span className="font-medium text-slate-600">{item.label}</span>
+                            <span className={`font-bold text-${item.color}-600`}>-{item.impact}</span>
+                          </li>
+                        ))}
+                      </ul>
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <p className="text-[10px] text-slate-400 uppercase font-bold mb-2">Weekly Summary</p>
+                        <div className="space-y-2 text-xs">
+                          <div className="flex justify-between"><span>Total Dispatch</span><span className="font-bold text-slate-700">-{monthlyMovements[selectedProductDetails.id]?.out || 0}</span></div>
+                          <div className="flex justify-between"><span>Damage/Other</span><span className="font-bold text-slate-700">-{Number(monthlyMovements[selectedProductDetails.id]?.damage || 0) + Number(monthlyMovements[selectedProductDetails.id]?.rejected || 0) + Number(monthlyMovements[selectedProductDetails.id]?.replacement || 0)}</span></div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-               </div>
+                </div>
+              </div>
             </div>
-            <div className="p-4 bg-white border-t border-slate-200 flex justify-end"><Button onClick={() => setSelectedProductDetails(null)} variant="secondary" className="w-full md:w-auto">Close History</Button></div>
+            
+            <div className="p-4 bg-white border-t border-slate-200 flex justify-end">
+              <Button onClick={() => setSelectedProductDetails(null)} variant="secondary" className="w-full md:w-auto">Close History</Button>
+            </div>
           </div>
         </div>
       )}

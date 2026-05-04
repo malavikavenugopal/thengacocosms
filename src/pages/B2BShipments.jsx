@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Card, Input, Select, SearchableSelect, MultiSelect, Button, Table } from '../components/ui';
-import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Truck, Package, Box, Layers } from 'lucide-react';
+import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Truck, Package, Box, Layers, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 
@@ -36,6 +36,7 @@ const B2BShipments = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isGeneratingVisual, setIsGeneratingVisual] = useState(false);
+  const [selectedSummaryProduct, setSelectedSummaryProduct] = useState(null);
 
   // Filters
   const [filterStartDate, setFilterStartDate] = useState(() => {
@@ -688,11 +689,17 @@ const B2BShipments = () => {
                 .filter(p => p.isPacked !== false)
                 .reduce((acc, p) => {
                   const master = stock.find(item => item.name === p.name);
-                  const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+                  
+                  let effectivePackSize = Number(p.packSize) || 1;
+                  const totalUnits = (Number(p.quantity) || 0) * effectivePackSize;
                   
                   if (master?.isComposite && master.components) {
                     master.components.forEach(comp => {
-                      const compUnits = totalUnits * (Number(comp.quantity) || 1);
+                      let multiplier = Number(comp.quantity) || 1;
+                      if (effectivePackSize > 1 && multiplier > 1 && effectivePackSize === multiplier) {
+                         multiplier = 1; 
+                      }
+                      const compUnits = totalUnits * multiplier;
                       if (!acc[comp.name]) acc[comp.name] = 0;
                       acc[comp.name] += compUnits;
                     });
@@ -719,8 +726,19 @@ const B2BShipments = () => {
                     <td className="py-4 px-6 text-sm">
                       <span className="text-[10px] font-mono font-bold text-indigo-500 bg-indigo-50 px-1 rounded">{masterSKU?.sku || 'N/A'}</span>
                     </td>
-                    <td className="py-4 px-6 text-sm">{name}</td>
-                    <td className="py-4 px-6 text-sm text-right pr-12 font-black text-indigo-600">{units} Units</td>
+                    <td className="py-4 px-6 text-sm font-bold">{name}</td>
+                    <td className="py-4 px-6 text-sm">
+                      <div className="flex items-center justify-end gap-3 pr-12">
+                        <span className="font-black text-indigo-600">{units} Units</span>
+                        <button 
+                          onClick={() => setSelectedSummaryProduct(name)}
+                          className="p-1.5 bg-indigo-50 text-indigo-600 rounded hover:bg-indigo-100 transition-colors"
+                          title="View Orders"
+                        >
+                          <Eye size={16} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 );
               });
@@ -728,6 +746,77 @@ const B2BShipments = () => {
           </Table>
         </div>
       </Card>
+
+      {selectedSummaryProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="flex justify-between items-center p-6 border-b border-slate-100 bg-slate-50">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">{selectedSummaryProduct}</h3>
+                <p className="text-sm text-slate-500">Orders contributing to this product</p>
+              </div>
+              <button onClick={() => setSelectedSummaryProduct(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto bg-slate-50/50">
+              <div className="space-y-3">
+                {filteredShipments.filter(s => {
+                  return (s.products || []).filter(p => p.isPacked !== false).some(p => {
+                    if (p.name === selectedSummaryProduct) return true;
+                    const master = stock.find(item => item.name === p.name);
+                    if (master?.isComposite && master.components) {
+                      return master.components.some(c => c.name === selectedSummaryProduct);
+                    }
+                    return false;
+                  });
+                }).map(s => {
+                  let contribution = 0;
+                  let contributingProducts = [];
+                  (s.products || []).filter(p => p.isPacked !== false).forEach(p => {
+                    const master = stock.find(item => item.name === p.name);
+                    
+                    let effectivePackSize = Number(p.packSize) || 1;
+                    const totalUnits = (Number(p.quantity) || 0) * effectivePackSize;
+                    
+                    if (p.name === selectedSummaryProduct) {
+                      contribution += totalUnits;
+                      contributingProducts.push(`${p.name} (Qty: ${p.quantity || 0}, Pack: ${p.packSize || 1})`);
+                    } else {
+                      if (master?.isComposite && master.components) {
+                         const comp = master.components.find(c => c.name === selectedSummaryProduct);
+                         if (comp) {
+                           let multiplier = Number(comp.quantity) || 1;
+                           if (effectivePackSize > 1 && multiplier > 1 && effectivePackSize === multiplier) {
+                              multiplier = 1; 
+                           }
+                           contribution += totalUnits * multiplier;
+                           contributingProducts.push(`${p.name} (Qty: ${p.quantity || 0}, Pack: ${p.packSize || 1})`);
+                         }
+                      }
+                    }
+                  });
+
+                  if (contribution === 0) return null;
+
+                  return (
+                    <div key={s.id} className="flex justify-between items-center p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                      <div>
+                        <div className="font-bold text-slate-800">{s.clientName}</div>
+                        <div className="text-xs text-slate-500 mb-1">{s.date} • Courier: {s.courierName}</div>
+                        <div className="text-[10px] font-bold text-indigo-600/80 uppercase tracking-widest">Via: {Array.from(new Set(contributingProducts)).join(', ')}</div>
+                      </div>
+                      <div className="font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">
+                        {contribution} Units
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
