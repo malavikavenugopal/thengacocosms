@@ -23,6 +23,7 @@ const Layout = () => {
       case '/damage': return 'Damage Tracking';
       case '/stock': return 'Stock Check';
       case '/manufacturing': return 'Candle Manufacturing';
+      case '/rework': return 'Rework Log Entry';
       case '/reports': return 'Analytics & Reports';
       default: return 'Overview';
     }
@@ -82,7 +83,7 @@ const Layout = () => {
 
         <div className="p-3 sm:p-4 lg:p-8 flex-1 overflow-x-hidden">
           <div className="max-w-7xl mx-auto animate-in fade-in duration-300 slide-in-from-bottom-4">
-            <Outlet />
+            <Outlet key={location.pathname} />
           </div>
         </div>
       </main>

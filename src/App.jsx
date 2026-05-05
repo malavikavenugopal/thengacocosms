@@ -13,6 +13,7 @@ import Staff from './pages/Staff';
 import Channels from './pages/Channels';
 import Couriers from './pages/Couriers';
 import Returns from './pages/Returns';
+import ReworkLog from './pages/ReworkLog';
 import PurchaseManagement from './pages/PurchaseManagement';
 import ReorderPoint from './pages/ReorderPoint';
 import CandleManufacturing from './pages/CandleManufacturing';
@@ -72,6 +73,7 @@ function App() {
             <Route path="stock" element={<AdminRoute><MonthlyStockCheck /></AdminRoute>} />
             <Route path="rop" element={<ReorderPoint />} />
             <Route path="manufacturing" element={<CandleManufacturing />} />
+            <Route path="rework" element={<ReworkLog />} />
             <Route path="reports" element={<Reports />} />
           </Route>
         </Routes>

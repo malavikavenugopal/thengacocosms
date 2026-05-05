@@ -35,6 +35,7 @@ export const GlobalProvider = ({ children }) => {
   const [replacementRecords, setReplacementRecords] = useState([]);
   const [monthlyStockData, setMonthlyStockData] = useState([]);
   const [productionRecords, setProductionRecords] = useState([]);
+  const [reworkRecords, setReworkRecords] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
@@ -183,10 +184,10 @@ export const GlobalProvider = ({ children }) => {
     const saved = localStorage.getItem('thenga_form_drafts');
     try {
       return saved ? JSON.parse(saved) : {
-        b2b: null, b2c: null, purchase: null, return: null, damage: null, qc: null, replacement: null, production: null
+        b2b: null, b2c: null, purchase: null, return: null, damage: null, qc: null, replacement: null, production: null, rework: null
       };
     } catch (e) {
-      return { b2b: null, b2c: null, purchase: null, return: null, damage: null, qc: null, replacement: null, production: null };
+      return { b2b: null, b2c: null, purchase: null, return: null, damage: null, qc: null, replacement: null, production: null, rework: null };
     }
   });
 
@@ -194,13 +195,13 @@ export const GlobalProvider = ({ children }) => {
     localStorage.setItem('thenga_form_drafts', JSON.stringify(drafts));
   }, [drafts]);
 
-  const updateDraft = (module, data) => {
+  const updateDraft = React.useCallback((module, data) => {
     setDrafts(prev => ({ ...prev, [module]: data }));
-  };
+  }, []);
 
-  const clearDraft = (module) => {
+  const clearDraft = React.useCallback((module) => {
     setDrafts(prev => ({ ...prev, [module]: null }));
-  };
+  }, []);
 
   // Auth Listener
   useEffect(() => {
@@ -282,6 +283,9 @@ export const GlobalProvider = ({ children }) => {
     const unsubProduction = onSnapshot(query(collection(db, 'productionRecords'), orderBy('date', 'desc')), (snapshot) => {
       setProductionRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
+    const unsubRework = onSnapshot(query(collection(db, 'reworkRecords'), orderBy('outDate', 'desc')), (snapshot) => {
+      setReworkRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
 
     // Fallback: If data takes too long (e.g. empty database), stop loading after 3 seconds
     const timeout = setTimeout(() => setLoading(false), 3000);
@@ -290,7 +294,7 @@ export const GlobalProvider = ({ children }) => {
       clearTimeout(timeout);
       unsubStock(); unsubB2B(); unsubB2C(); unsubDamage();
       unsubReturns(); unsubQC(); unsubStaff(); unsubChannels(); unsubCouriers();
-      unsubMonthly(); unsubPurchases(); unsubVendors(); unsubReplacements(); unsubProduction();
+      unsubMonthly(); unsubPurchases(); unsubVendors(); unsubReplacements(); unsubProduction(); unsubRework();
     };
   }, [currentUser]);
 
@@ -446,6 +450,22 @@ export const GlobalProvider = ({ children }) => {
     }
   };
 
+  const updateReturnRecord = async (id, updatedRecord, shouldAdjust) => {
+    const oldRecord = returnRecords.find(r => r.id === id);
+    if (!oldRecord) return;
+    if (oldRecord.deducted && oldRecord.isReusable) {
+      const totalUnits = (Number(oldRecord.quantity) || 0) * (Number(oldRecord.packSize) || 1);
+      await updateFirestoreStock(oldRecord.productName, totalUnits, 'sub', 'returned');
+    }
+    const masterSKU = stock.find(s => s.name === updatedRecord.productName);
+    const finalized = { ...updatedRecord, packSize: masterSKU?.packSize || 1, deducted: shouldAdjust };
+    await updateDoc(doc(db, 'returnRecords', String(id)), finalized);
+    if (shouldAdjust && updatedRecord.isReusable) {
+      const totalUnits = (Number(updatedRecord.quantity) || 0) * (masterSKU?.packSize || 1);
+      await updateFirestoreStock(updatedRecord.productName, totalUnits, 'add', 'returned');
+    }
+  };
+
   const addPurchaseRecord = async (record) => {
     const masterSKU = stock.find(s => s.name === record.productName);
     const finalized = { ...record, packSize: masterSKU?.packSize || 1 };
@@ -550,6 +570,43 @@ export const GlobalProvider = ({ children }) => {
     }
   };
 
+  const deleteReplacementRecord = async (id) => {
+    if (!id) return;
+    const record = replacementRecords.find(r => r.id === id);
+    await deleteDoc(doc(db, 'replacementRecords', String(id)));
+    if (record && record.deducted) {
+      const products = record.products || [{ name: record.productName, quantity: record.quantity, packSize: record.packSize }];
+      for (const p of products) {
+        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+        await updateFirestoreStock(p.name, totalUnits, 'sub', 'replacement');
+      }
+    }
+  };
+
+  const updateReplacementRecord = async (id, updatedRecord, shouldDeduct) => {
+    const oldRecord = replacementRecords.find(r => r.id === id);
+    if (!oldRecord) return;
+    if (oldRecord.deducted) {
+      const oldProducts = oldRecord.products || [{ name: oldRecord.productName, quantity: oldRecord.quantity, packSize: oldRecord.packSize }];
+      for (const p of oldProducts) {
+        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+        await updateFirestoreStock(p.name, totalUnits, 'sub', 'replacement');
+      }
+    }
+    const processedProducts = (updatedRecord.products || []).map(p => {
+      const master = stock.find(s => s.name === p.name);
+      return { ...p, packSize: master?.packSize || 1 };
+    });
+    const finalized = { ...updatedRecord, products: processedProducts, deducted: shouldDeduct };
+    await updateDoc(doc(db, 'replacementRecords', String(id)), finalized);
+    if (shouldDeduct) {
+      for (const p of processedProducts) {
+        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+        await updateFirestoreStock(p.name, totalUnits, 'add', 'replacement');
+      }
+    }
+  };
+
   const addProductionRecord = async (record) => {
     const masterSKU = stock.find(s => s.name === record.productName);
     const finalized = { ...record, packSize: masterSKU?.packSize || 1 };
@@ -616,21 +673,26 @@ export const GlobalProvider = ({ children }) => {
   const updateSKU = async (id, updates) => { await updateDoc(doc(db, 'stock', id), updates); };
   const deleteSKU = async (id) => { await deleteDoc(doc(db, 'stock', id)); };
 
+  const addReworkRecord = async (record) => { await addDoc(collection(db, 'reworkRecords'), record); };
+  const updateReworkRecord = async (id, record) => { await updateDoc(doc(db, 'reworkRecords', id), record); };
+  const deleteReworkRecord = async (id) => { await deleteDoc(doc(db, 'reworkRecords', id)); };
+
   return (
     <GlobalContext.Provider value={{
       stock, addSKU, updateSKU, deleteSKU,
       b2bShipments, addB2BShipment, deleteB2BShipment, updateB2BShipment,
       b2cShipments, addB2CShipment, deleteB2CShipment, updateB2CShipment,
       damageRecords, addDamageRecord, deleteDamageRecord, updateDamageRecord,
-      returnRecords, addReturnRecord, deleteReturnRecord,
+      returnRecords, addReturnRecord, deleteReturnRecord, updateReturnRecord,
       purchaseRecords, addPurchaseRecord, deletePurchaseRecord, updatePurchaseRecord,
       qcRecords, addQCRecord, updateQCRecord, deleteQCRecord,
-      replacementRecords, addReplacementRecord,
+      replacementRecords, addReplacementRecord, updateReplacementRecord, deleteReplacementRecord,
       productionRecords, addProductionRecord, updateProductionRecord, deleteProductionRecord,
       staff, addStaffMember, updateStaffMember, deleteStaffMember,
       channels, addChannel, updateChannel, deleteChannel,
       couriers, addCourier, updateCourier, deleteCourier,
       vendors, addVendor, updateVendor, deleteVendor,
+      reworkRecords, addReworkRecord, updateReworkRecord, deleteReworkRecord,
       monthlyStockData, saveMonthlyStock: async (month, productId, updates) => {
         const id = `${month}_${productId}`;
         await setDoc(doc(db, 'monthlyStockData', id), { ...updates, month, productId }, { merge: true });

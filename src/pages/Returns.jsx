@@ -138,14 +138,20 @@ const Returns = () => {
     e.preventDefault();
     const newRecord = {
       ...formData,
-      isReusable: formData.condition === 'Good (Reuse)',
+      isReusable: formData.condition === 'Good (Reuse)' || formData.condition === 'Recovered (From Rejected)',
       isDamaged: formData.condition === 'Damaged (Waste)',
+      isFromRejected: formData.condition === 'Recovered (From Rejected)',
       id: Date.now()
     };
 
-    const confirmText = newRecord.isReusable 
-      ? `Record for ${formData.quantity} reusable units. Apply stock change?`
-      : `Record for ${formData.quantity} damaged units. History only (No stock change).`;
+    let confirmText = '';
+    if (formData.condition === 'Recovered (From Rejected)') {
+      confirmText = `Record for ${formData.quantity} units recovered from Rejected stock. Apply stock in?`;
+    } else if (newRecord.isReusable) {
+      confirmText = `Record for ${formData.quantity} reusable units. Apply stock change?`;
+    } else {
+      confirmText = `Record for ${formData.quantity} damaged units. History only (No stock change).`;
+    }
 
     Swal.fire({
       title: isEditing ? 'Update Log?' : 'Log Entry?',
@@ -216,7 +222,7 @@ const Returns = () => {
         channel: record.channel,
         date: record.date,
         reason: record.reason || '',
-        condition: record.isReusable ? 'Good (Reuse)' : 'Damaged (Waste)'
+        condition: record.isFromRejected ? 'Recovered (From Rejected)' : (record.isReusable ? 'Good (Reuse)' : 'Damaged (Waste)')
       });
     } else {
       setRepForm({
@@ -317,7 +323,7 @@ const Returns = () => {
                 />
                 <Select 
                   label="Condition" 
-                  options={['Good (Reuse)', 'Damaged (Waste)']}
+                  options={['Good (Reuse)', 'Damaged (Waste)', 'Recovered (From Rejected)']}
                   value={formData.condition}
                   onChange={(e) => setFormData({...formData, condition: e.target.value})}
                   required
@@ -588,8 +594,11 @@ const Returns = () => {
                   <tr key={r.id} className="hover:bg-slate-50 transition-colors">
                     <td className="py-4 px-6 text-sm text-slate-600">{r.date}</td>
                     <td className="py-4 px-6 text-sm">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.isReusable ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
-                        {r.isReusable ? 'RESTOCK' : 'DAMAGED'}
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        r.isFromRejected ? 'bg-amber-100 text-amber-800' : 
+                        (r.isReusable ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800')
+                      }`}>
+                        {r.isFromRejected ? 'REJECTED -> STOCK' : (r.isReusable ? 'RESTOCK' : 'DAMAGED')}
                       </span>
                     </td>
                     <td className="py-4 px-6 text-sm">

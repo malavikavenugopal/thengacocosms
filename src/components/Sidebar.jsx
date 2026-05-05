@@ -10,6 +10,7 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
     { name: 'SKU Master', path: '/products', icon: <Layers size={20} /> },
     { name: 'Purchase Stock', path: '/purchases', icon: <ShoppingCart size={20} /> },
     { name: 'Candle Manufacturing', path: '/manufacturing', icon: <Hammer size={20} /> },
+    { name: 'Rework Log', path: '/rework', icon: <RotateCcw size={20} /> },
     { name: 'Staff Management', path: '/staff', icon: <Users size={20} /> },
     { name: 'Channel Management', path: '/channels', icon: <Globe size={20} /> },
     { name: 'Courier Management', path: '/couriers', icon: <Truck size={20} /> },
@@ -49,7 +50,7 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
           <NavLink
             key={link.path}
             to={link.path}
-            onClick={() => setMobileMenuOpen(false)}
+            onClick={() => setMobileMenuOpen && setMobileMenuOpen(false)}
             className={({ isActive }) =>
               `flex items-center gap-2.5 px-3 py-1.5 rounded-lg font-medium transition-all duration-200 text-xs sm:text-sm group ${isActive
                 ? 'bg-indigo-600 text-white shadow-md shadow-indigo-900/20'
@@ -57,7 +58,9 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
               }`
             }
           >
-            <span className="transition-transform duration-200 group-hover:scale-110 child-icon">{React.cloneElement(link.icon, { size: 18 })}</span>
+            <span className="transition-transform duration-200 group-hover:scale-110 child-icon">
+              {link.icon && React.isValidElement(link.icon) ? React.cloneElement(link.icon, { size: 18 }) : null}
+            </span>
             {link.name}
           </NavLink>
         ))}
