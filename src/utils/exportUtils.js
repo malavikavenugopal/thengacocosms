@@ -275,14 +275,7 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
       }
 
       // Product specific columns
-      // Smart detection: If packSize is 1 but name contains "Set of X", use X
-      let effectivePackSize = Number(p.packSize) || 1;
-      if (effectivePackSize === 1) {
-        const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-        if (match && match[1]) {
-          effectivePackSize = Number(match[1]);
-        }
-      }
+      const effectivePackSize = Number(p.packSize) || 1;
 
       const totalUnits = (Number(p.quantity) || 0) * effectivePackSize;
       grandTotalUnits += totalUnits;

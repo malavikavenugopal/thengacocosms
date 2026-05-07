@@ -55,11 +55,7 @@ const Reports = () => {
         let qtyForThisProduct = 0;
         (s.products || []).forEach(sp => {
            if (sp.name === p.name) {
-             let ps = Number(sp.packSize) || 1;
-             if (ps === 1) {
-               const match = sp.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-               if (match && match[1]) ps = Number(match[1]);
-             }
+             const ps = Number(sp.packSize) || Number(p.packSize) || 1;
              qtyForThisProduct += (Number(sp.quantity) || 0) * ps;
            } else {
              // Check if sp is a bundle containing p
@@ -115,15 +111,10 @@ const Reports = () => {
 
       (s.products || []).forEach(p => {
         // Direct match
-        let ps = Number(p.packSize) || 1;
-        if (ps === 1) {
-          const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-          if (match && match[1]) ps = Number(match[1]);
-        }
+        const masterSKU = stock.find(item => item.name === p.name);
+        const ps = Number(p.packSize) || Number(masterSKU?.packSize) || 1;
         const shipmentQty = (Number(p.quantity) || 0) * ps;
 
-        // Try to find the SKU in stock
-        const masterSKU = stock.find(item => item.name === p.name);
         if (masterSKU?.isComposite && masterSKU.components) {
           // If it's a bundle, add to its components instead
           masterSKU.components.forEach(comp => {
@@ -198,11 +189,7 @@ const Reports = () => {
         let direct = 0;
         (s.products || []).forEach(sp => {
           if (sp.name === p.name) {
-            let ps = Number(sp.packSize) || 1;
-            if (ps === 1) {
-              const match = sp.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-              if (match && match[1]) ps = Number(match[1]);
-            }
+            const ps = Number(sp.packSize) || Number(p.packSize) || 1;
             direct += (Number(sp.quantity) || 0) * ps;
           } else {
             // Check if sp is a bundle containing p
@@ -223,11 +210,7 @@ const Reports = () => {
         let direct = 0;
         (s.products || []).forEach(sp => {
           if (sp.name === p.name) {
-            let ps = Number(sp.packSize) || 1;
-            if (ps === 1) {
-              const match = sp.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-              if (match && match[1]) ps = Number(match[1]);
-            }
+            const ps = Number(sp.packSize) || Number(p.packSize) || 1;
             direct += (Number(sp.quantity) || 0) * ps;
           } else {
             // Check if sp is a bundle containing p
@@ -278,11 +261,8 @@ const Reports = () => {
           Channel: s.type === 'B2B' ? s.whoParceled : s.channel,
           Products: (s.products || []).map(p => `${p.name} (${p.quantity})`).join(', '),
           TotalUnits: s.products.reduce((sum, p) => {
-            let ps = Number(p.packSize) || 1;
-            if (ps === 1) {
-              const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-              if (match && match[1]) ps = Number(match[1]);
-            }
+            const master = stock.find(item => item.name === p.name);
+            const ps = Number(p.packSize) || Number(master?.packSize) || 1;
             return sum + (Number(p.quantity) * ps);
           }, 0)
         }));
@@ -521,11 +501,7 @@ const Reports = () => {
                         <div className="flex flex-col gap-2">
                           {(s.products || []).map((p, idx) => {
                             const masterSKU = stock.find(item => item.name === p.name);
-                            let ps = Number(p.packSize) || 1;
-                            if (ps === 1) {
-                              const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                              if (match && match[1]) ps = Number(match[1]);
-                            }
+                            const ps = Number(p.packSize) || Number(masterSKU?.packSize) || 1;
                             return (
                               <div key={idx} className="grid grid-cols-[1fr,60px,60px,60px] gap-2 items-center px-2 py-2 border-b border-slate-100 last:border-0 hover:bg-white rounded transition-colors group">
                                 <div className="flex items-center gap-2 min-w-0">

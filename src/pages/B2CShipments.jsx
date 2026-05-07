@@ -133,20 +133,10 @@ const B2CShipments = () => {
       // Inject packSize from Master Data for each product before saving
       const finalizedProducts = products.map(p => {
         const masterSKU = stock.find(s => s.name === p.name);
-        let packSize = masterSKU?.packSize || 1;
-        
-        // Smart detection: If packSize is 1 but name contains "Set of X", use X
-        if (packSize === 1) {
-          const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-          if (match && match[1]) {
-            packSize = Number(match[1]);
-          }
-        }
-
         return {
           name: p.name,
           quantity: p.quantity,
-          packSize: packSize
+          packSize: masterSKU?.packSize || 1
         };
       });
 
@@ -296,15 +286,7 @@ const B2CShipments = () => {
             <div className="space-y-4">
               {products.map((product) => {
                 const selectedSKU = stock.find(s => s.name === product.name);
-                let packSize = selectedSKU?.packSize || 1;
-                
-                // Smart detection for UI
-                if (packSize === 1 && product.name) {
-                  const match = product.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                  if (match && match[1]) {
-                    packSize = Number(match[1]);
-                  }
-                }
+                const packSize = product.packSize || selectedSKU?.packSize || 1;
 
                 const totalDeduction = (Number(product.quantity) || 0) * packSize;
                 
@@ -367,14 +349,7 @@ const B2CShipments = () => {
                           <div className="flex items-center gap-3">
                              <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-bold uppercase tracking-wider border border-slate-200">SKU: {selectedSKU.sku}</span>
                              <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-bold uppercase tracking-wider border border-slate-200">
-                               Pack: {(() => {
-                                 let ps = selectedSKU.packSize || 1;
-                                 if (ps === 1) {
-                                   const match = selectedSKU.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                                   if (match && match[1]) return match[1] + " (Auto)";
-                                 }
-                                 return ps;
-                               })()}
+                               Pack: {selectedSKU.packSize || 1}
                              </span>
                              <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded font-medium italic">{selectedSKU.category}</span>
                           </div>
@@ -540,11 +515,7 @@ const B2CShipments = () => {
                     <div className="flex flex-col gap-2">
                       {(s.products || []).map((p, idx) => {
                         const masterSKU = stock.find(item => item.name === p.name);
-                        let ps = p.packSize || 1;
-                        if (ps === 1) {
-                          const match = p.name.match(/\(\s*(?:Set|Pack)\s+of\s+(\d+)\s*\)/i);
-                          if (match && match[1]) ps = Number(match[1]);
-                        }
+                        const ps = p.packSize || 1;
                         return (
                           <div key={idx} className="grid grid-cols-[1fr,50px,50px,60px] gap-2 items-center px-2 py-2 border-b border-slate-100 last:border-0 hover:bg-white rounded transition-colors group">
                             <div className="flex items-center gap-2 min-w-0">
@@ -596,8 +567,7 @@ const B2CShipments = () => {
             {(() => {
               const summaryMap = filteredShipments.flatMap(s => s.products || []).reduce((acc, p) => {
                 const master = stock.find(item => item.name === p.name);
-                
-                let effectivePackSize = Number(p.packSize) || 1;
+                let effectivePackSize = Number(master?.packSize) || Number(p.packSize) || 1;
                 const totalUnits = (Number(p.quantity) || 0) * effectivePackSize;
                 
                 if (master?.isComposite && master.components) {
@@ -682,26 +652,25 @@ const B2CShipments = () => {
                   let contributingProducts = [];
                   (s.products || []).forEach(p => {
                     const master = stock.find(item => item.name === p.name);
-                    
-                    let effectivePackSize = Number(p.packSize) || 1;
+                    let effectivePackSize = Number(master?.packSize) || Number(p.packSize) || 1;
                     const totalUnits = (Number(p.quantity) || 0) * effectivePackSize;
                     
                     if (p.name === selectedSummaryProduct) {
-                      contribution += totalUnits;
-                      contributingProducts.push(`${p.name} (Qty: ${p.quantity || 0}, Pack: ${p.packSize || 1})`);
-                    } else {
-                      if (master?.isComposite && master.components) {
-                         const comp = master.components.find(c => c.name === selectedSummaryProduct);
-                         if (comp) {
-                           let multiplier = Number(comp.quantity) || 1;
-                           if (effectivePackSize > 1 && multiplier > 1 && effectivePackSize === multiplier) {
-                              multiplier = 1; 
-                           }
-                           contribution += totalUnits * multiplier;
-                           contributingProducts.push(`${p.name} (Qty: ${p.quantity || 0}, Pack: ${p.packSize || 1})`);
-                         }
-                      }
-                    }
+                       contribution += totalUnits;
+                       contributingProducts.push(`${p.name} (Qty: ${p.quantity || 0}, Pack: ${effectivePackSize})`);
+                     } else {
+                       if (master?.isComposite && master.components) {
+                          const comp = master.components.find(c => c.name === selectedSummaryProduct);
+                          if (comp) {
+                            let multiplier = Number(comp.quantity) || 1;
+                            if (effectivePackSize > 1 && multiplier > 1 && effectivePackSize === multiplier) {
+                               multiplier = 1; 
+                            }
+                            contribution += totalUnits * multiplier;
+                            contributingProducts.push(`${p.name} (Qty: ${p.quantity || 0}, Pack: ${effectivePackSize})`);
+                          }
+                       }
+                     }
                   });
 
                   if (contribution === 0) return null;
