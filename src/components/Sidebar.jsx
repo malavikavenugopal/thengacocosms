@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Package, Truck, AlertTriangle, ClipboardList, BarChart3, Box, X, Layers, Users, Globe, RotateCcw, LogOut, ShoppingCart, Hammer } from 'lucide-react';
+import { LayoutDashboard, Package, Truck, AlertTriangle, ClipboardList, BarChart3, Box, X, Layers, Users, Globe, RotateCcw, LogOut, ShoppingCart, Hammer, RefreshCcw } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 
 const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
@@ -17,6 +17,7 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
     { name: 'B2B Shipments', path: '/b2b', icon: <Package size={20} /> },
     { name: 'B2C Shipments', path: '/b2c', icon: <Truck size={20} /> },
     { name: 'Returns Management', path: '/returns', icon: <RotateCcw size={20} /> },
+    { name: 'Amazon Returns', path: '/amazon-returns', icon: <RefreshCcw size={20} /> },
     { name: 'Damage Tracking', path: '/damage', icon: <AlertTriangle size={20} /> },
     { name: 'Reorder Points', path: '/rop', icon: <Package size={20} /> },
     { name: 'Stock Check', path: '/stock', icon: <ClipboardList size={20} /> },

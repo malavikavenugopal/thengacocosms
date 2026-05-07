@@ -36,6 +36,7 @@ export const GlobalProvider = ({ children }) => {
   const [monthlyStockData, setMonthlyStockData] = useState([]);
   const [productionRecords, setProductionRecords] = useState([]);
   const [reworkRecords, setReworkRecords] = useState([]);
+  const [amazonReturnRecords, setAmazonReturnRecords] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
@@ -286,6 +287,9 @@ export const GlobalProvider = ({ children }) => {
     const unsubRework = onSnapshot(query(collection(db, 'reworkRecords'), orderBy('outDate', 'desc')), (snapshot) => {
       setReworkRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
+    const unsubAmazonReturns = onSnapshot(query(collection(db, 'amazonReturnRecords'), orderBy('returnRequestDate', 'desc')), (snapshot) => {
+      setAmazonReturnRecords(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
 
     // Fallback: If data takes too long (e.g. empty database), stop loading after 3 seconds
     const timeout = setTimeout(() => setLoading(false), 3000);
@@ -294,7 +298,7 @@ export const GlobalProvider = ({ children }) => {
       clearTimeout(timeout);
       unsubStock(); unsubB2B(); unsubB2C(); unsubDamage();
       unsubReturns(); unsubQC(); unsubStaff(); unsubChannels(); unsubCouriers();
-      unsubMonthly(); unsubPurchases(); unsubVendors(); unsubReplacements(); unsubProduction(); unsubRework();
+      unsubMonthly(); unsubPurchases(); unsubVendors(); unsubReplacements(); unsubProduction(); unsubRework(); unsubAmazonReturns();
     };
   }, [currentUser]);
 
@@ -677,6 +681,14 @@ export const GlobalProvider = ({ children }) => {
   const updateReworkRecord = async (id, record) => { await updateDoc(doc(db, 'reworkRecords', id), record); };
   const deleteReworkRecord = async (id) => { await deleteDoc(doc(db, 'reworkRecords', id)); };
 
+  // Amazon Returns CRUD
+  const addAmazonReturnRecords = async (records) => {
+    const batch = records.map(r => addDoc(collection(db, 'amazonReturnRecords'), r));
+    await Promise.all(batch);
+  };
+  const updateAmazonReturnRecord = async (id, record) => { await updateDoc(doc(db, 'amazonReturnRecords', id), record); };
+  const deleteAmazonReturnRecord = async (id) => { await deleteDoc(doc(db, 'amazonReturnRecords', id)); };
+
   return (
     <GlobalContext.Provider value={{
       stock, addSKU, updateSKU, deleteSKU,
@@ -693,6 +705,7 @@ export const GlobalProvider = ({ children }) => {
       couriers, addCourier, updateCourier, deleteCourier,
       vendors, addVendor, updateVendor, deleteVendor,
       reworkRecords, addReworkRecord, updateReworkRecord, deleteReworkRecord,
+      amazonReturnRecords, addAmazonReturnRecords, updateAmazonReturnRecord, deleteAmazonReturnRecord,
       monthlyStockData, saveMonthlyStock: async (month, productId, updates) => {
         const id = `${month}_${productId}`;
         await setDoc(doc(db, 'monthlyStockData', id), { ...updates, month, productId }, { merge: true });

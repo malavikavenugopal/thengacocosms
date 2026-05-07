@@ -14,6 +14,7 @@ import Channels from './pages/Channels';
 import Couriers from './pages/Couriers';
 import Returns from './pages/Returns';
 import ReworkLog from './pages/ReworkLog';
+import AmazonReturns from './pages/AmazonReturns';
 import PurchaseManagement from './pages/PurchaseManagement';
 import ReorderPoint from './pages/ReorderPoint';
 import CandleManufacturing from './pages/CandleManufacturing';
@@ -67,6 +68,7 @@ function App() {
             <Route path="channels" element={<Channels />} />
             <Route path="couriers" element={<Couriers />} />
             <Route path="returns" element={<Returns />} />
+            <Route path="amazon-returns" element={<AmazonReturns />} />
             <Route path="b2b" element={<B2BShipments />} />
             <Route path="b2c" element={<B2CShipments />} />
             <Route path="damage" element={<DamageTracking />} />
