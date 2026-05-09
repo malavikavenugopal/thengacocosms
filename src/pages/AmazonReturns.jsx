@@ -409,7 +409,7 @@ export default function AmazonReturns() {
         </div>
 
         {/* ── Mobile / Tablet card view (hidden on lg+) ── */}
-        <div className="block lg:hidden divide-y divide-slate-100">
+        <div className="hidden divide-y divide-slate-100">
           {filteredRecords.length === 0 ? (
             <div className="py-16 flex flex-col items-center gap-3 text-slate-400">
               <Package size={40} className="opacity-25" />
@@ -521,7 +521,7 @@ export default function AmazonReturns() {
         </div>
 
         {/* ── Desktop table (hidden below lg) ── */}
-        <div className="hidden lg:block overflow-x-auto">
+        <div className="overflow-x-auto show-scrollbar">
           <table className="w-full text-left border-collapse" style={{ minWidth: '2000px' }}>
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
