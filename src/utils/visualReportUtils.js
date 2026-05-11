@@ -318,7 +318,9 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
                        Checked: ${s.checked} | Rejected: ${s.rejected || 0} | Damaged: ${s.damaged}<br/>
                        <span style="color: #059669; font-weight: bold;">Approved: ${Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0)}</span>
                        ${s.rejectionReason ? `<br/><span style="color: #dc2626;">Reason: ${s.rejectionReason}</span>` : ''}
-                       ${s.suggestionEn ? `<br/><span style="color: #b45309;">Suggestion: ${s.suggestionEn}</span>` : ''}
+                       ${s.suggestionEn ? `<br/><span style="color: #b45309;">Suggestion (EN): ${s.suggestionEn}</span>` : ''}
+                       ${s.suggestionMl ? `<br/><span style="color: #b45309;">Suggestion (ML): ${s.suggestionMl}</span>` : ''}
+                       ${s.suggestionTa ? `<br/><span style="color: #b45309;">Suggestion (TA): ${s.suggestionTa}</span>` : ''}
                      </div>`
                   : type === 'Damage' 
                     ? `Reason: ${s.reason}`
@@ -489,7 +491,9 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
                   ? `<b>${s.productName}</b>
                      <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
                        ${s.rejectionReason ? `<span style="color: #dc2626;">Reason: ${s.rejectionReason}</span><br/>` : ''}
-                       ${s.suggestionEn ? `<span style="color: #b45309;">Suggestion: ${s.suggestionEn}</span>` : ''}
+                       ${s.suggestionEn ? `<span style="color: #b45309;">Suggestion (EN): ${s.suggestionEn}</span><br/>` : ''}
+                       ${s.suggestionMl ? `<span style="color: #b45309;">Suggestion (ML): ${s.suggestionMl}</span><br/>` : ''}
+                       ${s.suggestionTa ? `<span style="color: #b45309;">Suggestion (TA): ${s.suggestionTa}</span>` : ''}
                      </div>`
                   : (type === 'Replacement' ? s.type : (type === 'B2B' ? (s.courierName || '-') : (type === 'B2C' ? (Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : (s.whoParceled || '-')) : '-')))}
               </td>
