@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Card, Input, Select, Button } from '../components/ui';
-import { Upload, Edit2, Trash2, X, Save, Search, Download, FileSpreadsheet, RotateCcw, Package, RefreshCcw, AlertCircle, DollarSign, Shield } from 'lucide-react';
+import { Upload, Edit2, Trash2, X, Save, Search, Download, FileSpreadsheet, RotateCcw, Package, RefreshCcw, AlertCircle, DollarSign, Shield, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
@@ -58,13 +58,47 @@ const SAEFT_COLORS = {
   'PENDING': 'bg-amber-100 text-amber-700',
 };
 
+const parseDate = (dateStr) => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  
+  const day = parts[0].padStart(2, '0');
+  const monthStr = parts[1].toLowerCase();
+  const yearStr = parts[2];
+  
+  const months = {
+    jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+    jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+  };
+  
+  const month = months[monthStr] || '01';
+  
+  let year = yearStr;
+  if (year.length === 2) {
+    year = `20${year}`;
+  }
+  
+  return `${year}-${month}-${day}`;
+};
+
 export default function AmazonReturns() {
   const { amazonReturnRecords, addAmazonReturnRecords, updateAmazonReturnRecord, deleteAmazonReturnRecord, stock } = useGlobalState();
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [filters, setFilters] = useState({ search: '', startDate: '', endDate: '', status: '' });
+  const d_now = new Date();
+  const last_month_date = new Date(d_now.getFullYear(), d_now.getMonth(), 0);
+  const prev_year = last_month_date.getFullYear();
+  const prev_month = String(last_month_date.getMonth() + 1).padStart(2, '0');
+  const prev_last_day = last_month_date.getDate();
+  const [filters, setFilters] = useState({
+    search: '',
+    startDate: `${prev_year}-${prev_month}-01`,
+    endDate: `${prev_year}-${prev_month}-${String(prev_last_day).padStart(2, '0')}`,
+    status: ''
+  });
   const fileRef = useRef(null);
 
   const records = amazonReturnRecords;
@@ -160,10 +194,11 @@ export default function AmazonReturns() {
     const q = filters.search.toLowerCase();
     const ms = !q || [r.orderId, r.itemName, r.merchantSku, r.asin, r.orderItemId].some(v => (v || '').toLowerCase().includes(q));
     const st = !filters.status || r.returnRequestStatus === filters.status;
-    const sd = !filters.startDate || (r.returnRequestDate || r.orderDate) >= filters.startDate;
-    const ed = !filters.endDate || (r.returnRequestDate || r.orderDate) <= filters.endDate;
+    const orderDateFormatted = parseDate(r.orderDate);
+    const sd = !filters.startDate || orderDateFormatted >= filters.startDate;
+    const ed = !filters.endDate || orderDateFormatted <= filters.endDate;
     return ms && st && sd && ed;
-  }).sort((a, b) => (b.returnRequestDate || b.orderDate || '').localeCompare(a.returnRequestDate || a.orderDate || ''));
+  }).sort((a, b) => (parseDate(b.orderDate) || '').localeCompare(parseDate(a.orderDate) || ''));
 
   const stats = {
     total: records.length,
@@ -203,7 +238,23 @@ export default function AmazonReturns() {
   };
 
   const TABLE_COLS = [
-    { h: 'Order ID', render: r => <span className="font-mono text-[11px] font-bold text-indigo-600 whitespace-nowrap">{r.orderId || '—'}</span> },
+    { h: 'Order ID', render: r => (
+      <div className="flex items-center gap-1 group">
+        <span className="font-mono text-[11px] font-bold text-indigo-600 whitespace-nowrap">{r.orderId || '—'}</span>
+        {r.orderId && (
+          <button 
+            onClick={() => {
+              navigator.clipboard.writeText(r.orderId);
+              toast.success('Order ID copied!');
+            }}
+            className="opacity-0 group-hover:opacity-100 p-0.5 text-slate-400 hover:text-slate-600 transition-opacity"
+            title="Copy Order ID"
+          >
+            <Copy size={12} />
+          </button>
+        )}
+      </div>
+    ) },
     { h: 'Order Date', render: r => <span className="text-slate-600 whitespace-nowrap text-[11px]">{r.orderDate || '—'}</span> },
     { h: 'Return Req. Date', render: r => <span className="text-slate-600 whitespace-nowrap text-[11px]">{r.returnRequestDate || '—'}</span> },
     { h: 'ASIN', render: r => <span className="font-mono text-[10px] text-amber-600 font-bold whitespace-nowrap">{r.asin || '—'}</span> },
@@ -275,12 +326,18 @@ export default function AmazonReturns() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3">
           <div className="p-2 bg-orange-100 text-orange-600 rounded-lg"><RefreshCcw size={24} /></div>
           <div>
             <h2 className="text-2xl font-bold tracking-tight text-slate-900">Amazon Returns</h2>
             <p className="text-sm text-slate-500">Amazon return report management</p>
           </div>
+        </div>
+        <div>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" id="az-upload" onChange={handleFileUpload} />
+          <label htmlFor="az-upload" className={`cursor-pointer flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all border ${isUploading ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-wait' : 'bg-orange-600 text-white border-orange-600 hover:bg-orange-700 hover:shadow-lg hover:shadow-orange-400/30'}`}>
+            <Upload size={16} />{isUploading ? 'Reading...' : 'Upload Amazon Report'}
+          </label>
         </div>
       </div>
 
@@ -335,27 +392,7 @@ export default function AmazonReturns() {
         </Card>
       )}
 
-      {/* Upload */}
-      <Card className="border-dashed border-2 border-orange-200 bg-orange-50/20">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-orange-100 text-orange-500 rounded-xl"><FileSpreadsheet size={26} /></div>
-            <div>
-              <p className="font-bold text-slate-800">Upload Amazon Return Report</p>
-              <p className="text-xs text-slate-500 mt-0.5">Seller Central → Reports → Fulfillment → Returns → Download as Excel</p>
-            </div>
-          </div>
-          <div>
-            <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" id="az-upload" onChange={handleFileUpload} />
-            <label htmlFor="az-upload" className={`cursor-pointer flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm transition-all border ${isUploading ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-wait' : 'bg-orange-600 text-white border-orange-600 hover:bg-orange-700 hover:shadow-lg hover:shadow-orange-400/30'}`}>
-              <Upload size={16} />{isUploading ? 'Reading...' : 'Upload Amazon Report'}
-            </label>
-          </div>
-        </div>
-        <p className="text-[10px] text-slate-400 mt-3 italic">
-          Maps 34 columns: Order ID · Order date · Return request date · Return request status · Amazon RMA ID · Seller RMA ID · Label type · Label cost · Currency code · Return carrier · Tracking ID · Label to be paid by · A-to-z claim · Is prime · ASIN · Merchant SKU · Item Name · Return quantity · Return reason · In policy · Return type · Resolution · Invoice number · Return delivery date · Order Amount · Order quantity · SafeT fields · Refunded Amount · Category · Order Item ID
-        </p>
-      </Card>
+
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -521,18 +558,18 @@ export default function AmazonReturns() {
         </div>
 
         {/* ── Desktop table (hidden below lg) ── */}
-        <div className="overflow-x-auto show-scrollbar">
+        <div className="overflow-x-auto overflow-y-auto max-h-[70vh] show-scrollbar">
           <table className="w-full text-left border-collapse" style={{ minWidth: '2000px' }}>
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="border-b border-slate-200">
               <tr>
                 {TABLE_COLS.map(c => (
-                  <th key={c.h} className={`py-3 px-3 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${
+                  <th key={c.h} className={`sticky top-0 z-10 py-3 px-3 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${
                     c.manual
                       ? 'text-orange-600 bg-orange-50 border-b-2 border-orange-200'
-                      : 'text-slate-500'
+                      : 'text-slate-500 bg-slate-50'
                   }`}>{c.h}</th>
                 ))}
-                <th className="py-3 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+                <th className="sticky top-0 z-10 py-3 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider bg-slate-50">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 bg-white">

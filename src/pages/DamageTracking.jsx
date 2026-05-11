@@ -57,8 +57,17 @@ const DamageTracking = () => {
 
     // Format images as HTML tags
     const imageHtml = images && images.length > 0
-      ? `<br/><br/><b style="font-size: 18px; color: #475569;">Inspection Photos:</b><br/>` +
-      images.map(url => `<br/><img src="${url}" alt="QC Photo" style="max-width: 450px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;" />`).join('')
+      ? `<br/><br/><b style="font-size: 18px; color: #475569;">Inspection Media:</b><br/>` +
+      images.map(url => {
+        const isVideo = typeof url === 'string' && (url.toLowerCase().includes('.mp4') || url.toLowerCase().includes('.webm') || url.toLowerCase().includes('.mov'));
+        if (isVideo) {
+          return `<br/><div style="max-width: 450px; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; text-align: center; background: #f8fafc; margin-bottom: 10px; font-family: sans-serif;">
+            <p style="margin: 0 0 10px 0; color: #64748b; font-size: 14px;">🎥 Inspection Video Attached</p>
+            <a href="${url}" target="_blank" style="display: inline-block; padding: 8px 16px; background: #4f46e5; color: white; border-radius: 6px; font-weight: bold; text-decoration: none; font-size: 12px;">▶ Watch Video</a>
+          </div>`;
+        }
+        return `<br/><img src="${url}" alt="QC Photo" style="max-width: 450px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 10px;" />`;
+      }).join('')
       : '';
 
     // Combined recipients to avoid sending multiple separate emails
@@ -126,7 +135,7 @@ const DamageTracking = () => {
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files);
     if (selectedImages.length + files.length > 4) {
-      toast.error("Maximum 4 images allowed");
+      toast.error("Maximum 4 files allowed");
       return;
     }
     setSelectedImages(prev => [...prev, ...files]);
@@ -520,11 +529,18 @@ const DamageTracking = () => {
             <div>
               <p style="margin: 0 0 8px 0; font-size: 10px; font-weight: bold; color: #94a3b8; text-transform: uppercase;">Inspection Photos (${r.images.length})</p>
               <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
-                ${r.images.map(url => `
-                  <div style="aspect-ratio: 1; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0;">
-                    <img src="${url}" style="width: 100%; height: 100%; object-fit: cover; cursor: pointer" onclick="window.open('${url}', '_blank')"/>
-                  </div>
-                `).join('')}
+                ${r.images.map(url => {
+                  const isVideo = typeof url === 'string' && (url.toLowerCase().includes('.mp4') || url.toLowerCase().includes('.webm') || url.toLowerCase().includes('.mov'));
+                  return `
+                    <div style="aspect-ratio: 1; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0;">
+                      ${isVideo ? `
+                        <video src="${url}" style="width: 100%; height: 100%; object-fit: cover; cursor: pointer" onclick="window.open('${url}', '_blank')"></video>
+                      ` : `
+                        <img src="${url}" style="width: 100%; height: 100%; object-fit: cover; cursor: pointer" onclick="window.open('${url}', '_blank')"/>
+                      `}
+                    </div>
+                  `;
+                }).join('')}
               </div>
             </div>
           ` : ''}
@@ -765,15 +781,15 @@ const DamageTracking = () => {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-2">
-                      <Camera size={14} /> Inspection Photos
+                      <Camera size={14} /> Inspection Photos / Videos
                     </h4>
-                    <p className="text-[10px] text-slate-400 mt-0.5">Max 4 images • JPG/PNG • Galley/Photo</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Max 4 files • Images/Videos</p>
                   </div>
                   <label className="cursor-pointer">
                     <input
                       type="file"
                       multiple
-                      accept="image/*"
+                      accept="image/*,video/*"
                       className="hidden"
                       onChange={handleImageSelect}
                       disabled={selectedImages.length >= 4 || isUploading}
@@ -787,15 +803,29 @@ const DamageTracking = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {selectedImages.map((file, idx) => (
                     <div key={idx} className="relative group aspect-video sm:aspect-square rounded-xl overflow-hidden border-2 border-indigo-100 bg-slate-50 shadow-sm">
-                      <img
-                        src={typeof file === 'string' ? file : URL.createObjectURL(file)}
-                        alt="preview"
-                        className="w-full h-full object-cover"
-                      />
+                      {typeof file !== 'string' && file.type.startsWith('video/') ? (
+                        <video
+                          src={URL.createObjectURL(file)}
+                          className="w-full h-full object-cover"
+                          controls
+                        />
+                      ) : typeof file === 'string' && (file.toLowerCase().includes('.mp4') || file.toLowerCase().includes('.webm') || file.toLowerCase().includes('.mov')) ? (
+                        <video
+                          src={file}
+                          className="w-full h-full object-cover"
+                          controls
+                        />
+                      ) : (
+                        <img
+                          src={typeof file === 'string' ? file : URL.createObjectURL(file)}
+                          alt="preview"
+                          className="w-full h-full object-cover"
+                        />
+                      )}
                       <button
                         type="button"
                         onClick={() => removeImage(idx)}
-                        className="absolute top-1 right-1 p-1 bg-rose-500 text-white rounded-full shadow-lg"
+                        className="absolute top-1 right-1 p-1 bg-rose-500 text-white rounded-full shadow-lg z-10"
                       >
                         <X size={12} />
                       </button>
@@ -1008,24 +1038,37 @@ const DamageTracking = () => {
                           <div className="flex items-center gap-2">
                             {r.images && r.images.length > 0 && (
                               <div className="flex -space-x-2 mr-2">
-                                {r.images.map((url, i) => (
-                                  <div
-                                    key={i}
-                                    className={`w-6 h-6 rounded-full border-2 border-white overflow-hidden bg-slate-100 shadow-sm cursor-pointer hover:scale-110 transition-transform ${i >= 3 ? 'hidden' : 'inline-block'}`}
-                                    onClick={() => {
-                                      Swal.fire({
-                                        imageUrl: url,
-                                        imageAlt: 'QC Inspection Photo',
-                                        showCloseButton: true,
-                                        showConfirmButton: false,
-                                        background: 'transparent',
-                                        backdrop: `rgba(0,0,0,0.8)`
-                                      });
-                                    }}
-                                  >
-                                    <img src={url} alt="qc" className="w-full h-full object-cover" />
-                                  </div>
-                                ))}
+                                {r.images.map((url, i) => {
+                                  const isVideo = typeof url === 'string' && (url.toLowerCase().includes('.mp4') || url.toLowerCase().includes('.webm') || url.toLowerCase().includes('.mov'));
+                                  return (
+                                    <div
+                                      key={i}
+                                      className={`w-6 h-6 rounded-full border-2 border-white overflow-hidden bg-slate-100 shadow-sm cursor-pointer hover:scale-110 transition-transform ${i >= 3 ? 'hidden' : 'inline-block'}`}
+                                      onClick={() => {
+                                        Swal.fire({
+                                          title: isVideo ? 'QC Inspection Video' : 'QC Inspection Photo',
+                                          html: isVideo ? `
+                                            <video src="${url}" controls style="width: 100%; border-radius: 8px;"></video>
+                                          ` : `
+                                            <img src="${url}" style="width: 100%; border-radius: 8px;" />
+                                          `,
+                                          showCloseButton: true,
+                                          showConfirmButton: false,
+                                          background: 'transparent',
+                                          backdrop: `rgba(0,0,0,0.8)`
+                                        });
+                                      }}
+                                    >
+                                      {isVideo ? (
+                                        <div className="w-full h-full flex items-center justify-center bg-indigo-50 text-indigo-600">
+                                          <Camera size={10} />
+                                        </div>
+                                      ) : (
+                                        <img src={url} alt="qc" className="w-full h-full object-cover" />
+                                      )}
+                                    </div>
+                                  );
+                                })}
                                 {r.images.length > 3 && (
                                   <button
                                     type="button"
