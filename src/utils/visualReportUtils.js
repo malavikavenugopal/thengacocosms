@@ -179,7 +179,10 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
 
   // Add Images for QC PDF Summary
   if (type === 'QC') {
-    const allImages = shipments.flatMap(s => s.images || []);
+    const allImages = shipments.flatMap(s => s.images || []).filter(url => {
+      const isImage = typeof url === 'string' && (url.toLowerCase().includes('.jpg') || url.toLowerCase().includes('.jpeg') || url.toLowerCase().includes('.png') || url.toLowerCase().includes('.webp'));
+      return isImage;
+    });
     if (allImages.length > 0) {
       doc.addPage();
       doc.setFont("times", "bold");
@@ -219,7 +222,11 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
 
 const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
   const shipmentsWithBase64 = await Promise.all(shipments.map(async s => {
-    const base64Images = s.images ? await Promise.all(s.images.map(img => getProxyImageBase64(img))) : [];
+    const nonVideoImages = s.images ? s.images.filter(url => {
+      const isImage = typeof url === 'string' && (url.toLowerCase().includes('.jpg') || url.toLowerCase().includes('.jpeg') || url.toLowerCase().includes('.png') || url.toLowerCase().includes('.webp'));
+      return isImage;
+    }) : [];
+    const base64Images = await Promise.all(nonVideoImages.map(img => getProxyImageBase64(img)));
     return { ...s, base64Images };
   }));
 
@@ -310,6 +317,8 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
                      <div style="margin-left: 10px; margin-top: 5px; font-size: 11px; color: #64748b;">
                        Checked: ${s.checked} | Rejected: ${s.rejected || 0} | Damaged: ${s.damaged}<br/>
                        <span style="color: #059669; font-weight: bold;">Approved: ${Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0)}</span>
+                       ${s.rejectionReason ? `<br/><span style="color: #dc2626;">Reason: ${s.rejectionReason}</span>` : ''}
+                       ${s.suggestionEn ? `<br/><span style="color: #b45309;">Suggestion: ${s.suggestionEn}</span>` : ''}
                      </div>`
                   : type === 'Damage' 
                     ? `Reason: ${s.reason}`
@@ -373,7 +382,11 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
   if (!shipments || shipments.length === 0) return null;
 
   const shipmentsWithBase64 = await Promise.all(shipments.map(async s => {
-    const base64Images = s.images ? await Promise.all(s.images.map(img => getProxyImageBase64(img))) : [];
+    const nonVideoImages = s.images ? s.images.filter(url => {
+      const isImage = typeof url === 'string' && (url.toLowerCase().includes('.jpg') || url.toLowerCase().includes('.jpeg') || url.toLowerCase().includes('.png') || url.toLowerCase().includes('.webp'));
+      return isImage;
+    }) : [];
+    const base64Images = await Promise.all(nonVideoImages.map(img => getProxyImageBase64(img)));
     return { ...s, base64Images };
   }));
 
@@ -472,7 +485,13 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
                 ${type === 'B2B' ? s.clientName : type === 'B2C' ? s.channel : type === 'Damage' ? s.productName : type === 'Return' ? s.channel : type === 'Replacement' ? (s.type === 'B2B' ? s.clientName : s.channel) : s.vendorName}
               </td>
               <td style="padding: 10px; border: 1px solid #ddd;">
-                ${type === 'QC' ? s.productName : (type === 'Replacement' ? s.type : (type === 'B2B' ? (s.courierName || '-') : (type === 'B2C' ? (Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : (s.whoParceled || '-')) : '-')))}
+                ${type === 'QC' 
+                  ? `<b>${s.productName}</b>
+                     <div style="font-size: 11px; color: #64748b; margin-top: 4px;">
+                       ${s.rejectionReason ? `<span style="color: #dc2626;">Reason: ${s.rejectionReason}</span><br/>` : ''}
+                       ${s.suggestionEn ? `<span style="color: #b45309;">Suggestion: ${s.suggestionEn}</span>` : ''}
+                     </div>`
+                  : (type === 'Replacement' ? s.type : (type === 'B2B' ? (s.courierName || '-') : (type === 'B2C' ? (Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : (s.whoParceled || '-')) : '-')))}
               </td>
               ${type === 'QC' ? `
                 <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${s.checked}</td>
