@@ -51,6 +51,20 @@ const B2CShipments = () => {
     }
   }, [formData, products, isEditing]);
 
+  // Handle edit from URL params
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const editId = params.get('edit');
+    if (editId && shipments.length > 0) {
+      const shipment = shipments.find(s => s.id === editId);
+      if (shipment) {
+        handleEdit(shipment);
+        // Clear the param so it doesn't trigger again on refresh
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, [shipments]);
+
   const filteredShipments = useMemo(() => {
     return shipments.filter(shipment => {
       // Date Filter

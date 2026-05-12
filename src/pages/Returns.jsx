@@ -238,6 +238,21 @@ const Returns = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Handle edit from URL params
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const editId = params.get('edit');
+    const tab = params.get('tab') || 'returns';
+    if (editId && returnRecords.length > 0) {
+      const record = returnRecords.find(r => r.id === editId);
+      if (record) {
+        handleEdit(record, tab);
+        // Clear the param so it doesn't trigger again on refresh
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+    }
+  }, [returnRecords]);
+
   const handleDelete = (record, tab) => {
     Swal.fire({
       title: 'Delete Record?',
