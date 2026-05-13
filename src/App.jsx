@@ -19,6 +19,7 @@ import PurchaseManagement from './pages/PurchaseManagement';
 import ReorderPoint from './pages/ReorderPoint';
 import CandleManufacturing from './pages/CandleManufacturing';
 import ExpoDashboard from './pages/ExpoDashboard';
+import StoreManagement from './pages/StoreManagement';
 import Login from './pages/Login';
 import { GlobalProvider, useGlobalState } from './context/GlobalContext';
 
@@ -70,6 +71,7 @@ function App() {
             <Route path="couriers" element={<Couriers />} />
             <Route path="returns" element={<Returns />} />
             <Route path="expo" element={<ExpoDashboard />} />
+            <Route path="store-management" element={<StoreManagement />} />
             <Route path="amazon-returns" element={<AmazonReturns />} />
             <Route path="b2b" element={<B2BShipments />} />
             <Route path="b2c" element={<B2CShipments />} />

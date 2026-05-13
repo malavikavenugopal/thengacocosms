@@ -276,7 +276,7 @@ const Reports = () => {
             Product: row.name
           };
           activeChannels.forEach(c => {
-            rowData[c.name.toUpperCase()] = row.channels[c.name] || 0;
+            rowData[c.toUpperCase()] = row.channels[c] || 0;
           });
           rowData.TOTAL = row.total;
           return rowData;
@@ -409,8 +409,8 @@ const Reports = () => {
                     <th className="py-3 px-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200 sticky left-[120px] bg-slate-50 z-10">SKU</th>
                     <th className="py-3 px-4 text-left text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200">Product</th>
                     {activeChannels.map(c => (
-                      <th key={c.id} className="py-3 px-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200 min-w-[100px]">
-                        {c.name}
+                      <th key={c} className="py-3 px-4 text-center text-xs font-bold text-slate-500 uppercase tracking-wider border-r border-slate-200 min-w-[100px]">
+                        {c}
                       </th>
                     ))}
                     <th className="py-3 px-4 text-center text-xs font-bold text-slate-900 uppercase tracking-wider bg-indigo-50/50">Total</th>
@@ -428,8 +428,8 @@ const Reports = () => {
                         <td className="py-3 px-4 text-sm font-mono text-indigo-600 border-r border-slate-100 bg-rose-50/20 sticky left-[120px] z-1 min-w-[100px]">{row.sku || '-'}</td>
                         <td className="py-3 px-4 text-sm text-slate-800 border-r border-slate-100 min-w-[250px] bg-blue-50/10 leading-relaxed">{row.name}</td>
                         {activeChannels.map(c => (
-                          <td key={c.id} className={`py-3 px-4 text-center text-sm border-r border-slate-100 ${row.channels[c.name] > 0 ? 'font-bold text-slate-900 bg-emerald-50/30' : 'text-slate-300'}`}>
-                            {row.channels[c.name]}
+                          <td key={c} className={`py-3 px-4 text-center text-sm border-r border-slate-100 ${row.channels[c] > 0 ? 'font-bold text-slate-900 bg-emerald-50/30' : 'text-slate-300'}`}>
+                            {row.channels[c]}
                           </td>
                         ))}
                         <td className="py-3 px-4 text-center text-sm font-bold text-slate-900 bg-indigo-50/30">{row.total}</td>

@@ -18,6 +18,7 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
     { name: 'B2C Shipments', path: '/b2c', icon: <Truck size={20} /> },
     { name: 'Returns Management', path: '/returns', icon: <RotateCcw size={20} /> },
     { name: 'Expo Dashboard', path: '/expo', icon: <Store size={20} /> },
+    { name: 'Store Management', path: '/store-management', icon: <Store size={20} /> },
     { name: 'Amazon Returns', path: '/amazon-returns', icon: <RefreshCcw size={20} /> },
     { name: 'Damage Tracking', path: '/damage', icon: <AlertTriangle size={20} /> },
     { name: 'Reorder Points', path: '/rop', icon: <Package size={20} /> },

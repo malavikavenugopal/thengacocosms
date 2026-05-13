@@ -11,7 +11,7 @@ import { generateVisualReport } from '../utils/visualReportUtils';
 import { isRecordEditable } from '../utils/dateUtils';
 
 const B2BShipments = () => {
-  const { stock, staff, couriers, b2bShipments: shipments, addB2BShipment, updateB2BShipment, deleteB2BShipment, drafts, updateDraft, clearDraft, getAvailableStock } = useGlobalState();
+  const { stock, staff, couriers, stores, addStore, b2bShipments: shipments, addB2BShipment, updateB2BShipment, deleteB2BShipment, drafts, updateDraft, clearDraft, getAvailableStock } = useGlobalState();
   
   const [formData, setFormData] = useState(() => {
     const defaultDate = new Date().toISOString().split('T')[0];
@@ -19,6 +19,7 @@ const B2BShipments = () => {
     return {
       whoParceled: Array.isArray(saved?.whoParceled) ? saved.whoParceled : saved?.whoParceled ? [saved.whoParceled] : [],
       clientName: saved?.clientName || '',
+      isStore: saved?.isStore || false,
       courierName: saved?.courierName || '',
       boxes: saved?.boxes || '',
       date: saved?.date || defaultDate,
@@ -199,6 +200,7 @@ const B2BShipments = () => {
     setFormData({
       whoParceled: Array.isArray(s.whoParceled) ? s.whoParceled : s.whoParceled ? [s.whoParceled] : [],
       clientName: s.clientName,
+      isStore: s.isStore || false,
       courierName: s.courierName,
       boxes: s.boxes,
       date: s.date,
@@ -213,8 +215,31 @@ const B2BShipments = () => {
     setIsEditing(false);
     setEditingId(null);
     const today = new Date().toISOString().split('T')[0];
-    setFormData({ whoParceled: [], clientName: '', courierName: '', boxes: '', date: today, status: 'Dispatched', dispatchDate: today });
+    setFormData({ whoParceled: [], clientName: '', isStore: false, courierName: '', boxes: '', date: today, status: 'Dispatched', dispatchDate: today });
     setProducts([{ id: Date.now(), name: '', quantity: '', isPacked: true, packedDate: today }]);
+  };
+
+  const handleCreateStore = () => {
+    Swal.fire({
+      title: 'Create New Store',
+      input: 'text',
+      inputLabel: 'Enter store name',
+      inputPlaceholder: 'e.g. Downtown Branch',
+      showCancelButton: true,
+      confirmButtonText: 'Create',
+      confirmButtonColor: '#4f46e5',
+      inputValidator: (value) => {
+        if (!value) {
+          return 'You need to write something!'
+        }
+      }
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        await addStore(result.value);
+        setFormData({ ...formData, clientName: result.value });
+        toast.success(`Store "${result.value}" created and selected!`);
+      }
+    });
   };
 
   const handleDelete = (id) => {
@@ -236,18 +261,21 @@ const B2BShipments = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight text-gray-900">{isEditing ? 'Edit B2B Shipment' : 'B2B Shipments'}</h2>
-          <p className="text-sm text-gray-500">Manage your business-to-business dispatches</p>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <div className="flex items-center gap-3 flex-1">
+          <div className="p-2 bg-indigo-100 text-indigo-600 rounded-lg shrink-0">
+            <Truck size={24} />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900">{isEditing ? 'Edit B2B Shipment' : 'B2B Shipments'}</h2>
+            <p className="text-sm text-gray-500">Manage your business-to-business dispatches</p>
+          </div>
         </div>
-        <div className="flex gap-2 w-full sm:w-auto">
-          {isEditing && (
-            <Button variant="ghost" onClick={handleCancel} className="text-rose-600 hover:bg-rose-50 flex-1 sm:flex-none">
-              <X size={16} className="mr-2" /> Cancel Edit
-            </Button>
-          )}
-        </div>
+        {isEditing && (
+          <Button variant="ghost" onClick={handleCancel} className="text-rose-600 hover:bg-rose-50 w-full sm:w-auto">
+            <X size={16} className="mr-2" /> Cancel Edit
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -259,13 +287,56 @@ const B2BShipments = () => {
               value={formData.whoParceled}
               onChange={(val) => setFormData({...formData, whoParceled: val})}
             />
-            <Input 
-              label="Client Name" 
-              placeholder="e.g. Global Retailers" 
-              value={formData.clientName}
-              onChange={(e) => setFormData({...formData, clientName: e.target.value})}
-              required
-            />
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Client Type</label>
+              <div className="flex gap-2 h-10">
+                <button
+                  type="button"
+                  onClick={() => setFormData({...formData, isStore: false, clientName: ''})}
+                  className={`flex-1 py-2 px-3 text-sm font-bold rounded-lg border transition-all ${!formData.isStore ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+                >
+                  Client
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData({...formData, isStore: true, clientName: ''})}
+                  className={`flex-1 py-2 px-3 text-sm font-bold rounded-lg border transition-all ${formData.isStore ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm' : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+                >
+                  Store
+                </button>
+              </div>
+            </div>
+            {formData.isStore ? (
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Store Name</label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <SearchableSelect 
+                      options={stores.map(s => s.name)} 
+                      value={formData.clientName}
+                      onChange={(val) => setFormData({...formData, clientName: val})}
+                      required
+                    />
+                  </div>
+                  <button 
+                    type="button" 
+                    onClick={handleCreateStore}
+                    className="p-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg h-10 w-10 flex items-center justify-center shadow-sm"
+                    title="Create New Store"
+                  >
+                    <Plus size={18} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <Input 
+                label="Client Name" 
+                placeholder="e.g. Global Retailers" 
+                value={formData.clientName}
+                onChange={(e) => setFormData({...formData, clientName: e.target.value})}
+                required
+              />
+            )}
             <SearchableSelect 
               label="Courier Name" 
               options={couriers.map(c => c.name)} 
@@ -464,8 +535,8 @@ const B2BShipments = () => {
                 Cancel
               </Button>
             )}
-            <Button type="submit" loading={isSubmitting}>
-              <Save size={16} className="mr-2" /> {isEditing ? 'Update Order' : 'Record Order'}
+            <Button type="submit" className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white shadow-xl shadow-slate-200" loading={isSubmitting}>
+              <Save size={18} className="mr-2" /> {isEditing ? 'Update Order' : 'Record Order'}
             </Button>
           </div>
         </form>

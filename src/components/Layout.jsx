@@ -18,6 +18,7 @@ const Layout = () => {
       case '/channels': return 'Channel Management';
       case '/couriers': return 'Courier Management';
       case '/returns': return 'Returns Management';
+      case '/store-management': return 'Store Management';
       case '/b2b': return 'B2B Shipments';
       case '/b2c': return 'B2C Shipments';
       case '/damage': return 'Damage Tracking';

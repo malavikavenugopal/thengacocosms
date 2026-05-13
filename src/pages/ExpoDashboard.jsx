@@ -8,7 +8,7 @@ import Swal from 'sweetalert2';
 import { useNavigate } from 'react-router-dom';
 
 const ExpoDashboard = () => {
-  const { stock, b2cShipments, returnRecords, deleteB2CShipment, deleteReturnRecord, channels, updateChannel, updateB2CShipment, updateReturnRecord } = useGlobalState();
+  const { stock, b2cShipments, b2bShipments, returnRecords, deleteB2CShipment, deleteB2BShipment, deleteReturnRecord, channels, updateChannel, updateB2CShipment, updateReturnRecord } = useGlobalState();
   const navigate = useNavigate();
   
   // Filters
@@ -21,6 +21,8 @@ const ExpoDashboard = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedChannel, setSelectedChannel] = useState('');
   const [isRenaming, setIsRenaming] = useState(false);
+  const [expoType, setExpoType] = useState('B2C'); // 'B2C' or 'B2B'
+  const [selectedB2BClient, setSelectedB2BClient] = useState('');
 
   // Set default channel to 'Expo' or the first one containing 'expo'
   useEffect(() => {
@@ -47,39 +49,75 @@ const ExpoDashboard = () => {
       return true;
     };
 
-    if (!selectedChannel) return [];
+    if (expoType === 'B2C') {
+      if (!selectedChannel) return [];
 
-    const channelLower = selectedChannel.toLowerCase();
+      const channelLower = selectedChannel.toLowerCase();
 
-    // 1. Process Stock Taken to Expo (Recorded as B2C Shipments with selected channel)
-    b2cShipments.forEach(s => {
-      if (s.channel?.toLowerCase() === channelLower && isWithinRange(s.date)) {
-        (s.products || []).forEach(p => {
-          const master = stock.find(item => item.name === p.name);
-          const packSize = Number(p.packSize) || Number(master?.packSize) || 1;
-          const totalUnits = (Number(p.quantity) || 0) * packSize;
+      // 1. Process Stock Taken to Expo (Recorded as B2C Shipments with selected channel)
+      b2cShipments.forEach(s => {
+        if (s.channel?.toLowerCase() === channelLower && isWithinRange(s.date)) {
+          (s.products || []).forEach(p => {
+            const master = stock.find(item => item.name === p.name);
+            const packSize = Number(p.packSize) || Number(master?.packSize) || 1;
+            const totalUnits = (Number(p.quantity) || 0) * packSize;
 
-          if (!summary[p.name]) {
-            summary[p.name] = { name: p.name, sku: master?.sku || 'N/A', taken: 0, returned: 0 };
-          }
-          summary[p.name].taken += totalUnits;
-        });
-      }
-    });
-
-    // 2. Process Stock Returned from Expo (Returns with selected channel)
-    returnRecords.forEach(r => {
-      if (r.channel?.toLowerCase() === channelLower && isWithinRange(r.date)) {
-        const master = stock.find(item => item.name === r.productName);
-        const packSize = Number(r.packSize) || Number(master?.packSize) || 1;
-        const totalUnits = (Number(r.quantity) || 0) * packSize;
-
-        if (!summary[r.productName]) {
-          summary[r.productName] = { name: r.productName, sku: master?.sku || 'N/A', taken: 0, returned: 0 };
+            if (!summary[p.name]) {
+              summary[p.name] = { name: p.name, sku: master?.sku || 'N/A', taken: 0, returned: 0 };
+            }
+            summary[p.name].taken += totalUnits;
+          });
         }
-        summary[r.productName].returned += totalUnits;
-      }
-    });
+      });
+
+      // 2. Process Stock Returned from Expo (Returns with selected channel)
+      returnRecords.forEach(r => {
+        if (r.channel?.toLowerCase() === channelLower && isWithinRange(r.date)) {
+          const master = stock.find(item => item.name === r.productName);
+          const packSize = Number(r.packSize) || Number(master?.packSize) || 1;
+          const totalUnits = (Number(r.quantity) || 0) * packSize;
+
+          if (!summary[r.productName]) {
+            summary[r.productName] = { name: r.productName, sku: master?.sku || 'N/A', taken: 0, returned: 0 };
+          }
+          summary[r.productName].returned += totalUnits;
+        }
+      });
+    } else {
+      if (!selectedB2BClient) return [];
+
+      const clientLower = selectedB2BClient.toLowerCase();
+
+      // Process B2B Shipments
+      b2bShipments.forEach(s => {
+        if (s.clientName?.toLowerCase() === clientLower && isWithinRange(s.date)) {
+          (s.products || []).forEach(p => {
+            const master = stock.find(item => item.name === p.name);
+            const packSize = Number(p.packSize) || Number(master?.packSize) || 1;
+            const totalUnits = (Number(p.quantity) || 0) * packSize;
+
+            if (!summary[p.name]) {
+              summary[p.name] = { name: p.name, sku: master?.sku || 'N/A', taken: 0, returned: 0 };
+            }
+            summary[p.name].taken += totalUnits;
+          });
+        }
+      });
+
+      // Process Returns for B2B (assuming channel field might contain client name)
+      returnRecords.forEach(r => {
+        if (r.channel?.toLowerCase() === clientLower && isWithinRange(r.date)) {
+          const master = stock.find(item => item.name === r.productName);
+          const packSize = Number(r.packSize) || Number(master?.packSize) || 1;
+          const totalUnits = (Number(r.quantity) || 0) * packSize;
+
+          if (!summary[r.productName]) {
+            summary[r.productName] = { name: r.productName, sku: master?.sku || 'N/A', taken: 0, returned: 0 };
+          }
+          summary[r.productName].returned += totalUnits;
+        }
+      });
+    }
 
     // Calculate Actual Sold
     const dataArray = Object.values(summary).map(p => ({
@@ -97,7 +135,7 @@ const ExpoDashboard = () => {
     }
 
     return dataArray;
-  }, [b2cShipments, returnRecords, stock, filterStartDate, filterEndDate, searchTerm, selectedChannel]);
+  }, [b2cShipments, b2bShipments, returnRecords, stock, filterStartDate, filterEndDate, searchTerm, selectedChannel, selectedB2BClient, expoType]);
 
   // Calculate totals for cards
   const totals = useMemo(() => {
@@ -112,36 +150,65 @@ const ExpoDashboard = () => {
   // Get all individual records for the bottom table
   const expoRecords = useMemo(() => {
     const records = [];
-    if (!selectedChannel) return [];
+    
+    if (expoType === 'B2C') {
+      if (!selectedChannel) return [];
+      const channelLower = selectedChannel.toLowerCase();
 
-    const channelLower = selectedChannel.toLowerCase();
+      b2cShipments.forEach(s => {
+        if (s.channel?.toLowerCase() === channelLower) {
+          records.push({
+            id: s.id,
+            date: s.date,
+            type: 'Taken',
+            details: (s.products || []).map(p => `${p.name} (${p.quantity})`).join(', '),
+            raw: s
+          });
+        }
+      });
 
-    b2cShipments.forEach(s => {
-      if (s.channel?.toLowerCase() === channelLower) {
-        records.push({
-          id: s.id,
-          date: s.date,
-          type: 'Taken',
-          details: (s.products || []).map(p => `${p.name} (${p.quantity})`).join(', '),
-          raw: s
-        });
-      }
-    });
+      returnRecords.forEach(r => {
+        if (r.channel?.toLowerCase() === channelLower) {
+          records.push({
+            id: r.id,
+            date: r.date,
+            type: 'Returned',
+            details: `${r.productName} (${r.quantity})`,
+            raw: r
+          });
+        }
+      });
+    } else {
+      if (!selectedB2BClient) return [];
+      const clientLower = selectedB2BClient.toLowerCase();
 
-    returnRecords.forEach(r => {
-      if (r.channel?.toLowerCase() === channelLower) {
-        records.push({
-          id: r.id,
-          date: r.date,
-          type: 'Returned',
-          details: `${r.productName} (${r.quantity})`,
-          raw: r
-        });
-      }
-    });
+      b2bShipments.forEach(s => {
+        if (s.clientName?.toLowerCase() === clientLower) {
+          records.push({
+            id: s.id,
+            date: s.date,
+            type: 'Taken',
+            details: (s.products || []).map(p => `${p.name} (${p.quantity})`).join(', '),
+            raw: s
+          });
+        }
+      });
+
+      returnRecords.forEach(r => {
+        if (r.channel?.toLowerCase() === clientLower) {
+          records.push({
+            id: r.id,
+            date: r.date,
+            type: 'Returned',
+            details: `${r.productName} (${r.quantity})`,
+            raw: r
+          });
+        }
+      });
+    }
 
     return records.sort((a, b) => new Date(b.date) - new Date(a.date));
-  }, [b2cShipments, returnRecords, selectedChannel]);
+  }, [b2cShipments, b2bShipments, returnRecords, selectedChannel, selectedB2BClient, expoType]);
 
   const handleExport = () => {
     if (expoData.length === 0) {
@@ -174,7 +241,11 @@ const ExpoDashboard = () => {
     }).then((result) => {
       if (result.isConfirmed) {
         if (record.type === 'Taken') {
-          deleteB2CShipment(record.id);
+          if (expoType === 'B2C') {
+            deleteB2CShipment(record.id);
+          } else {
+            deleteB2BShipment(record.id);
+          }
           toast.success('Record deleted successfully');
         } else if (record.type === 'Returned') {
           deleteReturnRecord(record.id);
@@ -186,7 +257,11 @@ const ExpoDashboard = () => {
 
   const handleEdit = (record) => {
     if (record.type === 'Taken') {
-      navigate(`/b2c?edit=${record.id}`);
+      if (expoType === 'B2C') {
+        navigate(`/b2c?edit=${record.id}`);
+      } else {
+        navigate(`/b2b?edit=${record.id}`);
+      }
     } else if (record.type === 'Returned') {
       navigate(`/returns?edit=${record.id}&tab=returns`);
     }
@@ -255,29 +330,55 @@ const ExpoDashboard = () => {
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          {/* Channel Selector */}
-          <div className="flex items-center gap-2">
-            <select 
-              className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer font-bold text-slate-700"
-              value={selectedChannel}
-              onChange={e => setSelectedChannel(e.target.value)}
-              disabled={isRenaming}
-            >
-              <option value="">Select Channel</option>
-              {channels.map(c => (
-                <option key={c.id} value={c.name}>{c.name}</option>
-              ))}
-            </select>
-            
-            <button
-              onClick={handleRenameChannel}
-              className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors"
-              title="Rename Channel and Update Records"
-              disabled={!selectedChannel || isRenaming}
-            >
-              <Edit2 size={14} />
-            </button>
-          </div>
+          {/* B2B/B2C Toggle */}
+          <select 
+            className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer font-bold text-slate-700"
+            value={expoType}
+            onChange={e => setExpoType(e.target.value)}
+            disabled={isRenaming}
+          >
+            <option value="B2C">B2C</option>
+            <option value="B2B">B2B</option>
+          </select>
+
+          {/* Conditional Selector */}
+          {expoType === 'B2C' ? (
+            <div className="flex items-center gap-2">
+              <select 
+                className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer font-bold text-slate-700"
+                value={selectedChannel}
+                onChange={e => setSelectedChannel(e.target.value)}
+                disabled={isRenaming}
+              >
+                <option value="">Select Channel</option>
+                {channels.map(c => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+              
+              <button
+                onClick={handleRenameChannel}
+                className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors"
+                title="Rename Channel and Update Records"
+                disabled={!selectedChannel || isRenaming}
+              >
+                <Edit2 size={14} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <select 
+                className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer font-bold text-slate-700"
+                value={selectedB2BClient}
+                onChange={e => setSelectedB2BClient(e.target.value)}
+              >
+                <option value="">Select B2B Client</option>
+                {Array.from(new Set(b2bShipments.map(s => s.clientName).filter(Boolean))).map(client => (
+                  <option key={client} value={client}>{client}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <div className="relative">
