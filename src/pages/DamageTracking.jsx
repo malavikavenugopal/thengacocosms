@@ -23,7 +23,7 @@ const DamageTracking = () => {
     "Other"
   ];
 
-  const sendQCEmail = (vendorName, date, products, images = [], recordIds = []) => {
+  const sendQCEmail = (vendorName, date, products, images = [], recordIds = [], customRecipients = null) => {
     // EmailJS credentials hardcoded as requested
     //   const SERVICE_ID = "service_wjn0j8t";
     // const TEMPLATE_ID = "template_fg6ypin";
@@ -70,8 +70,9 @@ const DamageTracking = () => {
       }).join('')
       : '';
 
-    // Combined recipients to avoid sending multiple separate emails
-    const recipients = "malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com"; 
+    // Combined recipients: Vendor's email + default accounts
+    const defaultRecipients = "malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com";
+    const recipients = customRecipients || defaultRecipients; 
 
     // Header with Title, Vendor, and Date
     const headerHtml = `
@@ -961,13 +962,20 @@ const DamageTracking = () => {
                       return;
                     }
 
+                    const vendor = vendors.find(v => v.name === (vendorFilter === 'All Vendors' ? '' : vendorFilter));
+                    const defaultRecipients = vendor?.email || "malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com";
+
                     Swal.fire({
-                      title: 'Email Consolidated Report?',
-                      text: `Send a single email with ${filtered.length} QC record(s) for the selected dates/vendor?`,
-                      icon: 'question',
+                      title: 'Customize Email Recipients',
+                      text: 'Edit or add email addresses for this report:',
+                      input: 'text',
+                      inputValue: defaultRecipients,
                       showCancelButton: true,
                       confirmButtonColor: '#4f46e5',
-                      confirmButtonText: 'Yes, Send All'
+                      confirmButtonText: 'Send Report',
+                      inputValidator: (value) => {
+                        if (!value) return 'At least one email is required!';
+                      }
                     }).then((result) => {
                       if (result.isConfirmed) {
                         const vendorText = vendorFilter === 'All Vendors' ? 'Multiple Vendors' : vendorFilter;
@@ -982,7 +990,7 @@ const DamageTracking = () => {
                         allImages = [...new Set(allImages)];
 
                         const rIds = filtered.map(r => r.id);
-                        sendQCEmail(vendorText, dateText, filtered, allImages, rIds);
+                        sendQCEmail(vendorText, dateText, filtered, allImages, rIds, result.value);
                       }
                     });
                   }}
@@ -1165,18 +1173,25 @@ const DamageTracking = () => {
                             <button
                               onClick={() => {
                                 if (r.emailSent) return;
-                                Swal.fire({
-                                  title: 'Send QC Email?',
-                                  text: "Send this QC report as a message to accounts?",
-                                  icon: 'question',
-                                  showCancelButton: true,
-                                  confirmButtonColor: '#4f46e5',
-                                  confirmButtonText: 'Yes, Send'
-                                }).then((result) => {
-                                  if (result.isConfirmed) {
-                                    sendQCEmail(r.vendorName, r.date, [r], r.images, r.id);
-                                  }
-                                });
+                                  const vendor = vendors.find(v => v.name === r.vendorName);
+                                  const defaultRecipients = vendor?.email || "malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com";
+
+                                  Swal.fire({
+                                    title: 'Customize QC Email',
+                                    text: 'Enter recipient emails (comma separated):',
+                                    input: 'text',
+                                    inputValue: defaultRecipients,
+                                    showCancelButton: true,
+                                    confirmButtonColor: '#4f46e5',
+                                    confirmButtonText: 'Send Email',
+                                    inputValidator: (value) => {
+                                      if (!value) return 'At least one email is required!';
+                                    }
+                                  }).then((result) => {
+                                    if (result.isConfirmed) {
+                                      sendQCEmail(r.vendorName, r.date, [r], r.images, r.id, result.value);
+                                    }
+                                  });
                               }}
                               disabled={r.emailSent}
                               className={`p-1.5 rounded-lg border border-transparent transition-all shadow-sm ${r.emailSent ? 'text-slate-300 bg-slate-50 cursor-not-allowed' : 'text-blue-500 hover:text-blue-600 hover:bg-white hover:border-blue-100'}`}

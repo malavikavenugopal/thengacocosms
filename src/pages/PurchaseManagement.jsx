@@ -12,7 +12,19 @@ const PurchaseManagement = () => {
   const [editingId, setEditingId] = useState(null);
   
   const [activeTab, setActiveTab] = useState('entry');
-  const [newVendor, setNewVendor] = useState({ name: '', whatsappName: '' });
+  const [newVendor, setNewVendor] = useState({ 
+    name: '', 
+    whatsappName: '', 
+    email: 'malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com' 
+  });
+  const STANDARD_EMAILS = [
+    { email: 'malavikavenu914@gmail.com', label: 'Malavika' },
+    { email: 'sudha.thenga@gmail.com', label: 'Sudha' },
+    { email: 'sumitha@thengacoco.com', label: 'Sumitha' },
+    { email: 'maria@thengacoco.com', label: 'Maria' },
+    { email: 'dhanya.thenga@gmail.com', label: 'Dhanya' }
+  ];
+
   const [editingVendor, setEditingVendor] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingVendor, setIsSavingVendor] = useState(false);
@@ -143,6 +155,16 @@ const PurchaseManagement = () => {
       date: new Date().toISOString().split('T')[0],
       items: [{ productName: '', quantity: '' }]
     });
+  };
+
+  const handleEditVendor = (v) => {
+    setEditingVendor(v);
+    setNewVendor({ 
+      name: v.name, 
+      whatsappName: v.whatsappName || '',
+      email: v.email || 'malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com'
+    });
+    window.scrollTo({ top: document.getElementById('vendor-form')?.offsetTop || 0, behavior: 'smooth' });
   };
 
   const handleDelete = (id) => {
@@ -544,41 +566,89 @@ const PurchaseManagement = () => {
                 onChange={(e) => setNewVendor({ ...newVendor, whatsappName: e.target.value })}
                 className="flex-1"
               />
-              <div className="flex items-end gap-2">
-                <Button onClick={async () => {
-                  if (!newVendor.name) return;
-                  setIsSavingVendor(true);
-                  try {
-                    if (editingVendor) {
-                      await updateVendor(editingVendor.id, newVendor);
-                      setEditingVendor(null);
-                      toast.success('Vendor updated');
-                    } else {
-                      await addVendor(newVendor);
-                      toast.success('Vendor registered');
+              <Input 
+                label="Recipient Emails (Custom)"
+                placeholder="Comma separated emails..." 
+                value={newVendor.email}
+                onChange={(e) => setNewVendor({ ...newVendor, email: e.target.value })}
+                className="flex-1"
+              />
+            </div>
+            
+            <div className="mt-4 p-4 bg-white/60 rounded-xl border border-indigo-100">
+              <p className="text-[10px] font-bold text-slate-400 uppercase mb-3 tracking-widest">Standard Recipients (Check to include)</p>
+              <div className="flex flex-wrap gap-4">
+                {STANDARD_EMAILS.map(item => (
+                  <label key={item.email} className="flex items-center gap-2 cursor-pointer group">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                      checked={newVendor.email.includes(item.email)}
+                      onChange={(e) => {
+                        const current = newVendor.email.split(',').map(s => s.trim()).filter(Boolean);
+                        let updated;
+                        if (e.target.checked) {
+                          updated = [...new Set([...current, item.email])];
+                        } else {
+                          updated = current.filter(email => email !== item.email);
+                        }
+                        setNewVendor({ ...newVendor, email: updated.join(', ') });
+                      }}
+                    />
+                    <span className="text-sm font-medium text-slate-700 group-hover:text-indigo-600 transition-colors">{item.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+              <div className="flex items-end justify-end mt-4 gap-2">
+                <Button 
+                  onClick={async () => {
+                    if (!newVendor.name) return;
+                    setIsSavingVendor(true);
+                    try {
+                      if (editingVendor) {
+                        await updateVendor(editingVendor.id, newVendor);
+                        setEditingVendor(null);
+                        toast.success('Vendor updated');
+                      } else {
+                        await addVendor(newVendor);
+                        toast.success('Vendor registered');
+                      }
+                    } catch (err) {
+                      toast.error('Error saving vendor');
+                    } finally {
+                      setNewVendor({ 
+                        name: '', 
+                        whatsappName: '', 
+                        email: 'malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com' 
+                      });
+                      setIsSavingVendor(false);
                     }
-                    setNewVendor({ name: '', whatsappName: '' });
-                  } finally {
-                    setIsSavingVendor(false);
-                  }
-                }} className="h-11" loading={isSavingVendor}>
+                  }} 
+                  className="h-11 px-8" 
+                  loading={isSavingVendor}
+                >
                   {editingVendor ? 'Update' : 'Add Vendor'}
                 </Button>
                 {editingVendor && (
                   <Button variant="secondary" onClick={() => {
                     setEditingVendor(null);
-                    setNewVendor({ name: '', whatsappName: '' });
+                    setNewVendor({ 
+                      name: '', 
+                      whatsappName: '', 
+                      email: 'malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com' 
+                    });
                   }} className="h-11">Cancel</Button>
                 )}
               </div>
-            </div>
-          </Card>
+            </Card>
 
-          <Card className="px-0 pt-0 pb-0 overflow-hidden border-slate-200">
+            <Card className="px-0 pt-0 pb-0 overflow-hidden border-slate-200">
             <div className="p-6 border-b border-slate-100">
               <h3 className="font-bold text-slate-900">Current Vendor List</h3>
             </div>
-            <Table headers={['Vendor Name', 'WhatsApp Contact', 'Actions']}>
+            <Table headers={['Vendor Name', 'WhatsApp Contact', 'Email Address', 'Actions']}>
               {vendors.length === 0 ? (
                 <tr><td colSpan="3" className="py-12 text-center text-slate-400 font-medium">No vendors registered yet.</td></tr>
               ) : (
@@ -586,12 +656,10 @@ const PurchaseManagement = () => {
                   <tr key={v.id} className="hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors">
                     <td className="py-4 px-6 text-sm font-bold text-slate-900">{v.name}</td>
                     <td className="py-4 px-6 text-sm text-slate-500 font-medium">{v.whatsappName || 'N/A'}</td>
+                    <td className="py-4 px-6 text-sm text-slate-500 font-medium">{v.email || 'N/A'}</td>
                     <td className="py-4 px-6">
                       <div className="flex gap-2 justify-end">
-                        <button onClick={() => {
-                          setEditingVendor(v);
-                          setNewVendor({ name: v.name, whatsappName: v.whatsappName || '' });
-                        }} className="p-2 text-indigo-400 hover:text-indigo-600 hover:bg-white rounded-lg border border-transparent hover:border-indigo-100 shadow-sm transition-all">
+                        <button onClick={() => handleEditVendor(v)} className="p-2 text-indigo-400 hover:text-indigo-600 hover:bg-white rounded-lg border border-transparent hover:border-indigo-100 shadow-sm transition-all">
                           <Edit2 size={18} />
                         </button>
                         <button onClick={() => {
