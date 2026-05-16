@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Input, Button, Table, SearchableSelect } from '../components/ui';
-import { Plus, Trash2, Edit2, Check, X, Layers, Box, Upload, FileDown, AlertCircle } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, Layers, Box, Upload, FileDown, AlertCircle, ArrowUpDown } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
 import { exportToCSV } from '../utils/exportUtils';
@@ -29,6 +29,7 @@ const Products = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const [sortOrder, setSortOrder] = useState('asc'); // Default to A-Z as requested
 
   const handleAddProduct = async (e) => {
     e.preventDefault();
@@ -331,6 +332,10 @@ const Products = () => {
       (p.isComposite && p.components.some(c => !isComponentValid(c.name)));
       
     return matchesSearch && matchesFilter && matchesBroken;
+  }).sort((a, b) => {
+    if (sortOrder === 'asc') return a.name.localeCompare(b.name);
+    if (sortOrder === 'desc') return b.name.localeCompare(a.name);
+    return 0;
   });
 
   // Pagination Logic
@@ -494,7 +499,10 @@ const Products = () => {
                       <SearchableSelect 
                         placeholder="Select Part..."
                         value={comp.name}
-                        options={stock.filter(s => !s.isComposite && s.name !== newProduct.name).map(s => s.name)}
+                        options={stock
+                          .filter(s => !s.isComposite && s.name !== newProduct.name)
+                          .map(s => s.name)
+                          .sort((a, b) => a.localeCompare(b))}
                         onChange={(val) => updateComponent(comp.id, 'name', val, false)}
                       />
                     </div>
@@ -561,15 +569,29 @@ const Products = () => {
                     </button>
                   ))}
                </div>
-               <div className="w-full sm:w-64">
-                  <input 
-                    type="text"
-                    placeholder="Search SKU, Name or Category..."
-                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                  />
-               </div>
+                <div className="flex w-full sm:w-auto gap-2">
+                   <div className="flex-1 sm:w-64">
+                      <input 
+                        type="text"
+                        placeholder="Search SKU, Name or Category..."
+                        className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                      />
+                   </div>
+                   <button
+                    onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                    className={`px-3 py-2 rounded-lg border transition-all flex items-center gap-2 ${
+                      sortOrder !== 'none' 
+                        ? 'bg-indigo-50 border-indigo-200 text-indigo-600 shadow-sm' 
+                        : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
+                    }`}
+                    title={sortOrder === 'asc' ? 'Sort Z-A' : 'Sort A-Z'}
+                   >
+                    <ArrowUpDown size={16} />
+                    <span className="text-[10px] font-bold uppercase">{sortOrder === 'asc' ? 'A-Z' : 'Z-A'}</span>
+                   </button>
+                </div>
             </div>
           </div>
           <Table headers={['Category', 'SKU Code', 'Product / SKU Name', 'Status', 'Pack', 'Available Stock', 'Actions']}>
@@ -835,7 +857,10 @@ const Products = () => {
                         <SearchableSelect 
                           placeholder="Select Part..."
                           value={comp.name}
-                          options={stock.filter(s => !s.isComposite && s.id !== editingProduct.id).map(s => s.name)}
+                          options={stock
+                            .filter(s => !s.isComposite && s.name !== editingProduct.name)
+                            .map(s => s.name)
+                            .sort((a, b) => a.localeCompare(b))}
                           onChange={(val) => updateComponent(comp.id, 'name', val, true)}
                         />
                       </div>

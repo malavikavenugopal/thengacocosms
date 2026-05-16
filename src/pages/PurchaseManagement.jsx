@@ -273,7 +273,9 @@ const PurchaseManagement = () => {
                   <div className="md:col-span-8">
                     <SearchableSelect 
                       label={index === 0 ? "Select Product" : ""} 
-                      options={soloProducts.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)} 
+                      options={soloProducts
+                        .map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)
+                        .sort((a, b) => a.localeCompare(b))} 
                       value={item.productName ? `${soloProducts.find(s => s.name === item.productName) ? `[${soloProducts.find(s => s.name === item.productName).sku || 'N/A'}] ${item.productName} (Pack: ${soloProducts.find(s => s.name === item.productName).packSize || 1})` : ''}` : ''}
                       onChange={(val) => {
                         const selectedName = soloProducts.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
@@ -376,7 +378,7 @@ const PurchaseManagement = () => {
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Product</label>
                   <SearchableSelect 
-                    options={['All Products', ...soloProducts.map(s => s.name)]}
+                    options={['All Products', ...soloProducts.map(s => s.name).sort((a, b) => a.localeCompare(b))]}
                     value={historyFilters.product || 'All Products'}
                     onChange={val => setHistoryFilters(f => ({ ...f, product: val === 'All Products' ? '' : val }))}
                   />

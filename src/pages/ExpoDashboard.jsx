@@ -134,7 +134,7 @@ const ExpoDashboard = () => {
       );
     }
 
-    return dataArray;
+    return dataArray.sort((a, b) => a.name.localeCompare(b.name));
   }, [b2cShipments, b2bShipments, returnRecords, stock, filterStartDate, filterEndDate, searchTerm, selectedChannel, selectedB2BClient, expoType]);
 
   // Calculate totals for cards
@@ -351,7 +351,7 @@ const ExpoDashboard = () => {
                 disabled={isRenaming}
               >
                 <option value="">Select Channel</option>
-                {channels.map(c => (
+                {[...channels].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
                   <option key={c.id} value={c.name}>{c.name}</option>
                 ))}
               </select>
@@ -373,7 +373,7 @@ const ExpoDashboard = () => {
                 onChange={e => setSelectedB2BClient(e.target.value)}
               >
                 <option value="">Select B2B Client</option>
-                {Array.from(new Set(b2bShipments.map(s => s.clientName).filter(Boolean))).map(client => (
+                {Array.from(new Set(b2bShipments.map(s => s.clientName).filter(Boolean))).sort((a, b) => a.localeCompare(b)).map(client => (
                   <option key={client} value={client}>{client}</option>
                 ))}
               </select>

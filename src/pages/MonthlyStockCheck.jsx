@@ -23,6 +23,7 @@ const MonthlyStockCheck = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProductDetails, setSelectedProductDetails] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
 
   const getWeekStr = (date) => {
     if (!date) return '';
@@ -425,7 +426,14 @@ const MonthlyStockCheck = () => {
     } finally { setIsExporting(false); }
   };
 
-  const filteredStock = stock.filter(item => !item.isComposite && (item.name.toLowerCase().includes(searchTerm.toLowerCase()) || (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()))));
+  const filteredStock = useMemo(() => {
+    return stock
+      .filter(item => !item.isComposite && (item.name.toLowerCase().includes(searchTerm.toLowerCase()) || (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()))))
+      .sort((a, b) => {
+        const comparison = a.name.localeCompare(b.name);
+        return sortOrder === 'asc' ? comparison : -comparison;
+      });
+  }, [stock, searchTerm, sortOrder]);
 
   return (
     <div className="space-y-4 md:space-y-6 max-w-[1600px] mx-auto pb-10">
@@ -445,9 +453,19 @@ const MonthlyStockCheck = () => {
             <input type="week" className="text-[10px] md:text-xs font-bold text-slate-700 outline-none w-32 bg-transparent" value={activePeriod} onChange={(e) => setSelectedWeek(e.target.value)} />
           </div>
 
-          <div className="relative flex-1 sm:min-w-[150px]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-            <input type="text" placeholder="Search SKU..." className="pl-9 pr-4 h-10 bg-white border border-slate-200 rounded-lg text-[10px] md:text-xs outline-none w-full focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+          <div className="flex items-center gap-2 flex-1 sm:min-w-[200px]">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+              <input type="text" placeholder="Search SKU..." className="pl-9 pr-4 h-10 bg-white border border-slate-200 rounded-lg text-[10px] md:text-xs outline-none w-full focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+            </div>
+            <button
+              onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+              className="px-3 h-10 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2 shrink-0"
+              title={sortOrder === 'asc' ? 'Sort Z-A' : 'Sort A-Z'}
+            >
+              <ArrowRightLeft size={14} className={sortOrder === 'desc' ? 'rotate-180 transition-transform' : 'transition-transform'} />
+              <span className="text-[10px] font-bold uppercase">{sortOrder === 'asc' ? 'A-Z' : 'Z-A'}</span>
+            </button>
           </div>
           
           <Button onClick={handleCarryPhysicalForward} variant="primary" loading={isSyncing} className="bg-indigo-600 hover:bg-indigo-700 shadow-md whitespace-nowrap text-[10px] md:text-xs h-10 px-3 flex-shrink-0">
