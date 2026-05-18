@@ -396,36 +396,6 @@ const MonthlyStockCheck = () => {
     } finally { setIsCarryingForward(false); }
   };
 
-  const handleExport = async () => {
-    setIsExporting(true);
-    try {
-      const dataToExport = stock.filter(item => !item.isComposite).map(item => {
-        const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
-        const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, dispatched: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-        const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used);
-        return { 
-          SKU: item.sku, 
-          Name: item.name, 
-          Period: activePeriod, 
-          Opening: mData.opening || 0, 
-          'Stock In': (Number(mData.in) || 0) + m.purchased + m.produced, 
-          Returns: m.returned, 
-          Dispatch: m.out, 
-          Packed: m.packed || 0, 
-          Dispatched: m.dispatched || 0,
-          Replacement: m.replacement, 
-          Damage: m.damage, 
-          Rejected: m.rejected, 
-          Used: m.used || 0,
-          Expected: expected, 
-          Physical: mData.physical || 0, 
-          Difference: (Number(mData.physical) || 0) - expected 
-        };
-      });
-      exportFormattedStockCheck(dataToExport, activePeriod, `Stock_Check_${activePeriod}.xlsx`);
-    } finally { setIsExporting(false); }
-  };
-
   const filteredStock = useMemo(() => {
     return stock
       .filter(item => !item.isComposite && (item.name.toLowerCase().includes(searchTerm.toLowerCase()) || (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()))))
@@ -463,6 +433,40 @@ const MonthlyStockCheck = () => {
 
     return { perfectMatch, highDifference: highDifference.slice(0, 10), notAudited };
   }, [filteredStock, monthlyStockData, activePeriod, monthlyMovements]);
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const dataToExport = stock.filter(item => !item.isComposite).map(item => {
+        const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
+        const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, dispatched: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+        const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used);
+        
+        const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : null;
+        const diff = physical !== null ? physical - expected : -expected;
+
+        return { 
+          SKU: item.sku, 
+          Name: item.name, 
+          Period: activePeriod, 
+          Opening: mData.opening || 0, 
+          'Stock In': (Number(mData.in) || 0) + m.purchased + m.produced, 
+          Returns: m.returned, 
+          Dispatch: m.out, 
+          Packed: m.packed || 0, 
+          Dispatched: m.dispatched || 0,
+          Replacement: m.replacement, 
+          Damage: m.damage, 
+          Rejected: m.rejected, 
+          Used: m.used || 0,
+          Expected: expected, 
+          Physical: physical !== null ? physical : 'Pending', 
+          Difference: physical !== null ? diff : 'N/A'
+        };
+      });
+      exportFormattedStockCheck(dataToExport, activePeriod, `Stock_Check_${activePeriod}.xlsx`, analyticsData);
+    } finally { setIsExporting(false); }
+  };
 
   return (
     <div className="space-y-4 md:space-y-6 max-w-[1600px] mx-auto pb-10">

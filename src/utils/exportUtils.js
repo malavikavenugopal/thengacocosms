@@ -450,7 +450,7 @@ export const exportFormattedROP = (products, type = 'ROP', fileName = 'ROP_Plann
 /**
  * Specialized Formatted Export for Monthly Stock Check
  */
-export const exportFormattedStockCheck = (data, period, fileName = 'Stock_Check.xlsx') => {
+export const exportFormattedStockCheck = (data, period, fileName = 'Stock_Check.xlsx', analytics = null) => {
   if (!data || !data.length) return;
 
   const isWeekly = period.includes('-W');
@@ -520,6 +520,67 @@ export const exportFormattedStockCheck = (data, period, fileName = 'Stock_Check.
     </tr>
   `;
 
+  if (analytics) {
+    const maxLen = Math.max(analytics.perfectMatch.length, analytics.highDifference.length, analytics.notAudited.length);
+    
+    tableHtml += `
+      <tr><th colspan="16" style="height: 20px; border: none;"></th></tr>
+      <tr>
+        <th colspan="16" style="background-color: #f8fafc; color: #334155; font-size: 14px; padding: 10px; text-align: center; border: 1px solid #cbd5e1;">📊 ANALYTICS DASHBOARD</th>
+      </tr>
+      <tr>
+        <th colspan="5" style="background-color: #ecfdf5; color: #065f46; font-weight: bold; border: 1px solid #10b981; text-align: center;">✅ ACCURATE STOCK (${analytics.perfectMatch.length})</th>
+        <th colspan="1" style="background-color: #ffffff; border: none;"></th>
+        <th colspan="5" style="background-color: #fff1f2; color: #e11d48; font-weight: bold; border: 1px solid #f43f5e; text-align: center;">⚠️ HIGH DISCREPANCY (${analytics.highDifference.length})</th>
+        <th colspan="1" style="background-color: #ffffff; border: none;"></th>
+        <th colspan="4" style="background-color: #fffbeb; color: #b45309; font-weight: bold; border: 1px solid #f59e0b; text-align: center;">⏳ PENDING AUDIT (${analytics.notAudited.length})</th>
+      </tr>
+      <tr>
+        <td colspan="5" style="background-color: #ecfdf5; color: #047857; text-align: center; border: 1px solid #10b981; font-size: 10px;">Products with no difference</td>
+        <td colspan="1" style="border: none;"></td>
+        <td colspan="5" style="background-color: #fff1f2; color: #be123c; text-align: center; border: 1px solid #f43f5e; font-size: 10px;">Largest stock differences</td>
+        <td colspan="1" style="border: none;"></td>
+        <td colspan="4" style="background-color: #fffbeb; color: #92400e; text-align: center; border: 1px solid #f59e0b; font-size: 10px;">Missing physical count</td>
+      </tr>
+    `;
+
+    for (let i = 0; i < maxLen; i++) {
+      const pm = analytics.perfectMatch[i];
+      const hd = analytics.highDifference[i];
+      const na = analytics.notAudited[i];
+      
+      tableHtml += `<tr>`;
+      // Accurate
+      if (pm) {
+        tableHtml += `<td colspan="5" style="border: 1px solid #a7f3d0; background-color: #ffffff; text-align: left;">${pm.name} (${pm.sku || '-'})</td>`;
+      } else {
+        tableHtml += `<td colspan="5" style="border: 1px solid #a7f3d0; background-color: #ffffff;"></td>`;
+      }
+      
+      tableHtml += `<td colspan="1" style="border: none;"></td>`;
+      
+      // Discrepancy
+      if (hd) {
+        tableHtml += `<td colspan="4" style="border: 1px solid #fecdd3; border-right: none; background-color: #ffffff; text-align: left;">${hd.item.name} (${hd.item.sku || '-'})</td>`;
+        tableHtml += `<td colspan="1" style="border: 1px solid #fecdd3; border-left: none; background-color: #ffffff; font-weight: bold; text-align: right; color: ${hd.diff < 0 ? '#e11d48' : '#d97706'}">${hd.diff > 0 ? '+'+hd.diff : hd.diff}</td>`;
+      } else {
+        tableHtml += `<td colspan="5" style="border: 1px solid #fecdd3; background-color: #ffffff;"></td>`;
+      }
+      
+      tableHtml += `<td colspan="1" style="border: none;"></td>`;
+
+      // Pending
+      if (na) {
+        tableHtml += `<td colspan="4" style="border: 1px solid #fde68a; background-color: #ffffff; text-align: left;">${na.name} (${na.sku || '-'})</td>`;
+      } else {
+        tableHtml += `<td colspan="4" style="border: 1px solid #fde68a; background-color: #ffffff;"></td>`;
+      }
+      tableHtml += `</tr>`;
+    }
+
+    tableHtml += `<tr><th colspan="16" style="height: 30px; border: none;"></th></tr>`;
+  }
+
   // Row 3: Headers
   const headers = [
     'SKU Code', 'SKU Name', 'Period', 'Opening', 'Stock In', 'Returns', 'Out', 'Packed', 'Dispatched', 'Replacement', 'Damage', 'Rejected', 'Used', 'Expected', 'Physical', 'Difference'
@@ -533,10 +594,14 @@ export const exportFormattedStockCheck = (data, period, fileName = 'Stock_Check.
 
   // Body
   data.forEach(row => {
-    const diff = row.Difference !== undefined ? Number(row.Difference) : (Number(row.Physical || 0) - Number(row.Expected || 0));
+    let diff = row.Difference;
+    if (diff === undefined) {
+      diff = (Number(row.Physical || 0) - Number(row.Expected || 0));
+    }
     let diffClass = 'diff-match';
-    if (diff < 0) diffClass = 'diff-neg';
-    else if (diff > 0) diffClass = 'diff-pos';
+    if (diff === 'N/A') diffClass = 'diff-match';
+    else if (Number(diff) < 0) diffClass = 'diff-neg';
+    else if (Number(diff) > 0) diffClass = 'diff-pos';
 
     tableHtml += `<tr>`;
     tableHtml += `<td>${row.SKU || row.SKU_Code || '-'}</td>`;
@@ -553,8 +618,10 @@ export const exportFormattedStockCheck = (data, period, fileName = 'Stock_Check.
     tableHtml += `<td>${row.Rejected || 0}</td>`;
     tableHtml += `<td>${row.Used || 0}</td>`;
     tableHtml += `<td class="expected-col">${row.Expected || 0}</td>`;
-    tableHtml += `<td class="num-bold">${row.Physical || 0}</td>`;
-    tableHtml += `<td class="${diffClass}">${diff > 0 ? `+${diff}` : diff}</td>`;
+    tableHtml += `<td class="num-bold">${row.Physical !== undefined ? row.Physical : 0}</td>`;
+    let diffText = diff;
+    if (diff !== 'N/A' && Number(diff) > 0) diffText = `+${diff}`;
+    tableHtml += `<td class="${diffClass}">${diffText}</td>`;
     tableHtml += `</tr>`;
   });
 
