@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Card, Button } from '../components/ui';
-import { Search, DownloadCloud, Eye, Calendar, ArrowRightLeft, X, ShoppingCart, MapPin, ClipboardList, History, Zap, Package, TrendingUp, TrendingDown, Layers, Save } from 'lucide-react';
+import { Search, DownloadCloud, Eye, Calendar, ArrowRightLeft, X, ShoppingCart, MapPin, ClipboardList, History, Zap, Package, TrendingUp, TrendingDown, Layers, Save, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import { exportFormattedStockCheck } from '../utils/exportUtils';
 import toast from 'react-hot-toast';
@@ -435,8 +435,99 @@ const MonthlyStockCheck = () => {
       });
   }, [stock, searchTerm, sortOrder]);
 
+  const analyticsData = useMemo(() => {
+    let perfectMatch = [];
+    let highDifference = [];
+    let notAudited = [];
+    
+    filteredStock.forEach(item => {
+      const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
+      const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
+      const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used);
+      
+      const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : null;
+      
+      if (physical === null) {
+        notAudited.push(item);
+      } else {
+        const diff = Math.abs(physical - expected);
+        if (diff === 0) {
+          perfectMatch.push(item);
+        } else {
+          highDifference.push({ item, diff: physical - expected, absDiff: diff });
+        }
+      }
+    });
+
+    highDifference.sort((a, b) => b.absDiff - a.absDiff);
+
+    return { perfectMatch, highDifference: highDifference.slice(0, 10), notAudited };
+  }, [filteredStock, monthlyStockData, activePeriod, monthlyMovements]);
+
   return (
     <div className="space-y-4 md:space-y-6 max-w-[1600px] mx-auto pb-10">
+      {/* Analytics Dashboard */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
+        {/* Accurate Stock */}
+        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col h-64">
+          <div className="flex items-center justify-between mb-4">
+             <div className="flex items-center gap-2 text-emerald-600">
+               <CheckCircle2 size={20} />
+               <h3 className="font-bold">Accurate Stock</h3>
+             </div>
+             <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded-full">{analyticsData.perfectMatch.length} Items</span>
+          </div>
+          <p className="text-[10px] text-slate-500 mb-3 uppercase tracking-wider font-bold">No Difference (Phys. = Exp.)</p>
+          <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin space-y-2">
+            {analyticsData.perfectMatch.length > 0 ? analyticsData.perfectMatch.map(item => (
+              <div key={item.id} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg text-xs">
+                <span className="font-medium text-slate-700 truncate mr-2">{item.name}</span>
+                <span className="text-[10px] font-bold text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded">{item.sku || '-'}</span>
+              </div>
+            )) : <div className="text-center text-slate-400 text-xs py-4">No perfect matches yet</div>}
+          </div>
+        </div>
+
+        {/* High Discrepancy */}
+        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col h-64">
+          <div className="flex items-center justify-between mb-4">
+             <div className="flex items-center gap-2 text-rose-600">
+               <AlertTriangle size={20} />
+               <h3 className="font-bold">High Discrepancy</h3>
+             </div>
+             <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-1 rounded-full">{analyticsData.highDifference.length} Items</span>
+          </div>
+          <p className="text-[10px] text-slate-500 mb-3 uppercase tracking-wider font-bold">Largest stock differences</p>
+          <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin space-y-2">
+            {analyticsData.highDifference.length > 0 ? analyticsData.highDifference.map(({item, diff}) => (
+              <div key={item.id} className="flex justify-between items-center bg-rose-50/50 p-2 rounded-lg text-xs border border-rose-100">
+                <span className="font-medium text-slate-700 truncate mr-2">{item.name}</span>
+                <span className={`font-black ${diff < 0 ? 'text-rose-600' : 'text-amber-600'} shrink-0`}>{diff > 0 ? `+${diff}` : diff}</span>
+              </div>
+            )) : <div className="text-center text-slate-400 text-xs py-4">No discrepancies found</div>}
+          </div>
+        </div>
+
+        {/* Pending Audit */}
+        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col h-64">
+          <div className="flex items-center justify-between mb-4">
+             <div className="flex items-center gap-2 text-amber-500">
+               <Clock size={20} />
+               <h3 className="font-bold">Pending Audit</h3>
+             </div>
+             <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-full">{analyticsData.notAudited.length} Items</span>
+          </div>
+          <p className="text-[10px] text-slate-500 mb-3 uppercase tracking-wider font-bold">Missing physical count</p>
+          <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin space-y-2">
+            {analyticsData.notAudited.length > 0 ? analyticsData.notAudited.map(item => (
+              <div key={item.id} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg text-xs">
+                <span className="font-medium text-slate-700 truncate mr-2">{item.name}</span>
+                <span className="text-[10px] font-bold text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded">{item.sku || '-'}</span>
+              </div>
+            )) : <div className="text-center text-slate-400 text-xs py-4">All items audited</div>}
+          </div>
+        </div>
+      </div>
       {/* Header Controls */}
       <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex items-center gap-3 w-full md:w-auto">
