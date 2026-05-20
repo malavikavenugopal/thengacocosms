@@ -70,13 +70,9 @@ const B2CShipments = () => {
       // Date Filter
       let dateMatch = true;
       if (filterStartDate || filterEndDate) {
-        const shipmentDate = new Date(shipment.date);
-        const start = filterStartDate ? new Date(filterStartDate) : null;
-        const end = filterEndDate ? new Date(filterEndDate) : null;
-        
-        if (start && end) dateMatch = shipmentDate >= start && shipmentDate <= end;
-        else if (start) dateMatch = shipmentDate >= start;
-        else if (end) dateMatch = shipmentDate <= end;
+        const startMatch = !filterStartDate || shipment.date >= filterStartDate;
+        const endMatch = !filterEndDate || shipment.date <= filterEndDate;
+        dateMatch = startMatch && endMatch;
       }
       if (!dateMatch) return false;
 

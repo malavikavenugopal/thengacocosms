@@ -65,23 +65,21 @@ const B2BShipments = () => {
       // Date Filter
       let dateMatch = true;
       if (filterStartDate || filterEndDate) {
-        const pDate = new Date(shipment.date);
-        const dDate = shipment.dispatchDate ? new Date(shipment.dispatchDate) : null;
-        const start = filterStartDate ? new Date(filterStartDate) : null;
-        const end = filterEndDate ? new Date(filterEndDate) : null;
+        const start = filterStartDate || null;
+        const end = filterEndDate || null;
         
         let matchP = true;
         let matchD = false;
 
         if (start && end) {
-           matchP = pDate >= start && pDate <= end;
-           if (dDate) matchD = dDate >= start && dDate <= end;
+           matchP = shipment.date >= start && shipment.date <= end;
+           if (shipment.dispatchDate) matchD = shipment.dispatchDate >= start && shipment.dispatchDate <= end;
         } else if (start) {
-           matchP = pDate >= start;
-           if (dDate) matchD = dDate >= start;
+           matchP = shipment.date >= start;
+           if (shipment.dispatchDate) matchD = shipment.dispatchDate >= start;
         } else if (end) {
-           matchP = pDate <= end;
-           if (dDate) matchD = dDate <= end;
+           matchP = shipment.date <= end;
+           if (shipment.dispatchDate) matchD = shipment.dispatchDate <= end;
         }
         
         dateMatch = matchP || matchD;
