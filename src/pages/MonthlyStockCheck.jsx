@@ -163,19 +163,45 @@ const MonthlyStockCheck = () => {
       }); 
     });
 
-    b2cShipments.filter(s => isTarget(s.date, periodStr)).forEach(s => { 
+    b2cShipments.forEach(s => {
+      // FBA shipments: use dispatchDate for dispatched, packedDate for packed
+      // Non-FBA: use date as before
+      const isFBA = s.isFBA;
+      let shouldCountAsOut = false;
+      let shouldCountAsPacked = false;
+
+      if (isFBA) {
+        if (s.status === 'Dispatched') {
+          // Count as Out on dispatch date
+          shouldCountAsOut = isTarget(s.dispatchDate, periodStr);
+        } else {
+          // Still packed — count as packed (no stock deduction) on packed date
+          shouldCountAsPacked = isTarget(s.packedDate || s.date, periodStr);
+        }
+      } else {
+        // Normal B2C: count as Out on shipment date
+        shouldCountAsOut = isTarget(s.date, periodStr);
+      }
+
+      if (!shouldCountAsOut && !shouldCountAsPacked) return;
+
       s.products.forEach(p => { 
         const pName = p.name || p.productName;
         const master = stock.find(item => compareNames(item.name, pName));
         
         let effectivePackSize = Number(p.packSize) || 1;
-        
         const qty = (Number(p.quantity) || 0) * effectivePackSize;
 
         const applyB2C = (id, amount) => {
           if (!sums[id]) return;
-          sums[id].b2cOut += amount;
-          sums[id].stockDeduction += amount; // B2C is always immediate deduction
+          if (shouldCountAsOut) {
+            sums[id].b2cOut += amount;
+            sums[id].stockDeduction += amount;
+          } else if (shouldCountAsPacked) {
+            // FBA packed but not yet dispatched: show as packed, deduct from stock
+            sums[id].packed = (sums[id].packed || 0) + amount;
+            sums[id].stockDeduction += amount;
+          }
         };
 
         if (master?.isComposite && master.components) {
@@ -295,7 +321,23 @@ const MonthlyStockCheck = () => {
     });
 
     // B2C Shipments
-    b2cShipments.filter(s => isTarget(s.date, period)).forEach(s => {
+    b2cShipments.forEach(s => {
+      const isFBA = s.isFBA;
+      let isOutThisPeriod = false;
+      let isPackedThisPeriod = false;
+
+      if (isFBA) {
+        if (s.status === 'Dispatched') {
+          isOutThisPeriod = isTarget(s.dispatchDate, period);
+        } else {
+          isPackedThisPeriod = isTarget(s.packedDate || s.date, period);
+        }
+      } else {
+        isOutThisPeriod = isTarget(s.date, period);
+      }
+
+      if (!isOutThisPeriod && !isPackedThisPeriod) return;
+
       s.products.forEach(p => {
         const master = stock.find(item => compareNames(item.name, p.name));
         
@@ -317,13 +359,23 @@ const MonthlyStockCheck = () => {
 
         if (impact > 0) {
           const viaText = `VIA: ${p.name} (QTY: ${p.quantity || 0}, PACK: ${p.packSize || 1})`.toUpperCase();
-          results.b2cOut.push({
-            id: `${s.id}-${p.name}`,
-            label: s.channel || 'B2C Order',
-            sublabel: s.date,
-            detail: viaText,
-            impact
-          });
+          if (isOutThisPeriod) {
+            results.b2cOut.push({
+              id: `${s.id}-${p.name}`,
+              label: `${s.channel || 'Amazon FBA'} (Dispatched)`,
+              sublabel: s.dispatchDate || s.date,
+              detail: viaText,
+              impact
+            });
+          } else if (isPackedThisPeriod) {
+            results.packed.push({
+              id: `${s.id}-${p.name}`,
+              label: `${s.channel || 'Amazon FBA'} (Packed)`,
+              sublabel: s.packedDate || s.date,
+              detail: viaText,
+              impact
+            });
+          }
         }
       });
     });

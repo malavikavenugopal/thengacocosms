@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Input, Select, SearchableSelect, MultiSelect, Button, Table } from '../components/ui';
-import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Package, Box, Layers, Eye } from 'lucide-react';
+import { Plus, Trash2, Save, ShoppingCart, Edit2, X, Lock, Download, Filter, Calendar as CalendarIcon, Package, Box, Layers, Eye, Truck } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
@@ -19,7 +19,10 @@ const B2CShipments = () => {
       channel: saved?.channel || '',
       orderCount: saved?.orderCount || '',
       date: saved?.date || defaultDate,
-      isFBA: saved?.isFBA || false
+      isFBA: saved?.isFBA || false,
+      packedDate: saved?.packedDate || defaultDate,
+      status: saved?.status || 'Packed',
+      dispatchDate: saved?.dispatchDate || defaultDate
     };
   });
 
@@ -152,6 +155,7 @@ const B2CShipments = () => {
 
       const shipmentData = {
         ...formData,
+        dispatchDate: formData.isFBA && formData.status === 'Dispatched' ? (formData.dispatchDate || new Date().toISOString().split('T')[0]) : null,
         products: finalizedProducts,
         timestamp: Date.now()
       };
@@ -182,7 +186,10 @@ const B2CShipments = () => {
       channel: s.channel,
       orderCount: s.orderCount || '',
       date: s.date,
-      isFBA: s.isFBA || false
+      isFBA: s.isFBA || false,
+      packedDate: s.packedDate || s.date || new Date().toISOString().split('T')[0],
+      status: s.status || 'Packed',
+      dispatchDate: s.dispatchDate || ''
     });
     setProducts(s.products.map((p, idx) => ({ ...p, id: Date.now() + idx })));
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -191,7 +198,8 @@ const B2CShipments = () => {
   const handleCancel = () => {
     setIsEditing(false);
     setEditingId(null);
-    setFormData({ whoParceled: [], channel: '', orderCount: '', date: new Date().toISOString().split('T')[0], isFBA: false });
+    const today = new Date().toISOString().split('T')[0];
+    setFormData({ whoParceled: [], channel: '', orderCount: '', date: today, isFBA: false, packedDate: today, status: 'Packed', dispatchDate: today });
     setProducts([{ id: Date.now(), name: '', quantity: '' }]);
   };
 
@@ -280,6 +288,33 @@ const B2CShipments = () => {
               </label>
               <Box size={16} className={formData.isFBA ? "text-orange-500" : "text-slate-300"} />
             </div>
+            {formData.isFBA && (
+              <Input 
+                label="Packed Date" 
+                type="date" 
+                value={formData.packedDate || formData.date}
+                onChange={(e) => setFormData({...formData, packedDate: e.target.value})}
+                required
+              />
+            )}
+            {formData.isFBA && (
+              <Select
+                label="Status"
+                options={['Packed', 'Dispatched']}
+                value={formData.status}
+                onChange={(e) => setFormData({...formData, status: e.target.value})}
+                required
+              />
+            )}
+            {formData.isFBA && formData.status === 'Dispatched' && (
+              <Input
+                label="Dispatch Date"
+                type="date"
+                value={formData.dispatchDate || new Date().toISOString().split('T')[0]}
+                onChange={(e) => setFormData({...formData, dispatchDate: e.target.value})}
+                required
+              />
+            )}
           </div>
 
           <div className="border-t border-slate-100 pt-6">
@@ -495,7 +530,21 @@ const B2CShipments = () => {
           ) : (
             filteredShipments.map(s => (
               <tr key={s.id} className="hover:bg-slate-50/80 transition-colors">
-                <td className="py-4 px-6 text-sm text-slate-800 whitespace-nowrap">{s.date}</td>
+                <td className="py-4 px-6 text-sm text-slate-800 whitespace-nowrap">
+                  <div><span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Order</span>{s.date}</div>
+                  {s.isFBA && s.packedDate && (
+                    <div className="mt-1">
+                      <span className="text-[9px] text-orange-500 font-bold uppercase tracking-wider block">Packed</span>
+                      <span className="text-orange-700 font-medium">{s.packedDate}</span>
+                    </div>
+                  )}
+                  {s.isFBA && s.dispatchDate && s.status === 'Dispatched' && (
+                    <div className="mt-1">
+                      <span className="text-[9px] text-emerald-500 font-bold uppercase tracking-wider block">Dispatched</span>
+                      <span className="text-emerald-700 font-medium">{s.dispatchDate}</span>
+                    </div>
+                  )}
+                </td>
                 <td className="py-4 px-6 text-sm font-medium">
                   <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold tracking-wide mb-1
                     ${s.channel === 'Amazon' || s.channel === 'Amazon FBA' ? 'bg-amber-100 text-amber-800' : 
@@ -506,6 +555,11 @@ const B2CShipments = () => {
                     {s.channel}
                     {s.isFBA && <span className="ml-1.5 px-1 bg-amber-600 text-white rounded text-[8px] leading-tight">FBA</span>}
                   </div>
+                  {s.isFBA && (
+                    <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider ml-1 ${s.status === 'Packed' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                      {s.status || 'Packed'}
+                    </span>
+                  )}
                   <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest pl-1">
                     Orders: <span className="text-slate-900">{s.orderCount || '1'}</span>
                   </div>
@@ -550,6 +604,22 @@ const B2CShipments = () => {
                         >
                           <Edit2 size={18} />
                         </button>
+                        {s.isFBA && s.status === 'Packed' && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await updateB2CShipment(s.id, { ...s, status: 'Dispatched', dispatchDate: new Date().toISOString().split('T')[0] });
+                                toast.success('FBA Shipment marked as Dispatched!');
+                              } catch (err) {
+                                toast.error('Failed to update status');
+                              }
+                            }}
+                            className="p-1.5 text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors border border-transparent hover:border-emerald-100"
+                            title="Mark as Dispatched"
+                          >
+                            <Truck size={18} />
+                          </button>
+                        )}
                         <button 
                           onClick={() => handleDelete(s.id)}
                           className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
