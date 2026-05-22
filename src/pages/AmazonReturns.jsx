@@ -60,8 +60,19 @@ const SAEFT_COLORS = {
 
 const parseDate = (dateStr) => {
   if (!dateStr) return '';
-  const parts = dateStr.split('-');
-  if (parts.length !== 3) return dateStr;
+  const str = String(dateStr).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+  
+  const parts = str.split('-');
+  if (parts.length !== 3) return str;
+  
+  // Detect if parts[0] is year (e.g. YYYY-MM-DD or similar)
+  if (parts[0].length === 4) {
+    const year = parts[0];
+    const month = parts[1].padStart(2, '0');
+    const day = parts[2].padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
   
   const day = parts[0].padStart(2, '0');
   const monthStr = parts[1].toLowerCase();
@@ -97,7 +108,8 @@ export default function AmazonReturns() {
     search: '',
     startDate: `${prev_year}-${prev_month}-01`,
     endDate: `${prev_year}-${prev_month}-${String(prev_last_day).padStart(2, '0')}`,
-    status: ''
+    status: '',
+    sortBy: 'orderDate_desc'
   });
   const fileRef = useRef(null);
 
@@ -190,15 +202,40 @@ export default function AmazonReturns() {
     XLSX.writeFile(wb, `Amazon_Returns_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const filteredRecords = records.filter(r => {
-    const q = filters.search.toLowerCase();
-    const ms = !q || [r.orderId, r.itemName, r.merchantSku, r.asin, r.orderItemId].some(v => (v || '').toLowerCase().includes(q));
-    const st = !filters.status || r.returnRequestStatus === filters.status;
-    const orderDateFormatted = parseDate(r.orderDate);
-    const sd = !filters.startDate || orderDateFormatted >= filters.startDate;
-    const ed = !filters.endDate || orderDateFormatted <= filters.endDate;
-    return ms && st && sd && ed;
-  }).sort((a, b) => (parseDate(b.orderDate) || '').localeCompare(parseDate(a.orderDate) || ''));
+  const filteredRecords = React.useMemo(() => {
+    const filtered = records.filter(r => {
+      const q = filters.search.toLowerCase();
+      const ms = !q || [r.orderId, r.itemName, r.merchantSku, r.asin, r.orderItemId].some(v => (v || '').toLowerCase().includes(q));
+      const st = !filters.status || r.returnRequestStatus === filters.status;
+      const orderDateFormatted = parseDate(r.orderDate);
+      const sd = !filters.startDate || orderDateFormatted >= filters.startDate;
+      const ed = !filters.endDate || orderDateFormatted <= filters.endDate;
+      return ms && st && sd && ed;
+    });
+
+    return filtered.sort((a, b) => {
+      let valA = '';
+      let valB = '';
+
+      if (filters.sortBy.startsWith('orderDate')) {
+        valA = parseDate(a.orderDate) || '';
+        valB = parseDate(b.orderDate) || '';
+      } else if (filters.sortBy.startsWith('returnRequestDate')) {
+        valA = parseDate(a.returnRequestDate) || '';
+        valB = parseDate(b.returnRequestDate) || '';
+      }
+
+      if (!valA && !valB) return 0;
+      if (!valA) return 1; // Put empty dates at the bottom
+      if (!valB) return -1;
+
+      if (filters.sortBy.endsWith('_asc')) {
+        return valA.localeCompare(valB);
+      } else {
+        return valB.localeCompare(valA);
+      }
+    });
+  }, [records, filters]);
 
   const stats = {
     total: records.length,
@@ -436,6 +473,12 @@ export default function AmazonReturns() {
             <select className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none" value={filters.status} onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}>
               <option value="">All Status</option>
               <option>Pending</option><option>Approved</option><option>Completed</option><option>Cancelled</option>
+            </select>
+            <select className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none" value={filters.sortBy} onChange={e => setFilters(f => ({ ...f, sortBy: e.target.value }))}>
+              <option value="orderDate_desc">Sort: Order Date (Newest)</option>
+              <option value="orderDate_asc">Sort: Order Date (Oldest)</option>
+              <option value="returnRequestDate_desc">Sort: Return Req. Date (Newest)</option>
+              <option value="returnRequestDate_asc">Sort: Return Req. Date (Oldest)</option>
             </select>
             <div className="border-l border-slate-200 pl-2">
               <Button variant="ghost" size="sm" onClick={handleExport} className="text-slate-600 h-8 text-xs">
