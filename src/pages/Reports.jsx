@@ -31,6 +31,7 @@ const Reports = () => {
     if (type === 'B2B') {
       metric = 'B2B Sales';
       b2bShipments.forEach(s => {
+        if (s.deducted === false) return;
         let dateMatch = true;
         if (filter.startDate || filter.endDate) {
           const start = filter.startDate || null;
@@ -161,6 +162,7 @@ const Reports = () => {
       
       // Get B2B
       b2bShipments.forEach(s => {
+        if (s.deducted === false) return;
         let dateMatch = true;
         if (filter.startDate || filter.endDate) {
           const start = filter.startDate || null;
@@ -366,6 +368,7 @@ const Reports = () => {
     const totals = {};
     
     b2bShipments.forEach(s => {
+      if (s.deducted === false) return;
       let dateMatch = true;
       if (filter.startDate || filter.endDate) {
         const start = filter.startDate || null;
@@ -505,6 +508,7 @@ const Reports = () => {
       .filter(p => !p.isComposite)
       .map(p => {
         const b2bQty = b2bShipments.reduce((sum, s) => {
+          if (s.deducted === false) return sum;
           let dateMatch = true;
           if (filter.startDate || filter.endDate) {
             const start = filter.startDate || null;
@@ -595,6 +599,7 @@ const Reports = () => {
         }, 0);
 
         const b2bQtyLifetime = b2bShipments.reduce((sum, s) => {
+          if (s.deducted === false) return sum;
           let direct = 0;
           (s.products || []).forEach(sp => {
             if (sp.name === p.name) {

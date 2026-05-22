@@ -42,7 +42,8 @@ const DamageTracking = () => {
           • Rejected: <b>${p.rejected || 0}</b> ${p.rejectionReason ? `(${p.rejectionReason})` : ''}<br/>
           • Damaged: <b>${p.damaged}</b><br/>
           • Baseless: <b>${p.baseless || 0}</b><br/>
-          • Approved: <b style="color: #059669;">${Number(p.checked) - Number(p.damaged) - (Number(p.rejected) || 0) - (Number(p.baseless) || 0)}</b>
+          • Holes: <b>${p.hole || 0}</b><br/>
+          • Approved: <b style="color: #059669;">${Number(p.checked) - Number(p.damaged) - (Number(p.rejected) || 0) - (Number(p.baseless) || 0) - (Number(p.hole) || 0)}</b>
         </div>
         ${p.suggestionEn || p.suggestionMl || p.suggestionTa ? `
           <div style="margin-top: 15px; padding: 10px; border-left: 4px solid #fde68a; background-color: #fffbeb;">
@@ -196,15 +197,16 @@ const DamageTracking = () => {
       p.date || date,
       isSummary ? `${p.productName}\n(${p.vendorName || 'N/A'})` : p.productName,
       p.checked,
-      Number(p.checked) - (Number(p.damaged) || 0) - (Number(p.rejected) || 0) - (Number(p.baseless) || 0),
+      Number(p.checked) - (Number(p.damaged) || 0) - (Number(p.rejected) || 0) - (Number(p.baseless) || 0) - (Number(p.hole) || 0),
       p.damaged || 0,
       p.rejected || 0,
-      p.baseless || 0
+      p.baseless || 0,
+      p.hole || 0
     ]);
 
     autoTable(doc, {
       startY: 60,
-      head: [['#', 'Date', 'Product / Vendor', 'Checked', 'Good', 'Damaged', 'Rejected', 'Baseless']],
+      head: [['#', 'Date', 'Product / Vendor', 'Checked', 'Good', 'Damaged', 'Rejected', 'Baseless', 'Holes']],
       body: tableData,
       theme: 'grid',
       headStyles: { fillColor: [5, 150, 105] }
@@ -277,7 +279,7 @@ const DamageTracking = () => {
       suggestionEn: '',
       suggestionMl: '',
       suggestionTa: '',
-      products: [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', baseless: '', rejectionReason: '' }]
+      products: [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', baseless: '', hole: '', rejectionReason: '' }]
     };
     return {
       ...base,
@@ -285,7 +287,7 @@ const DamageTracking = () => {
       suggestionEn: base.suggestionEn || '',
       suggestionMl: base.suggestionMl || '',
       suggestionTa: base.suggestionTa || '',
-      products: (base.products || [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', baseless: '', rejectionReason: '' }]).map(p => ({
+      products: (base.products || [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', baseless: '', hole: '', rejectionReason: '' }]).map(p => ({
         ...p,
         rejectionReason: p.rejectionReason || ''
       }))
@@ -366,7 +368,7 @@ const DamageTracking = () => {
       return;
     }
 
-    const hasDamages = qcForm.products.some(p => Number(p.damaged) > 0 || (Number(p.rejected) || 0) > 0 || (Number(p.baseless) || 0) > 0);
+    const hasDamages = qcForm.products.some(p => Number(p.damaged) > 0 || (Number(p.rejected) || 0) > 0 || (Number(p.baseless) || 0) > 0 || (Number(p.hole) || 0) > 0);
 
     const processSubmission = async (shouldDeduct) => {
       try {
@@ -421,7 +423,7 @@ const DamageTracking = () => {
     if (hasDamages) {
       Swal.fire({
         title: 'Deduct from Stock?',
-        text: `Deduct identified non-sellable units (Damaged + Rejected items) from stock?`,
+        text: `Deduct identified non-sellable units (Damaged + Rejected + Baseless + Hole items) from stock?`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#4f46e5',
@@ -438,7 +440,7 @@ const DamageTracking = () => {
   const addQCProduct = () => {
     setQcForm({
       ...qcForm,
-      products: [...qcForm.products, { id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', rejectionReason: '' }]
+      products: [...qcForm.products, { id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', baseless: '', hole: '', rejectionReason: '' }]
     });
   };
 
@@ -491,13 +493,13 @@ const DamageTracking = () => {
              <p style="margin: 0 0 8px 0; font-size: 10px; font-weight: bold; color: #94a3b8; text-transform: uppercase;">Product Details</p>
              <div style="background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px;">
                 <p style="margin: 0; font-size: 15px; font-weight: bold; color: #065f46;">${r.productName}</p>
-                <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; text-align: center;">
+                <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-top: 10px; text-align: center;">
                   <div style="background: #f1f5f9; padding: 8px; border-radius: 6px;">
                     <p style="margin: 0; font-size: 16px; font-weight: 900; color: #1e293b;">${r.checked}</p>
                     <p style="margin: 0; font-size: 8px; color: #64748b; text-transform: uppercase;">Checked</p>
                   </div>
                   <div style="background: #ecfdf5; padding: 8px; border-radius: 6px;">
-                    <p style="margin: 0; font-size: 16px; font-weight: 900; color: #059669;">${r.good || (Number(r.checked) - Number(r.damaged || 0) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0))}</p>
+                    <p style="margin: 0; font-size: 16px; font-weight: 900; color: #059669;">${r.good || (Number(r.checked) - Number(r.damaged || 0) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0) - (Number(r.hole) || 0))}</p>
                     <p style="margin: 0; font-size: 8px; color: #059669; text-transform: uppercase;">Good</p>
                   </div>
                   <div style="background: #fff1f2; padding: 8px; border-radius: 6px;">
@@ -511,6 +513,10 @@ const DamageTracking = () => {
                   <div style="background: #f8fafc; padding: 8px; border-radius: 6px; border: 1px dashed #cbd5e1;">
                     <p style="margin: 0; font-size: 16px; font-weight: 900; color: #64748b;">${r.baseless || 0}</p>
                     <p style="margin: 0; font-size: 8px; color: #64748b; text-transform: uppercase;">Baseless</p>
+                  </div>
+                  <div style="background: #fdf2f8; padding: 8px; border-radius: 6px; border: 1px dashed #fbcfe8;">
+                    <p style="margin: 0; font-size: 16px; font-weight: 900; color: #db2777;">${r.hole || 0}</p>
+                    <p style="margin: 0; font-size: 8px; color: #db2777; text-transform: uppercase;">Holes</p>
                   </div>
                 </div>
                 ${r.rejectionReason ? `<p style="margin: 10px 0 0 0; font-size: 11px; color: #b91c1c;"><b>Reason:</b> ${r.rejectionReason}</p>` : ''}
@@ -564,7 +570,7 @@ const DamageTracking = () => {
       suggestionEn: r.suggestionEn || '',
       suggestionMl: r.suggestionMl || '',
       suggestionTa: r.suggestionTa || '',
-      products: [{ id: Date.now(), productName: r.productName, checked: r.checked, damaged: r.damaged, rejected: r.rejected || '', baseless: r.baseless || '', rejectionReason: r.rejectionReason || '' }]
+      products: [{ id: Date.now(), productName: r.productName, checked: r.checked, damaged: r.damaged, rejected: r.rejected || '', baseless: r.baseless || '', hole: r.hole || '', rejectionReason: r.rejectionReason || '' }]
     });
     setSelectedImages(r.images || []);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -580,7 +586,7 @@ const DamageTracking = () => {
       suggestionEn: '',
       suggestionMl: '',
       suggestionTa: '',
-      products: [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', rejectionReason: '' }]
+      products: [{ id: Date.now(), productName: '', checked: '', damaged: '', rejected: '', baseless: '', hole: '', rejectionReason: '' }]
     });
     setSelectedImages([]);
   };
@@ -660,7 +666,7 @@ const DamageTracking = () => {
                 <div className="space-y-3">
                   {qcForm.products.map((p, index) => (
                     <div key={p.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-white/40 p-3 rounded-lg border border-indigo-50 relative group">
-                      <div className="md:col-span-12 lg:col-span-5">
+                      <div className="md:col-span-12 lg:col-span-3">
                         <SearchableSelect
                           label="Product / SKU"
                           options={availableQCProducts.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)}
@@ -672,7 +678,7 @@ const DamageTracking = () => {
                           required
                         />
                       </div>
-                      <div className="md:col-span-4 lg:col-span-2">
+                      <div className="md:col-span-3 lg:col-span-1">
                         <Input
                           label="Checked"
                           type="number"
@@ -682,7 +688,7 @@ const DamageTracking = () => {
                           required
                         />
                       </div>
-                      <div className="md:col-span-4 lg:col-span-2">
+                      <div className="md:col-span-3 lg:col-span-1">
                         <Input
                           label="Damaged"
                           type="number"
@@ -692,7 +698,7 @@ const DamageTracking = () => {
                           required
                         />
                       </div>
-                      <div className="md:col-span-4 lg:col-span-1">
+                      <div className="md:col-span-2 lg:col-span-1">
                         <Input
                           label="Rejected"
                           type="number"
@@ -701,7 +707,7 @@ const DamageTracking = () => {
                           onChange={(e) => updateQCProductField(p.id, 'rejected', e.target.value)}
                         />
                       </div>
-                      <div className="md:col-span-4 lg:col-span-1">
+                      <div className="md:col-span-2 lg:col-span-1">
                         <Input
                           label="Baseless"
                           type="number"
@@ -710,7 +716,16 @@ const DamageTracking = () => {
                           onChange={(e) => updateQCProductField(p.id, 'baseless', e.target.value)}
                         />
                       </div>
-                      <div className="md:col-span-12 lg:col-span-2">
+                      <div className="md:col-span-2 lg:col-span-1">
+                        <Input
+                          label="Hole"
+                          type="number"
+                          min="0"
+                          value={p.hole}
+                          onChange={(e) => updateQCProductField(p.id, 'hole', e.target.value)}
+                        />
+                      </div>
+                      <div className="md:col-span-10 lg:col-span-3">
                         <div className="space-y-1.5">
                           <label className="text-xs font-bold text-slate-500 uppercase tracking-tight ml-1">Reason</label>
                           <select
@@ -842,11 +857,11 @@ const DamageTracking = () => {
               </div>
 
               <div className="flex flex-col sm:flex-row justify-between items-center bg-white/50 p-4 rounded-xl border border-indigo-100/50 gap-4">
-                <div className="grid grid-cols-3 gap-4 w-full sm:w-auto">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 w-full sm:w-auto">
                   <div>
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Total Good</p>
                     <p className="text-xl font-black text-emerald-600">
-                      {qcForm.products.reduce((acc, p) => acc + (Number(p.checked) || 0) - (Number(p.damaged) || 0) - (Number(p.rejected) || 0), 0)}
+                      {qcForm.products.reduce((acc, p) => acc + (Number(p.checked) || 0) - (Number(p.damaged) || 0) - (Number(p.rejected) || 0) - (Number(p.baseless) || 0) - (Number(p.hole) || 0), 0)}
                     </p>
                   </div>
                   <div>
@@ -859,6 +874,18 @@ const DamageTracking = () => {
                     <p className="text-[10px] font-bold text-slate-400 uppercase">Damaged</p>
                     <p className="text-xl font-black text-rose-600">
                       {qcForm.products.reduce((acc, p) => acc + (Number(p.damaged) || 0), 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Baseless</p>
+                    <p className="text-xl font-black text-slate-500">
+                      {qcForm.products.reduce((acc, p) => acc + (Number(p.baseless) || 0), 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Holes</p>
+                    <p className="text-xl font-black text-amber-700">
+                      {qcForm.products.reduce((acc, p) => acc + (Number(p.hole) || 0), 0)}
                     </p>
                   </div>
                 </div>
@@ -1004,7 +1031,7 @@ const DamageTracking = () => {
             </div>
 
             <div className="w-full">
-              <Table headers={['Date', 'Product', 'Vendor', 'Checked', 'Damaged', 'Rejected', 'Baseless', 'Approved', 'Preview + Share', 'Actions']}>
+              <Table headers={['Date', 'Product', 'Vendor', 'Checked', 'Damaged', 'Rejected', 'Baseless', 'Holes', 'Approved', 'Preview + Share', 'Actions']}>
                 {qcRecords
                   .filter(r => {
                     const matchesSearch = r.productName.toLowerCase().includes(historySearch.toLowerCase()) ||
@@ -1039,8 +1066,9 @@ const DamageTracking = () => {
                         <td className="py-4 px-6 text-sm font-bold text-rose-600">{r.damaged}</td>
                         <td className="py-4 px-6 text-sm font-bold text-amber-600">{r.rejected || 0}</td>
                         <td className="py-4 px-6 text-sm font-bold text-slate-500">{r.baseless || 0}</td>
+                        <td className="py-4 px-6 text-sm font-bold text-amber-700">{r.hole || 0}</td>
                         <td className="py-4 px-6 text-sm font-black text-emerald-600">
-                          {Number(r.checked) - Number(r.damaged) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0)}
+                          {Number(r.checked) - Number(r.damaged) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0) - (Number(r.hole) || 0)}
                         </td>
                         <td className="py-4 px-6 text-sm">
                           <div className="flex items-center gap-2">

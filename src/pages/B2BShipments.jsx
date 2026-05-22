@@ -156,7 +156,6 @@ const B2BShipments = () => {
     setIsSubmitting(true);
     
     try {
-
       const finalizedProducts = products.map(p => {
         const masterSKU = stock.find(s => s.name === p.name);
         return {
@@ -168,26 +167,47 @@ const B2BShipments = () => {
         };
       });
 
-      const shipmentData = {
-        ...formData,
-        dispatchDate: formData.status === 'Dispatched' ? (formData.dispatchDate || new Date().toISOString().split('T')[0]) : null,
-        products: finalizedProducts
+      const saveShipment = async (shouldDeduct) => {
+        const shipmentData = {
+          ...formData,
+          dispatchDate: formData.status === 'Dispatched' ? (formData.dispatchDate || new Date().toISOString().split('T')[0]) : null,
+          products: finalizedProducts,
+          deducted: shouldDeduct
+        };
+
+        if (isEditing) {
+          await updateB2BShipment(editingId, shipmentData);
+          toast.success(shouldDeduct ? 'B2B Shipment updated & stock adjusted!' : 'B2B Shipment updated (Log only).');
+        } else {
+          await addB2BShipment(shipmentData);
+          toast.success(shouldDeduct ? 'B2B Shipment recorded & stock deducted!' : 'B2B Shipment recorded (Log only).');
+          clearDraft('b2b');
+        }
+        handleCancel();
       };
 
-      if (isEditing) {
-        await updateB2BShipment(editingId, shipmentData);
-        toast.success('B2B Shipment updated!');
+      if (formData.isStore) {
+        Swal.fire({
+          title: 'Deduct from Stock?',
+          text: 'Do you want to reduce the quantities from your main inventory?',
+          icon: 'question',
+          showCancelButton: true,
+          confirmButtonColor: '#4f46e5',
+          cancelButtonColor: '#cbd5e1',
+          confirmButtonText: 'Yes, Deduct',
+          cancelButtonText: 'Log Entry Only'
+        }).then(async (result) => {
+          await saveShipment(result.isConfirmed);
+        }).finally(() => {
+          setIsSubmitting(false);
+        });
       } else {
-        await addB2BShipment(shipmentData);
-        toast.success('B2B Shipment recorded!');
-        clearDraft('b2b');
+        await saveShipment(true);
+        setIsSubmitting(false);
       }
-
-      handleCancel();
     } catch (error) {
       console.error(error);
       toast.error('Failed to save B2B shipment');
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -241,9 +261,13 @@ const B2BShipments = () => {
   };
 
   const handleDelete = (id) => {
+    const shipment = shipments.find(s => s.id === id);
+    const isDeducted = shipment ? (shipment.deducted !== false) : true;
     Swal.fire({
       title: 'Delete this shipment?',
-      text: "This will restore the deducted stock back to your inventory.",
+      text: isDeducted 
+        ? "This will restore the deducted stock back to your inventory."
+        : "You won't be able to revert this!",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#e11d48',
@@ -252,7 +276,7 @@ const B2BShipments = () => {
     }).then((result) => {
       if (result.isConfirmed) {
         deleteB2BShipment(id);
-        toast.error('Shipment deleted & Stock restored.');
+        toast.error(isDeducted ? 'Shipment deleted & Stock restored.' : 'Shipment deleted.');
       }
     });
   };
@@ -634,7 +658,25 @@ const B2BShipments = () => {
                   )}
                 </td>
                 <td className="py-4 px-6 text-sm">
-                  <div className="font-bold text-slate-900">{s.clientName}</div>
+                  <div className="font-bold text-slate-900 flex items-center flex-wrap gap-2">
+                    {s.clientName}
+                    {s.isStore && (
+                      <span className="text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-indigo-50 text-indigo-600 border border-indigo-100">
+                        Store
+                      </span>
+                    )}
+                    {s.isStore && (
+                      s.deducted === false ? (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-slate-50 text-slate-400 border border-slate-200">
+                          Log Only
+                        </span>
+                      ) : (
+                        <span className="text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-100">
+                          Deducted
+                        </span>
+                      )
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 mt-0.5">
                     <span className="text-[10px] uppercase font-bold text-indigo-500">{s.courierName}</span>
                     <span className={`text-[8px] px-1.5 py-0.5 rounded-full font-bold uppercase tracking-wider ${s.status === 'Packed' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>

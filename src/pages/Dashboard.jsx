@@ -36,7 +36,7 @@ const Dashboard = () => {
     };
 
     return {
-      b2b: filterFn(b2bShipments),
+      b2b: filterFn(b2bShipments).filter(s => s.deducted !== false),
       b2c: filterFn(b2cShipments),
       damage: filterFn(damageRecords),
       returns: filterFn(returnRecords)

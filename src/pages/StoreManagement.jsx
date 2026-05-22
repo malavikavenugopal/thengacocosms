@@ -50,7 +50,7 @@ const StoreManagement = () => {
     setActiveTab('enter-sales');
   };
 
-  const handleDeleteSale = (id) => {
+  const handleDeleteSale = (sale) => {
     Swal.fire({
       title: 'Are you sure?',
       text: "You won't be able to revert this!",
@@ -62,7 +62,7 @@ const StoreManagement = () => {
     }).then(async (result) => {
       if (result.isConfirmed) {
         try {
-          await deleteStoreSale(id);
+          await deleteStoreSale(sale.id);
           toast.success('Sales record deleted');
         } catch (error) {
           toast.error('Failed to delete');
@@ -213,12 +213,12 @@ const StoreManagement = () => {
       };
 
       if (editingSale) {
-        await updateStoreSale(editingSale.id, record);
-        toast.success('Sales record updated successfully!');
+        await updateStoreSale(editingSale.id, record, false);
+        toast.success('Sales record updated.');
         setEditingSale(null);
       } else {
-        await addStoreSale(record);
-        toast.success('Sales record saved successfully!');
+        await addStoreSale(record, false);
+        toast.success('Sales record saved.');
       }
       setSalesData([{ id: Date.now(), productName: '', quantity: '', amount: '' }]);
       setSelectedStore('');
@@ -664,7 +664,7 @@ const StoreManagement = () => {
                           <Edit2 size={16} />
                         </button>
                         <button
-                          onClick={() => handleDeleteSale(sale.id)}
+                          onClick={() => handleDeleteSale(sale)}
                           className="p-1.5 text-rose-500 hover:bg-rose-50 rounded"
                           title="Delete"
                         >

@@ -96,16 +96,18 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
     headers = [['Date', 'Product', 'Quantity', 'Reason', 'Recorded By']];
     body = shipments.map(s => [s.date, s.productName, s.quantity, s.reason, s.staffName]);
   } else if (type === 'QC') {
-    headers = [['Date', 'Vendor', 'Product', 'Checked', 'Rejected', 'Damaged', 'Approved']];
+    headers = [['Date', 'Vendor', 'Product', 'Checked', 'Damaged', 'Rejected', 'Baseless', 'Holes', 'Approved']];
     body = shipments.map(s => {
-      const approved = Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0);
+      const approved = Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0) - (Number(s.hole) || 0);
       return [
         s.date, 
         s.vendorName, 
         s.productName,
         s.checked,
-        s.rejected || 0,
         s.damaged,
+        s.rejected || 0,
+        s.baseless || 0,
+        s.hole || 0,
         approved
       ];
     });
@@ -315,8 +317,8 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
                 ${type === 'QC' 
                   ? `• <b>${s.productName}</b><br/>
                      <div style="margin-left: 10px; margin-top: 5px; font-size: 11px; color: #64748b;">
-                       Checked: ${s.checked} | Rejected: ${s.rejected || 0} | Damaged: ${s.damaged}<br/>
-                       <span style="color: #059669; font-weight: bold;">Approved: ${Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0)}</span>
+                       Checked: ${s.checked} | Damaged: ${s.damaged} | Rejected: ${s.rejected || 0} | Baseless: ${s.baseless || 0} | Holes: ${s.hole || 0}<br/>
+                       <span style="color: #059669; font-weight: bold;">Approved: ${Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0) - (Number(s.hole) || 0)}</span>
                        ${s.rejectionReason ? `<br/><span style="color: #dc2626;">Reason: ${s.rejectionReason}</span>` : ''}
                        ${s.suggestionEn ? `<br/><span style="color: #b45309;">Suggestion (EN): ${s.suggestionEn}</span>` : ''}
                        ${s.suggestionMl ? `<br/><span style="color: #b45309;">Suggestion (ML): ${s.suggestionMl}</span>` : ''}
@@ -332,7 +334,7 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
                 }
               </td>
               <td colspan="${type === 'B2B' || type === 'B2C' ? '3' : '1'}" style="padding: 12px; border: 1px solid #ddd; text-align: center; font-weight: bold;">
-                ${type === 'QC' ? (Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0)) : (type === 'Return' ? `+${s.quantity}` : (type === 'Replacement' ? `-${s.products && s.products.length > 0 ? s.products.reduce((acc, p) => acc + (Number(p.quantity) * (Number(p.packSize) || 1)), 0) : s.quantity}` : s.quantity))}
+                ${type === 'QC' ? (Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0) - (Number(s.hole) || 0)) : (type === 'Return' ? `+${s.quantity}` : (type === 'Replacement' ? `-${s.products && s.products.length > 0 ? s.products.reduce((acc, p) => acc + (Number(p.quantity) * (Number(p.packSize) || 1)), 0) : s.quantity}` : s.quantity))}
               </td>
             </tr>
           `;
@@ -436,8 +438,10 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
           <th style="padding: 10px; border: 1px solid #ddd;">${type === 'QC' ? 'Product' : (type === 'Replacement' ? 'Type' : (type === 'B2B' ? 'Courier' : 'Parceled By'))}</th>
           ${type === 'QC' ? `
             <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Checked</th>
-            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Rejected</th>
             <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Damaged</th>
+            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Rejected</th>
+            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Baseless</th>
+            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Holes</th>
             <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Approved</th>
           ` : `
             <th style="padding: 10px; border: 1px solid #ddd;">${type === 'B2B' || type === 'B2C' ? 'Product' : 'Details'}</th>
@@ -478,7 +482,7 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
             `).join('');
           }
 
-          const approved = Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0);
+          const approved = Number(s.checked) - Number(s.damaged) - (Number(s.rejected) || 0) - (Number(s.baseless) || 0) - (Number(s.hole) || 0);
 
           return `
             <tr style="background-color: ${rowBg};">
@@ -493,14 +497,16 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
                        ${s.rejectionReason ? `<span style="color: #dc2626;">Reason: ${s.rejectionReason}</span><br/>` : ''}
                        ${s.suggestionEn ? `<span style="color: #b45309;">Suggestion (EN): ${s.suggestionEn}</span><br/>` : ''}
                        ${s.suggestionMl ? `<span style="color: #b45309;">Suggestion (ML): ${s.suggestionMl}</span><br/>` : ''}
-                       ${s.suggestionTa ? `<span style="color: #b45309;">Suggestion (TA): ${s.suggestionTa}</span>` : ''}
+                       ${s.suggestionTa ? `<span style="color: #b45309;">Suggestion (TA): ${s.suggestionTa}</span><br/>` : ''}
                      </div>`
                   : (type === 'Replacement' ? s.type : (type === 'B2B' ? (s.courierName || '-') : (type === 'B2C' ? (Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : (s.whoParceled || '-')) : '-')))}
               </td>
               ${type === 'QC' ? `
                 <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${s.checked}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${s.damaged || 0}</td>
                 <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${s.rejected || 0}</td>
-                <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${s.damaged}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${s.baseless || 0}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${s.hole || 0}</td>
                 <td style="padding: 10px; border: 1px solid #ddd; text-align: center; font-weight: bold; color: #059669;">${approved}</td>
               ` : `
                 <td style="padding: 10px; border: 1px solid #ddd;">

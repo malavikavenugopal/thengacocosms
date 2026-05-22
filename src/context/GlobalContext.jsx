@@ -18,7 +18,94 @@ import toast from 'react-hot-toast';
 
 const GlobalContext = createContext();
 
-export const useGlobalState = () => useContext(GlobalContext);
+export const useGlobalState = () => {
+  const context = useContext(GlobalContext);
+  if (context === undefined) {
+    console.warn("useGlobalState must be used within a GlobalProvider. Returning safe fallback to prevent crashes.");
+    return {
+      currentUser: null,
+      authLoading: true,
+      stock: [],
+      storeSales: [],
+      stores: [],
+      b2bShipments: [],
+      b2cShipments: [],
+      damageRecords: [],
+      returnRecords: [],
+      purchaseRecords: [],
+      staff: [],
+      channels: [],
+      couriers: [],
+      vendors: [],
+      qcRecords: [],
+      replacementRecords: [],
+      monthlyStockData: [],
+      productionRecords: [],
+      reworkRecords: [],
+      amazonReturnRecords: [],
+      storeReminders: [],
+      loading: true,
+      drafts: { b2b: null, b2c: null, purchase: null, return: null, damage: null, qc: null, replacement: null, production: null, rework: null },
+      updateDraft: () => {},
+      clearDraft: () => {},
+      getAvailableStock: () => 0,
+      addSKU: async () => {},
+      updateSKU: async () => {},
+      deleteSKU: async () => {},
+      addB2BShipment: async () => {},
+      deleteB2BShipment: async () => {},
+      updateB2BShipment: async () => {},
+      addB2CShipment: async () => {},
+      deleteB2CShipment: async () => {},
+      updateB2CShipment: async () => {},
+      addDamageRecord: async () => {},
+      deleteDamageRecord: async () => {},
+      updateDamageRecord: async () => {},
+      addReturnRecord: async () => {},
+      deleteReturnRecord: async () => {},
+      updateReturnRecord: async () => {},
+      addPurchaseRecord: async () => {},
+      deletePurchaseRecord: async () => {},
+      updatePurchaseRecord: async () => {},
+      addQCRecord: async () => {},
+      deleteQCRecord: async () => {},
+      updateQCRecord: async () => {},
+      addReplacementRecord: async () => {},
+      deleteReplacementRecord: async () => {},
+      updateReplacementRecord: async () => {},
+      addProductionRecord: async () => {},
+      deleteProductionRecord: async () => {},
+      updateProductionRecord: async () => {},
+      addStaffMember: async () => {},
+      updateStaffMember: async () => {},
+      deleteStaffMember: async () => {},
+      addChannel: async () => {},
+      updateChannel: async () => {},
+      deleteChannel: async () => {},
+      addCourier: async () => {},
+      updateCourier: async () => {},
+      deleteCourier: async () => {},
+      addVendor: async () => {},
+      updateVendor: async () => {},
+      deleteVendor: async () => {},
+      addStore: async () => {},
+      updateStore: async () => {},
+      deleteStore: async () => {},
+      addStoreSale: async () => {},
+      updateStoreSale: async () => {},
+      deleteStoreSale: async () => {},
+      addStoreReminder: async () => {},
+      addReworkRecord: async () => {},
+      updateReworkRecord: async () => {},
+      deleteReworkRecord: async () => {},
+      addAmazonReturnRecords: async () => {},
+      updateAmazonReturnRecord: async () => {},
+      deleteAmazonReturnRecord: async () => {},
+      logout: async () => {}
+    };
+  }
+  return context;
+};
 
 export const GlobalProvider = ({ children }) => {
   const [stock, setStock] = useState([]);
@@ -71,7 +158,7 @@ export const GlobalProvider = ({ children }) => {
         in: (purchaseRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date))
           .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
 
-        out: (b2bShipments || []).filter(s => isTargetMonth(s.date) && (!s.status || s.status === 'Dispatched'))
+        out: (b2bShipments || []).filter(s => isTargetMonth(s.date) && (!s.status || s.status === 'Dispatched') && s.deducted !== false)
           .reduce((total, sh) => {
             return total + (sh.products || []).reduce((shTotal, p) => {
               let usage = 0;
@@ -106,9 +193,28 @@ export const GlobalProvider = ({ children }) => {
               }
               return shTotal + usage;
             }, 0);
+          }, 0) +
+          (storeSales || []).filter(s => isTargetMonth(s.date) && s.deducted)
+          .reduce((total, sh) => {
+            return total + (sh.products || []).reduce((shTotal, p) => {
+              let usage = 0;
+              const prodName = p.productName || p.name;
+              if (prodName === productName) {
+                usage = (Number(p.quantity) * Number(p.packSize || 1));
+              } else {
+                const bundle = (stock || []).find(item => item.name === prodName);
+                if (bundle?.isComposite && bundle.components) {
+                  const comp = bundle.components.find(c => c.name === productName);
+                  if (comp) {
+                    usage = (Number(p.quantity) * Number(p.packSize || 1) * Number(comp.quantity || 1));
+                  }
+                }
+              }
+              return shTotal + usage;
+            }, 0);
           }, 0),
 
-        packed: (b2bShipments || []).filter(s => isTargetMonth(s.date) && s.status === 'Packed')
+        packed: (b2bShipments || []).filter(s => isTargetMonth(s.date) && s.status === 'Packed' && s.deducted !== false)
           .reduce((total, sh) => {
             return total + (sh.products || []).reduce((shTotal, p) => {
               if (p.isPacked === false) return shTotal;
@@ -138,6 +244,12 @@ export const GlobalProvider = ({ children }) => {
 
         rejected: (qcRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date) && r.deducted)
           .reduce((s, r) => s + (Number(r.rejected) * Number(r.packSize || 1)), 0),
+
+        baseless: (qcRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date) && r.deducted)
+          .reduce((s, r) => s + (Number(r.baseless || 0) * Number(r.packSize || 1)), 0),
+
+        hole: (qcRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date) && r.deducted)
+          .reduce((s, r) => s + (Number(r.hole || 0) * Number(r.packSize || 1)), 0),
 
         replacement: (replacementRecords || []).filter(r => isTargetMonth(r.date) && r.deducted)
           .reduce((s, r) => {
@@ -177,7 +289,7 @@ export const GlobalProvider = ({ children }) => {
       }
 
       const totalIn = (Number(mData.in) || 0) + movements.in + (Number(movements.produced) || 0) + (Number(movements.returned) || 0);
-      const totalOut = (Number(movements.out) || 0) + (Number(movements.packed) || 0) + (Number(movements.damage) || 0) + (Number(movements.rejected) || 0) + (Number(movements.replacement) || 0) + (Number(movements.usedInProduction) || 0);
+      const totalOut = (Number(movements.out) || 0) + (Number(movements.packed) || 0) + (Number(movements.damage) || 0) + (Number(movements.rejected) || 0) + (Number(movements.baseless) || 0) + (Number(movements.hole) || 0) + (Number(movements.replacement) || 0) + (Number(movements.usedInProduction) || 0);
 
       return (Number(mData.opening) || 0) + totalIn - totalOut;
     }
@@ -337,10 +449,12 @@ export const GlobalProvider = ({ children }) => {
 
   const addB2BShipment = async (shipment) => {
     await addDoc(collection(db, 'b2bShipments'), shipment);
-    for (const p of shipment.products) {
-      if (p.isPacked !== false) {
-        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
-        await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
+    if (shipment.deducted !== false) {
+      for (const p of shipment.products) {
+        if (p.isPacked !== false) {
+          const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+          await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
+        }
       }
     }
   };
@@ -349,7 +463,7 @@ export const GlobalProvider = ({ children }) => {
     if (!id) return;
     const shipment = b2bShipments.find(s => s.id === id);
     await deleteDoc(doc(db, 'b2bShipments', String(id)));
-    if (shipment) {
+    if (shipment && shipment.deducted !== false) {
       for (const p of shipment.products) {
         if (p.isPacked !== false) {
           const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
@@ -362,17 +476,21 @@ export const GlobalProvider = ({ children }) => {
   const updateB2BShipment = async (id, updatedShipment) => {
     const oldShipment = b2bShipments.find(s => s.id === id);
     if (!oldShipment) return;
-    for (const p of oldShipment.products) {
-      if (p.isPacked !== false) {
-        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
-        await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+    if (oldShipment.deducted !== false) {
+      for (const p of oldShipment.products) {
+        if (p.isPacked !== false) {
+          const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+          await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+        }
       }
     }
     await updateDoc(doc(db, 'b2bShipments', String(id)), updatedShipment);
-    for (const p of updatedShipment.products) {
-      if (p.isPacked !== false) {
-        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
-        await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
+    if (updatedShipment.deducted !== false) {
+      for (const p of updatedShipment.products) {
+        if (p.isPacked !== false) {
+          const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+          await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
+        }
       }
     }
   };
@@ -524,7 +642,7 @@ export const GlobalProvider = ({ children }) => {
     const masterSKU = stock.find(s => s.name === record.productName);
     const finalized = { ...record, packSize: masterSKU?.packSize || 1, deducted: shouldDeduct };
     await addDoc(collection(db, 'qcRecords'), finalized);
-    const issueQty = (Number(record.rejected) || 0) + (Number(record.damaged) || 0);
+    const issueQty = (Number(record.rejected) || 0) + (Number(record.damaged) || 0) + (Number(record.baseless) || 0) + (Number(record.hole) || 0);
     if (shouldDeduct && issueQty > 0) {
       const totalUnits = issueQty * (masterSKU?.packSize || 1);
       await updateFirestoreStock(record.productName, totalUnits, 'add', 'damage');
@@ -536,7 +654,7 @@ export const GlobalProvider = ({ children }) => {
     const record = qcRecords.find(r => r.id === id);
     await deleteDoc(doc(db, 'qcRecords', String(id)));
     if (record && record.deducted) {
-      const issueQty = (Number(record.rejected) || 0) + (Number(record.damaged) || 0);
+      const issueQty = (Number(record.rejected) || 0) + (Number(record.damaged) || 0) + (Number(record.baseless) || 0) + (Number(record.hole) || 0);
       if (issueQty > 0) {
         const totalUnits = issueQty * (Number(record.packSize) || 1);
         await updateFirestoreStock(record.productName, totalUnits, 'sub', 'damage');
@@ -550,7 +668,7 @@ export const GlobalProvider = ({ children }) => {
 
     // 1. Revert old stock adjustment
     if (oldRecord.deducted) {
-      const oldIssueQty = (Number(oldRecord.rejected) || 0) + (Number(oldRecord.damaged) || 0);
+      const oldIssueQty = (Number(oldRecord.rejected) || 0) + (Number(oldRecord.damaged) || 0) + (Number(oldRecord.baseless) || 0) + (Number(oldRecord.hole) || 0);
       if (oldIssueQty > 0) {
         const totalUnits = oldIssueQty * (Number(oldRecord.packSize) || 1);
         await updateFirestoreStock(oldRecord.productName, totalUnits, 'sub', 'damage');
@@ -564,7 +682,7 @@ export const GlobalProvider = ({ children }) => {
 
     // 3. Apply new stock adjustment
     if (shouldAdjust) {
-      const newIssueQty = (Number(updatedRecord.rejected) || 0) + (Number(updatedRecord.damaged) || 0);
+      const newIssueQty = (Number(updatedRecord.rejected) || 0) + (Number(updatedRecord.damaged) || 0) + (Number(updatedRecord.baseless) || 0) + (Number(updatedRecord.hole) || 0);
       if (newIssueQty > 0) {
         const totalUnits = newIssueQty * (masterSKU?.packSize || 1);
         await updateFirestoreStock(updatedRecord.productName, totalUnits, 'add', 'damage');
@@ -694,10 +812,43 @@ export const GlobalProvider = ({ children }) => {
   const updateStore = async (id, name) => { await updateDoc(doc(db, 'stores', id), { name }); };
   const deleteStore = async (id) => { await deleteDoc(doc(db, 'stores', id)); };
 
-  const addStoreSale = async (data) => { await addDoc(collection(db, 'storeSales'), data); };
+  const addStoreSale = async (data, shouldAdjust) => {
+    const processedProducts = (data.products || []).map(p => {
+      const master = stock.find(s => s.name === p.productName);
+      return { ...p, packSize: master?.packSize || 1 };
+    });
+    const finalized = { ...data, products: processedProducts, deducted: false };
+    await addDoc(collection(db, 'storeSales'), finalized);
+  };
   const addStoreReminder = async (data) => { await addDoc(collection(db, 'storeReminders'), data); };
-  const updateStoreSale = async (id, data) => { await updateDoc(doc(db, 'storeSales', id), data); };
-  const deleteStoreSale = async (id) => { await deleteDoc(doc(db, 'storeSales', id)); };
+  const updateStoreSale = async (id, data, shouldAdjust) => {
+    const oldSale = storeSales.find(s => s.id === id);
+    if (!oldSale) return;
+    // Revert old stock if it was deducted
+    if (oldSale.deducted) {
+      for (const p of (oldSale.products || [])) {
+        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+        await updateFirestoreStock(p.productName, totalUnits, 'sub', 'out');
+      }
+    }
+    const processedProducts = (data.products || []).map(p => {
+      const master = stock.find(s => s.name === p.productName);
+      return { ...p, packSize: master?.packSize || 1 };
+    });
+    const finalized = { ...data, products: processedProducts, deducted: false };
+    await updateDoc(doc(db, 'storeSales', String(id)), finalized);
+  };
+  const deleteStoreSale = async (id) => {
+    if (!id) return;
+    const sale = storeSales.find(s => s.id === id);
+    await deleteDoc(doc(db, 'storeSales', String(id)));
+    if (sale && sale.deducted) {
+      for (const p of (sale.products || [])) {
+        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+        await updateFirestoreStock(p.productName, totalUnits, 'sub', 'out');
+      }
+    }
+  };
 
   const addReworkRecord = async (record) => { await addDoc(collection(db, 'reworkRecords'), record); };
   const updateReworkRecord = async (id, record) => { await updateDoc(doc(db, 'reworkRecords', id), record); };

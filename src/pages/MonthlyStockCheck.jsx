@@ -113,7 +113,7 @@ const MonthlyStockCheck = () => {
     });
     
     b2bShipments.forEach(s => { 
-      if (!s.products) return;
+      if (!s.products || s.deducted === false) return;
       s.products.forEach(p => { 
         const pName = p.name || p.productName;
         const packedDate = p.packedDate || s.packedDate || s.date;
@@ -273,7 +273,7 @@ const MonthlyStockCheck = () => {
 
     // B2B Shipments
     b2bShipments.forEach(s => {
-      if (!s.products || !Array.isArray(s.products)) return;
+      if (!s.products || !Array.isArray(s.products) || s.deducted === false) return;
 
       const dDate = s.dispatchDate || (s.status === 'Dispatched' ? s.date : null);
       const noPacking = s.isPacked === false;
