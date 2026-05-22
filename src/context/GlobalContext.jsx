@@ -158,7 +158,7 @@ export const GlobalProvider = ({ children }) => {
         in: (purchaseRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date))
           .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
 
-        out: (b2bShipments || []).filter(s => isTargetMonth(s.date) && (!s.status || s.status === 'Dispatched') && s.deducted !== false)
+        out: (b2bShipments || []).filter(s => isTargetMonth(s.date) && (!s.status || s.status === 'Dispatched') && s.deducted !== false && s.deducted !== 'false')
           .reduce((total, sh) => {
             return total + (sh.products || []).reduce((shTotal, p) => {
               let usage = 0;
@@ -214,7 +214,7 @@ export const GlobalProvider = ({ children }) => {
             }, 0);
           }, 0),
 
-        packed: (b2bShipments || []).filter(s => isTargetMonth(s.date) && s.status === 'Packed' && s.deducted !== false)
+        packed: (b2bShipments || []).filter(s => isTargetMonth(s.date) && s.status === 'Packed' && s.deducted !== false && s.deducted !== 'false')
           .reduce((total, sh) => {
             return total + (sh.products || []).reduce((shTotal, p) => {
               if (p.isPacked === false) return shTotal;
@@ -234,7 +234,7 @@ export const GlobalProvider = ({ children }) => {
             }, 0);
           }, 0),
 
-        returned: (returnRecords || []).filter(r => r.productName === productName && r.isReusable && isTargetMonth(r.date))
+        returned: (returnRecords || []).filter(r => r.productName === productName && r.isReusable && isTargetMonth(r.date) && r.deducted !== false && r.deducted !== 'false')
           .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
 
         damage: (damageRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date))
@@ -449,7 +449,7 @@ export const GlobalProvider = ({ children }) => {
 
   const addB2BShipment = async (shipment) => {
     await addDoc(collection(db, 'b2bShipments'), shipment);
-    if (shipment.deducted !== false) {
+    if (shipment.deducted !== false && shipment.deducted !== 'false') {
       for (const p of shipment.products) {
         if (p.isPacked !== false) {
           const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
@@ -463,7 +463,7 @@ export const GlobalProvider = ({ children }) => {
     if (!id) return;
     const shipment = b2bShipments.find(s => s.id === id);
     await deleteDoc(doc(db, 'b2bShipments', String(id)));
-    if (shipment && shipment.deducted !== false) {
+    if (shipment && shipment.deducted !== false && shipment.deducted !== 'false') {
       for (const p of shipment.products) {
         if (p.isPacked !== false) {
           const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
@@ -476,7 +476,7 @@ export const GlobalProvider = ({ children }) => {
   const updateB2BShipment = async (id, updatedShipment) => {
     const oldShipment = b2bShipments.find(s => s.id === id);
     if (!oldShipment) return;
-    if (oldShipment.deducted !== false) {
+    if (oldShipment.deducted !== false && oldShipment.deducted !== 'false') {
       for (const p of oldShipment.products) {
         if (p.isPacked !== false) {
           const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
@@ -485,7 +485,7 @@ export const GlobalProvider = ({ children }) => {
       }
     }
     await updateDoc(doc(db, 'b2bShipments', String(id)), updatedShipment);
-    if (updatedShipment.deducted !== false) {
+    if (updatedShipment.deducted !== false && updatedShipment.deducted !== 'false') {
       for (const p of updatedShipment.products) {
         if (p.isPacked !== false) {
           const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
