@@ -61,18 +61,16 @@ const Reports = () => {
         let details = [];
         (s.products || []).forEach(sp => {
           if (sp.name === productName) {
-            const ps = Number(sp.packSize) || Number(masterSKU?.packSize) || 1;
-            qty += (Number(sp.quantity) || 0) * ps;
-            details.push(`${sp.quantity} pack(s) of size ${ps}`);
+            qty += Number(sp.quantity) || 0;
+            details.push(`${sp.quantity} units`);
           } else {
             const bundle = stock.find(item => item.name === sp.name);
             if (bundle?.isComposite && bundle.components) {
               const comp = bundle.components.find(c => c.name === productName);
               if (comp) {
-                const eps = Number(sp.packSize) || Number(bundle.packSize) || 1;
-                const compQty = (Number(sp.quantity) || 0) * eps * (Number(comp.quantity) || 1);
+                const compQty = (Number(sp.quantity) || 0) * (Number(comp.quantity) || 1);
                 qty += compQty;
-                details.push(`${sp.quantity} x bundle "${sp.name}" (contains ${comp.quantity} x pack size ${eps})`);
+                details.push(`${sp.quantity} x bundle "${sp.name}" (contains ${comp.quantity})`);
               }
             }
           }
@@ -104,22 +102,16 @@ const Reports = () => {
         let details = [];
         (s.products || []).forEach(sp => {
           if (sp.name === productName) {
-            const ps = Number(sp.packSize) || Number(masterSKU?.packSize) || 1;
-            qty += (Number(sp.quantity) || 0) * ps;
-            details.push(`${sp.quantity} pack(s) of size ${ps}`);
+            qty += Number(sp.quantity) || 0;
+            details.push(`${sp.quantity} units`);
           } else {
             const bundle = stock.find(item => item.name === sp.name);
             if (bundle?.isComposite && bundle.components) {
               const comp = bundle.components.find(c => c.name === productName);
               if (comp) {
-                const eps = Number(sp.packSize) || Number(bundle.packSize) || 1;
-                let multiplier = Number(comp.quantity) || 1;
-                if (eps > 1 && multiplier > 1 && eps === multiplier) {
-                  multiplier = 1;
-                }
-                const compQty = (Number(sp.quantity) || 0) * eps * multiplier;
+                const compQty = (Number(sp.quantity) || 0) * (Number(comp.quantity) || 1);
                 qty += compQty;
-                details.push(`${sp.quantity} x bundle "${sp.name}" (contains ${comp.quantity} x pack size ${eps})`);
+                details.push(`${sp.quantity} x bundle "${sp.name}" (contains ${comp.quantity})`);
               }
             }
           }
@@ -192,18 +184,16 @@ const Reports = () => {
         let details = [];
         (s.products || []).forEach(sp => {
           if (sp.name === productName) {
-            const ps = Number(sp.packSize) || Number(masterSKU?.packSize) || 1;
-            qty += (Number(sp.quantity) || 0) * ps;
-            details.push(`${sp.quantity} pack(s) of size ${ps}`);
+            qty += Number(sp.quantity) || 0;
+            details.push(`${sp.quantity} units`);
           } else {
             const bundle = stock.find(item => item.name === sp.name);
             if (bundle?.isComposite && bundle.components) {
               const comp = bundle.components.find(c => c.name === productName);
               if (comp) {
-                const eps = Number(sp.packSize) || Number(bundle.packSize) || 1;
-                const compQty = (Number(sp.quantity) || 0) * eps * (Number(comp.quantity) || 1);
+                const compQty = (Number(sp.quantity) || 0) * (Number(comp.quantity) || 1);
                 qty += compQty;
-                details.push(`${sp.quantity} x bundle "${sp.name}" (contains ${comp.quantity} x pack size ${eps})`);
+                details.push(`${sp.quantity} x bundle "${sp.name}" (contains ${comp.quantity})`);
               }
             }
           }
@@ -235,22 +225,16 @@ const Reports = () => {
         let details = [];
         (s.products || []).forEach(sp => {
           if (sp.name === productName) {
-            const ps = Number(sp.packSize) || Number(masterSKU?.packSize) || 1;
-            qty += (Number(sp.quantity) || 0) * ps;
-            details.push(`${sp.quantity} pack(s) of size ${ps}`);
+            qty += Number(sp.quantity) || 0;
+            details.push(`${sp.quantity} units`);
           } else {
             const bundle = stock.find(item => item.name === sp.name);
             if (bundle?.isComposite && bundle.components) {
               const comp = bundle.components.find(c => c.name === productName);
               if (comp) {
-                const eps = Number(sp.packSize) || Number(bundle.packSize) || 1;
-                let multiplier = Number(comp.quantity) || 1;
-                if (eps > 1 && multiplier > 1 && eps === multiplier) {
-                  multiplier = 1;
-                }
-                const compQty = (Number(sp.quantity) || 0) * eps * multiplier;
+                const compQty = (Number(sp.quantity) || 0) * (Number(comp.quantity) || 1);
                 qty += compQty;
-                details.push(`${sp.quantity} x bundle "${sp.name}" (contains ${comp.quantity} x pack size ${eps})`);
+                details.push(`${sp.quantity} x bundle "${sp.name}" (contains ${comp.quantity})`);
               }
             }
           }
@@ -313,20 +297,14 @@ const Reports = () => {
         let qtyForThisProduct = 0;
         (s.products || []).forEach(sp => {
            if (sp.name === p.name) {
-             const ps = Number(sp.packSize) || Number(p.packSize) || 1;
-             qtyForThisProduct += (Number(sp.quantity) || 0) * ps;
+             qtyForThisProduct += Number(sp.quantity) || 0;
            } else {
              // Check if sp is a bundle containing p
              const bundle = stock.find(item => item.name === sp.name);
              if (bundle?.isComposite && bundle.components) {
                const comp = bundle.components.find(c => c.name === p.name);
                if (comp) {
-                 const eps = Number(sp.packSize) || Number(bundle.packSize) || 1;
-                 let multiplier = Number(comp.quantity) || 1;
-                 if (eps > 1 && multiplier > 1 && eps === multiplier) {
-                   multiplier = 1;
-                 }
-                 qtyForThisProduct += (Number(sp.quantity) || 0) * eps * multiplier;
+                  qtyForThisProduct += (Number(sp.quantity) || 0) * (Number(comp.quantity) || 1);
                }
              }
            }
@@ -403,8 +381,7 @@ const Reports = () => {
       (s.products || []).forEach(p => {
         // Direct match
         const masterSKU = stock.find(item => item.name === p.name);
-        const ps = Number(p.packSize) || Number(masterSKU?.packSize) || 1;
-        const shipmentQty = (Number(p.quantity) || 0) * ps;
+        const shipmentQty = Number(p.quantity) || 0;
 
         if (masterSKU?.isComposite && masterSKU.components) {
           // If it's a bundle, add to its components instead
@@ -540,15 +517,13 @@ const Reports = () => {
           let direct = 0;
           (s.products || []).forEach(sp => {
             if (sp.name === p.name) {
-              const ps = Number(sp.packSize) || Number(p.packSize) || 1;
-              direct += (Number(sp.quantity) || 0) * ps;
+              direct += Number(sp.quantity) || 0;
             } else {
               const bundle = stock.find(item => item.name === sp.name);
               if (bundle?.isComposite && bundle.components) {
                 const comp = bundle.components.find(c => c.name === p.name);
                 if (comp) {
-                  const eps = Number(sp.packSize) || Number(bundle.packSize) || 1;
-                  direct += (Number(sp.quantity) || 0) * eps * (Number(comp.quantity) || 1);
+                  direct += (Number(sp.quantity) || 0) * (Number(comp.quantity) || 1);
                 }
               }
             }
@@ -567,19 +542,13 @@ const Reports = () => {
           let direct = 0;
           (s.products || []).forEach(sp => {
             if (sp.name === p.name) {
-              const ps = Number(sp.packSize) || Number(p.packSize) || 1;
-              direct += (Number(sp.quantity) || 0) * ps;
+              direct += Number(sp.quantity) || 0;
             } else {
               const bundle = stock.find(item => item.name === sp.name);
               if (bundle?.isComposite && bundle.components) {
                 const comp = bundle.components.find(c => c.name === p.name);
                 if (comp) {
-                  const eps = Number(sp.packSize) || Number(bundle.packSize) || 1;
-                  let multiplier = Number(comp.quantity) || 1;
-                  if (eps > 1 && multiplier > 1 && eps === multiplier) {
-                    multiplier = 1;
-                  }
-                  direct += (Number(sp.quantity) || 0) * eps * multiplier;
+                  direct += (Number(sp.quantity) || 0) * (Number(comp.quantity) || 1);
                 }
               }
             }
@@ -603,8 +572,7 @@ const Reports = () => {
           let direct = 0;
           (s.products || []).forEach(sp => {
             if (sp.name === p.name) {
-              const ps = Number(sp.packSize) || Number(p.packSize) || 1;
-              direct += (Number(sp.quantity) || 0) * ps;
+              direct += Number(sp.quantity) || 0;
             } else {
               const bundle = stock.find(item => item.name === sp.name);
               if (bundle?.isComposite && bundle.components) {
@@ -622,8 +590,7 @@ const Reports = () => {
           let direct = 0;
           (s.products || []).forEach(sp => {
             if (sp.name === p.name) {
-              const ps = Number(sp.packSize) || Number(p.packSize) || 1;
-              direct += (Number(sp.quantity) || 0) * ps;
+              direct += Number(sp.quantity) || 0;
             } else {
               const bundle = stock.find(item => item.name === sp.name);
               if (bundle?.isComposite && bundle.components) {
@@ -673,8 +640,7 @@ const Reports = () => {
           Products: (s.products || []).map(p => `${p.name} (${p.quantity})`).join(', '),
           TotalUnits: s.products.reduce((sum, p) => {
             const master = stock.find(item => item.name === p.name);
-            const ps = Number(p.packSize) || Number(master?.packSize) || 1;
-            return sum + (Number(p.quantity) * ps);
+            return sum + (Number(p.quantity) || 0);
           }, 0)
         }));
         title = 'DISPATCH LOG — SHIPMENTS';
@@ -945,25 +911,20 @@ const Reports = () => {
                       <div className="overflow-x-auto max-w-[500px]">
                         <div className="min-w-[450px]">
                         {/* Internal Header */}
-                        <div className="grid grid-cols-[1fr,60px,60px,60px] gap-2 mb-2 px-2 py-1 bg-slate-50 rounded text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        <div className="grid grid-cols-[1fr,80px] gap-2 mb-2 px-2 py-1 bg-slate-50 rounded text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                           <span>Product</span>
                           <span className="text-center">Qty</span>
-                          <span className="text-center">Pack</span>
-                          <span className="text-center">Total</span>
                         </div>
                         <div className="flex flex-col gap-2">
                           {(s.products || []).map((p, idx) => {
                             const masterSKU = stock.find(item => item.name === p.name);
-                            const ps = Number(p.packSize) || Number(masterSKU?.packSize) || 1;
                             return (
-                              <div key={idx} className="grid grid-cols-[1fr,60px,60px,60px] gap-2 items-center px-2 py-2 border-b border-slate-100 last:border-0 hover:bg-white rounded transition-colors group">
+                              <div key={idx} className="grid grid-cols-[1fr,80px] gap-2 items-center px-2 py-2 border-b border-slate-100 last:border-0 hover:bg-white rounded transition-colors group">
                                 <div className="flex items-center gap-2 min-w-0">
                                   <span className="text-[9px] font-mono font-bold text-emerald-600 bg-emerald-50 px-1 rounded shrink-0 border border-emerald-100">{masterSKU?.sku || 'N/A'}</span>
                                   <span className="font-medium text-slate-800 break-words line-clamp-2" title={p.name}>{p.name}</span>
                                 </div>
                                 <div className="text-center font-bold text-slate-900">{p.quantity}</div>
-                                <div className="text-center text-slate-400 font-medium">{ps}</div>
-                                <div className="text-center font-bold text-indigo-600 bg-indigo-50/50 py-0.5 rounded">{Number(p.quantity) * ps}</div>
                               </div>
                             );
                           })}

@@ -163,7 +163,7 @@ const B2BShipments = () => {
           quantity: p.quantity,
           isPacked: p.isPacked !== false,
           packedDate: p.packedDate || (p.isPacked !== false ? (formData.date || new Date().toISOString().split('T')[0]) : null),
-          packSize: masterSKU?.packSize || 1,
+          packSize: masterSKU?.isComposite ? 1 : (masterSKU?.packSize || 1),
         };
       });
 
@@ -414,8 +414,11 @@ const B2BShipments = () => {
             <div className="space-y-4">
               {products.map((product) => {
                 const selectedSKU = stock.find(s => s.name === product.name);
-                const packSize = product.packSize || selectedSKU?.packSize || 1;
-                const totalDeduction = (Number(product.quantity) || 0) * packSize;
+                const isComposite = selectedSKU?.isComposite;
+                const totalMultiplier = isComposite 
+                  ? (selectedSKU.components?.reduce((sum, c) => sum + (Number(c.quantity) || 0), 0) || 1)
+                  : 1;
+                const totalDeduction = (Number(product.quantity) || 0) * totalMultiplier;
                 
                 // Stock Availability Logic
                 const available = product.name ? getAvailableStock(product.name) : null;
@@ -424,7 +427,7 @@ const B2BShipments = () => {
                   const oldShipment = shipments.find(s => s.id === editingId);
                   const oldProduct = oldShipment?.products?.find(op => op.name === product.name);
                   if (oldProduct) {
-                    alreadyDeducted = Number(oldProduct.quantity) * (Number(oldProduct.packSize) || 1);
+                    alreadyDeducted = Number(oldProduct.quantity);
                   }
                 }
                 const totalAvailable = available !== null ? available + alreadyDeducted : null;
@@ -435,10 +438,10 @@ const B2BShipments = () => {
                       <div className="md:col-span-5">
                         <SearchableSelect 
                           label={products[0].id === product.id ? "Select Product / SKU" : undefined}
-                          options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)}
-                          value={selectedSKU ? `[${selectedSKU.sku || 'N/A'}] ${selectedSKU.name} (Pack: ${selectedSKU.packSize || 1})` : ''}
+                          options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name}`)}
+                          value={selectedSKU ? `[${selectedSKU.sku || 'N/A'}] ${selectedSKU.name}` : ''}
                           onChange={(val) => {
-                            const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
+                            const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name}` === val)?.name;
                             updateProduct(product.id, 'name', selectedName || '');
                           }}
                         />
@@ -481,12 +484,6 @@ const B2BShipments = () => {
                         </div>
                       )}
 
-                      <div className="md:col-span-2 py-3 text-center border-l border-slate-200">
-                        <p className="text-[10px] font-bold text-slate-400 mb-1 uppercase tracking-tighter">Inventory Deduction</p>
-                        <p className={`font-bold ${product.isPacked !== false ? 'text-indigo-600' : 'text-slate-400 line-through'}`}>
-                          {product.quantity ? `${product.quantity} x ${packSize} = ${totalDeduction}` : '-'}
-                        </p>
-                      </div>
                       <div className="md:col-span-1 flex justify-end pb-2">
                         <button 
                           type="button" 
@@ -500,13 +497,10 @@ const B2BShipments = () => {
                     </div>
                      {selectedSKU && (
                        <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
-                          <div className="flex items-center gap-3">
-                             <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-bold uppercase tracking-wider border border-slate-200">SKU: {selectedSKU.sku}</span>
-                             <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-bold uppercase tracking-wider border border-slate-200">
-                               Pack: {selectedSKU.packSize || 1}
-                             </span>
-                             <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded font-medium italic">{selectedSKU.category}</span>
-                          </div>
+                           <div className="flex items-center gap-3">
+                              <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-bold uppercase tracking-wider border border-slate-200">SKU: {selectedSKU.sku}</span>
+                              <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded font-medium italic">{selectedSKU.category}</span>
+                           </div>
 
                           {/* Compact Stock Warning Box */}
                           <div className={`p-2 rounded-lg border transition-all ${totalAvailable <= 0 ? 'bg-red-50 border-red-200' : totalAvailable < 20 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50/30 border-emerald-100'}`}>
@@ -688,33 +682,28 @@ const B2BShipments = () => {
                 <td className="py-4 px-6 text-sm">
                   <div className="min-w-[450px]">
                     {/* Internal Table Header */}
-                    <div className="grid grid-cols-[1fr,60px,60px,60px,60px] gap-2 mb-2 px-2 py-1 bg-slate-50 rounded text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                    <div className="grid grid-cols-[1fr,80px,80px] gap-2 mb-2 px-2 py-1 bg-slate-50 rounded text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                       <span>Product</span>
                       <span className="text-center">Qty</span>
-                      <span className="text-center">Pack</span>
-                      <span className="text-center">Total</span>
                       <span className="text-center">Status</span>
                     </div>
                     <div className="flex flex-col gap-2">
                       {(s.products || []).map((p, idx) => {
-                         const masterSKU = stock.find(item => item.name === p.name);
-                         const ps = p.packSize || 1;
-                         const isPacked = p.isPacked !== false;
-                         return (
-                          <div key={idx} className="grid grid-cols-[1fr,60px,60px,60px,60px] gap-2 items-center px-2 py-2 border-b border-slate-100 last:border-0 hover:bg-white rounded transition-colors group">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-[9px] font-mono font-bold text-emerald-600 bg-emerald-50 px-1 rounded shrink-0 border border-emerald-100">{masterSKU?.sku || 'N/A'}</span>
-                              <span className={`font-semibold break-words line-clamp-2 ${isPacked ? 'text-slate-800' : 'text-slate-400'}`} title={p.name}>{p.name}</span>
-                            </div>
-                            <div className="text-center font-bold text-slate-900">{p.quantity}</div>
-                            <div className="text-center text-slate-400 font-medium">{ps}</div>
-                            <div className="text-center font-bold text-emerald-600 bg-emerald-50/50 py-0.5 rounded">{Number(p.quantity) * ps}</div>
-                            <div className="text-center">
-                              {isPacked ? <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Packed</span> : <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Pending</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
+                          const masterSKU = stock.find(item => item.name === p.name);
+                          const isPacked = p.isPacked !== false;
+                          return (
+                           <div key={idx} className="grid grid-cols-[1fr,80px,80px] gap-2 items-center px-2 py-2 border-b border-slate-100 last:border-0 hover:bg-white rounded transition-colors group">
+                             <div className="flex items-center gap-2 min-w-0">
+                               <span className="text-[9px] font-mono font-bold text-emerald-600 bg-emerald-50 px-1 rounded shrink-0 border border-emerald-100">{masterSKU?.sku || 'N/A'}</span>
+                               <span className={`font-semibold break-words line-clamp-2 ${isPacked ? 'text-slate-800' : 'text-slate-400'}`} title={p.name}>{p.name}</span>
+                             </div>
+                             <div className="text-center font-bold text-slate-900">{p.quantity}</div>
+                             <div className="text-center">
+                               {isPacked ? <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Packed</span> : <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">Pending</span>}
+                             </div>
+                           </div>
+                         );
+                       })}
                     </div>
                   </div>
                 </td>
@@ -773,20 +762,15 @@ const B2BShipments = () => {
                 .filter(p => p.isPacked !== false)
                 .reduce((acc, p) => {
                   const master = stock.find(item => item.name === p.name);
-                  let effectivePackSize = Number(master?.packSize) || Number(p.packSize) || 1;
-                  const totalUnits = (Number(p.quantity) || 0) * effectivePackSize;
-                  
                   if (master?.isComposite && master.components) {
+                    const comboQty = Number(p.quantity) || 0;
                     master.components.forEach(comp => {
-                      let multiplier = Number(comp.quantity) || 1;
-                      if (effectivePackSize > 1 && multiplier > 1 && effectivePackSize === multiplier) {
-                         multiplier = 1; 
-                      }
-                      const compUnits = totalUnits * multiplier;
+                      const compUnits = comboQty * (Number(comp.quantity) || 1);
                       if (!acc[comp.name]) acc[comp.name] = 0;
                       acc[comp.name] += compUnits;
                     });
                   } else {
+                    const totalUnits = Number(p.quantity) || 0;
                     if (!acc[p.name]) acc[p.name] = 0;
                     acc[p.name] += totalUnits;
                   }
@@ -858,22 +842,17 @@ const B2BShipments = () => {
                   let contributingProducts = [];
                   (s.products || []).filter(p => p.isPacked !== false).forEach(p => {
                     const master = stock.find(item => item.name === p.name);
-                    let effectivePackSize = Number(master?.packSize) || Number(p.packSize) || 1;
-                    const totalUnits = (Number(p.quantity) || 0) * effectivePackSize;
-                    
                     if (p.name === selectedSummaryProduct) {
+                      const totalUnits = Number(p.quantity) || 0;
                       contribution += totalUnits;
-                      contributingProducts.push(`${p.name} (Qty: ${p.quantity || 0}, Pack: ${effectivePackSize})`);
+                      contributingProducts.push(`${p.name} (Qty: ${p.quantity || 0})`);
                     } else {
                       if (master?.isComposite && master.components) {
                          const comp = master.components.find(c => c.name === selectedSummaryProduct);
                          if (comp) {
-                           let multiplier = Number(comp.quantity) || 1;
-                           if (effectivePackSize > 1 && multiplier > 1 && effectivePackSize === multiplier) {
-                              multiplier = 1; 
-                           }
-                           contribution += totalUnits * multiplier;
-                           contributingProducts.push(`${p.name} (Qty: ${p.quantity || 0}, Pack: ${effectivePackSize})`);
+                           const compQty = (Number(p.quantity) || 0) * (Number(comp.quantity) || 1);
+                           contribution += compQty;
+                           contributingProducts.push(`${p.name} (Qty: ${p.quantity || 0})`);
                          }
                       }
                     }

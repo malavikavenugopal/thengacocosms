@@ -189,8 +189,7 @@ const MonthlyStockCheck = () => {
         const pName = p.name || p.productName;
         const master = stock.find(item => compareNames(item.name, pName));
         
-        let effectivePackSize = Number(p.packSize) || 1;
-        const qty = (Number(p.quantity) || 0) * effectivePackSize;
+        const qty = Number(p.quantity) || 0;
 
         const applyB2C = (id, amount) => {
           if (!sums[id]) return;
@@ -207,11 +206,7 @@ const MonthlyStockCheck = () => {
         if (master?.isComposite && master.components) {
           master.components.forEach(comp => {
             const compMaster = stock.find(m => m.id === comp.productId || compareNames(m.name, comp.name));
-            let multiplier = Number(comp.quantity) || 1;
-            if (effectivePackSize > 1 && multiplier > 1 && effectivePackSize === multiplier) {
-               multiplier = 1; 
-            }
-            if (compMaster) { applyB2C(compMaster.id, qty * multiplier); }
+            if (compMaster) { applyB2C(compMaster.id, (Number(p.quantity) || 0) * (Number(comp.quantity) || 1)); }
           });
         }
         if (master) { applyB2C(master.id, qty); }
@@ -220,36 +215,36 @@ const MonthlyStockCheck = () => {
 
     damageRecords.filter(r => isTarget(r.date)).forEach(r => { 
       const master = stock.find(s => compareNames(s.name, r.productName));
-      if (master && sums[master.id]) { sums[master.id].damage += (Number(r.quantity) || 0) * (Number(r.packSize) || 1); }
+      if (master && sums[master.id]) { sums[master.id].damage += Number(r.quantity) || 0; }
     });
     qcRecords.filter(r => isTarget(r.date) && r.deducted).forEach(r => { 
       const master = stock.find(s => compareNames(s.name, r.productName));
       if (master && sums[master.id]) { 
-        sums[master.id].damage += (Number(r.damaged) || 0) * (Number(r.packSize) || 1); 
-        sums[master.id].rejected += (Number(r.rejected) || 0) * (Number(r.packSize) || 1); 
+        sums[master.id].damage += Number(r.damaged) || 0; 
+        sums[master.id].rejected += Number(r.rejected) || 0; 
       } 
     });
     returnRecords.filter(r => isTarget(r.date) && r.isReusable && r.deducted !== false).forEach(r => { 
       const master = stock.find(s => compareNames(s.name, r.productName));
-      if (master && sums[master.id]) { sums[master.id].returned += (Number(r.quantity) || 0) * (Number(r.packSize) || 1); }
+      if (master && sums[master.id]) { sums[master.id].returned += Number(r.quantity) || 0; }
     });
     purchaseRecords.filter(r => isTarget(r.date)).forEach(r => { 
       const master = stock.find(s => compareNames(s.name, r.productName));
-      if (master && sums[master.id]) { sums[master.id].purchased += (Number(r.quantity) || 0) * (Number(r.packSize) || 1); }
+      if (master && sums[master.id]) { sums[master.id].purchased += Number(r.quantity) || 0; }
     });
     replacementRecords.filter(r => isTarget(r.date) && r.deducted).forEach(r => { 
-      const prods = r.products || [{ name: r.productName, quantity: r.quantity, packSize: r.packSize }]; 
+      const prods = r.products || [{ name: r.productName, quantity: r.quantity }]; 
       prods.forEach(p => { 
         const master = stock.find(s => compareNames(s.name, p.name));
-        if (master && sums[master.id]) { sums[master.id].replacement += (Number(p.quantity) || 0) * (Number(p.packSize) || 1); }
+        if (master && sums[master.id]) { sums[master.id].replacement += Number(p.quantity) || 0; }
       }); 
     });
     (productionRecords || []).filter(r => isTarget(r.date)).forEach(r => { 
       const master = stock.find(s => compareNames(s.name, r.productName));
-      if (master && sums[master.id]) { sums[master.id].produced += (Number(r.quantity) || 0) * (Number(r.packSize) || 1); }
+      if (master && sums[master.id]) { sums[master.id].produced += Number(r.quantity) || 0; }
       (r.rawMaterials || []).forEach(rm => { 
         const rmMaster = stock.find(s => compareNames(s.name, rm.name));
-        if (rmMaster && sums[rmMaster.id]) { sums[rmMaster.id].used += (Number(rm.quantity) || 0) * (Number(rm.packSize) || 1); }
+        if (rmMaster && sums[rmMaster.id]) { sums[rmMaster.id].used += Number(rm.quantity) || 0; }
       }); 
     });
 
@@ -299,7 +294,7 @@ const MonthlyStockCheck = () => {
         }
 
         if (matchQty > 0) {
-          const viaText = `VIA: ${pName} (QTY: ${p.quantity || 0}, PACK: ${p.packSize || 1})`.toUpperCase();
+          const viaText = `VIA: ${pName} (QTY: ${p.quantity || 0})`.toUpperCase();
           const item = { 
             id: `${s.id}-${pName}`, 
             label: s.clientName || s.customerName || 'B2B Order', 
@@ -341,24 +336,19 @@ const MonthlyStockCheck = () => {
       s.products.forEach(p => {
         const master = stock.find(item => compareNames(item.name, p.name));
         
-        let effectivePackSize = Number(p.packSize) || 1;
-        const qty = (Number(p.quantity) || 0) * effectivePackSize;
+        const qty = Number(p.quantity) || 0;
         
         let impact = 0;
         if (compareNames(p.name, product.name)) impact = qty;
         else if (master?.isComposite) {
           const comp = master.components?.find(c => compareNames(c.name, product.name));
           if (comp) {
-            let multiplier = Number(comp.quantity) || 1;
-            if (effectivePackSize > 1 && multiplier > 1 && effectivePackSize === multiplier) {
-               multiplier = 1; 
-            }
-            impact = qty * multiplier;
+            impact = (Number(p.quantity) || 0) * (Number(comp.quantity) || 1);
           }
         }
 
         if (impact > 0) {
-          const viaText = `VIA: ${p.name} (QTY: ${p.quantity || 0}, PACK: ${p.packSize || 1})`.toUpperCase();
+          const viaText = `VIA: ${p.name} (QTY: ${p.quantity || 0})`.toUpperCase();
           if (isOutThisPeriod) {
             results.b2cOut.push({
               id: `${s.id}-${p.name}`,
@@ -382,20 +372,20 @@ const MonthlyStockCheck = () => {
 
     // Other Records
     purchaseRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name)).forEach(r => {
-      results.in.push({ id: r.id, label: `Purchase: ${r.vendorName}`, impact: r.quantity * (r.packSize || 1), color: 'emerald' });
+      results.in.push({ id: r.id, label: `Purchase: ${r.vendorName}`, impact: r.quantity, color: 'emerald' });
     });
     productionRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name)).forEach(r => {
-      results.in.push({ id: r.id, label: `Mfg: ${r.location}`, impact: r.quantity * (r.packSize || 1), color: 'indigo' });
+      results.in.push({ id: r.id, label: `Mfg: ${r.location}`, impact: r.quantity, color: 'indigo' });
     });
     returnRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name) && r.isReusable && r.deducted !== false).forEach(r => {
-      results.in.push({ id: r.id, label: `Return: ${r.channel}`, impact: r.quantity * (r.packSize || 1), color: 'blue' });
+      results.in.push({ id: r.id, label: `Return: ${r.channel}`, impact: r.quantity, color: 'blue' });
     });
     damageRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name)).forEach(r => {
-      results.adjustments.push({ id: r.id, label: 'Damage/Loss', impact: r.quantity * (r.packSize || 1), color: 'red' });
+      results.adjustments.push({ id: r.id, label: 'Damage/Loss', impact: r.quantity, color: 'red' });
     });
     qcRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name)).forEach(r => {
-      if (r.rejected) results.adjustments.push({ id: `${r.id}-rej`, label: 'QC Rejected', impact: r.rejected * (r.packSize || 1), color: 'rose' });
-      if (r.damaged) results.adjustments.push({ id: `${r.id}-dmg`, label: 'QC Damaged', impact: r.damaged * (r.packSize || 1), color: 'rose' });
+      if (r.rejected) results.adjustments.push({ id: `${r.id}-rej`, label: 'QC Rejected', impact: r.rejected, color: 'rose' });
+      if (r.damaged) results.adjustments.push({ id: `${r.id}-dmg`, label: 'QC Damaged', impact: r.damaged, color: 'rose' });
     });
 
     return results;

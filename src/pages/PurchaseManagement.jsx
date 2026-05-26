@@ -274,11 +274,11 @@ const PurchaseManagement = () => {
                     <SearchableSelect 
                       label={index === 0 ? "Select Product" : ""} 
                       options={soloProducts
-                        .map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)
+                        .map(s => `[${s.sku || 'N/A'}] ${s.name}`)
                         .sort((a, b) => a.localeCompare(b))} 
-                      value={item.productName ? `${soloProducts.find(s => s.name === item.productName) ? `[${soloProducts.find(s => s.name === item.productName).sku || 'N/A'}] ${item.productName} (Pack: ${soloProducts.find(s => s.name === item.productName).packSize || 1})` : ''}` : ''}
+                      value={item.productName ? `${soloProducts.find(s => s.name === item.productName) ? `[${soloProducts.find(s => s.name === item.productName).sku || 'N/A'}] ${item.productName}` : ''}` : ''}
                       onChange={(val) => {
-                        const selectedName = soloProducts.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
+                        const selectedName = soloProducts.find(s => `[${s.sku || 'N/A'}] ${s.name}` === val)?.name;
                         updateRow(index, 'productName', selectedName || '');
                       }}
                       required

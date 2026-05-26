@@ -169,7 +169,7 @@ export const GlobalProvider = ({ children }) => {
                 if (bundle?.isComposite && bundle.components) {
                   const comp = bundle.components.find(c => c.name === productName);
                   if (comp) {
-                    usage = (Number(p.quantity) * Number(p.packSize || 1) * Number(comp.quantity || 1));
+                    usage = (Number(p.quantity) * Number(comp.quantity || 1));
                   }
                 }
               }
@@ -187,7 +187,7 @@ export const GlobalProvider = ({ children }) => {
                 if (bundle?.isComposite && bundle.components) {
                   const comp = bundle.components.find(c => c.name === productName);
                   if (comp) {
-                    usage = (Number(p.quantity) * Number(p.packSize || 1) * Number(comp.quantity || 1));
+                    usage = (Number(p.quantity) * Number(comp.quantity || 1));
                   }
                 }
               }
@@ -206,7 +206,7 @@ export const GlobalProvider = ({ children }) => {
                 if (bundle?.isComposite && bundle.components) {
                   const comp = bundle.components.find(c => c.name === productName);
                   if (comp) {
-                    usage = (Number(p.quantity) * Number(p.packSize || 1) * Number(comp.quantity || 1));
+                    usage = (Number(p.quantity) * Number(comp.quantity || 1));
                   }
                 }
               }
@@ -226,7 +226,7 @@ export const GlobalProvider = ({ children }) => {
                 if (bundle?.isComposite && bundle.components) {
                   const comp = bundle.components.find(c => c.name === productName);
                   if (comp) {
-                    usage = (Number(p.quantity) * Number(p.packSize || 1) * Number(comp.quantity || 1));
+                    usage = (Number(p.quantity) * Number(comp.quantity || 1));
                   }
                 }
               }
@@ -804,8 +804,17 @@ export const GlobalProvider = ({ children }) => {
   const addVendor = async (data) => { await addDoc(collection(db, 'vendors'), data); };
   const updateVendor = async (id, data) => { await updateDoc(doc(db, 'vendors', id), data); };
   const deleteVendor = async (id) => { await deleteDoc(doc(db, 'vendors', id)); };
-  const addSKU = async (sku) => { await addDoc(collection(db, 'stock'), { ...sku, in: 0, out: 0, damage: 0, returned: 0, produced: 0, used: 0, physical: '' }); };
-  const updateSKU = async (id, updates) => { await updateDoc(doc(db, 'stock', id), updates); };
+  const addSKU = async (sku) => {
+    const finalized = { ...sku, packSize: sku.isComposite ? 1 : (Number(sku.packSize) || 1) };
+    await addDoc(collection(db, 'stock'), { ...finalized, in: 0, out: 0, damage: 0, returned: 0, produced: 0, used: 0, physical: '' });
+  };
+  const updateSKU = async (id, updates) => {
+    const finalized = { ...updates };
+    if (updates.isComposite !== undefined) {
+      finalized.packSize = updates.isComposite ? 1 : (Number(updates.packSize) || 1);
+    }
+    await updateDoc(doc(db, 'stock', id), finalized);
+  };
   const deleteSKU = async (id) => { await deleteDoc(doc(db, 'stock', id)); };
 
   const addStore = async (name) => { await addDoc(collection(db, 'stores'), { name }); };

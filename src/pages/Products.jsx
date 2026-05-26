@@ -51,7 +51,7 @@ const Products = () => {
         sku: (newProduct.isComposite ? newProduct.sku.trim().toUpperCase() : ''),
         category: newProduct.category.trim() || 'Other',
         opening: Number(newProduct.opening) || 0,
-        packSize: Number(newProduct.packSize) || 1,
+        packSize: 1,
         isComposite: newProduct.isComposite,
         components: newProduct.isComposite ? newProduct.components.map(c => ({ name: c.name, quantity: c.quantity })) : []
       });
@@ -125,7 +125,7 @@ const Products = () => {
         name: editingProduct.name.trim(),
         sku: (editingProduct.isComposite ? editingProduct.sku.trim().toUpperCase() : ''),
         category: editingProduct.category.trim() || 'Other',
-        packSize: Number(editingProduct.packSize) || 1,
+        packSize: 1,
         isComposite: editingProduct.isComposite,
         components: editingProduct.isComposite ? editingProduct.components.map(c => ({ name: c.name, quantity: Number(c.quantity) || 1 })) : []
       });
@@ -197,7 +197,7 @@ const Products = () => {
             const name = row.name || row.productname || row.itemname;
             const sku = (row.sku || row.skucode || row.id || '').toUpperCase();
             const category = row.category || row.group || 'Other';
-            const packSize = Number(row.packsize || row.pack) || 1;
+            const packSize = isComposite ? 1 : (Number(row.packsize || row.pack) || 1);
             const opening = Number(row.openingstock || row.opening || row.stock) || 0;
             
             let components = [];
@@ -436,22 +436,12 @@ const Products = () => {
               onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
               required
             />
-            <div className="grid grid-cols-2 gap-3">
-              <Input 
-                label="Category" 
-                placeholder="e.g. Bowls" 
-                value={newProduct.category}
-                onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}
-              />
-              <Input 
-                label="Pack Size" 
-                type="number" 
-                min="1"
-                placeholder="1, 2, 4..." 
-                value={newProduct.packSize}
-                onChange={(e) => setNewProduct({...newProduct, packSize: e.target.value})}
-              />
-            </div>
+            <Input 
+              label="Category" 
+              placeholder="e.g. Bowls" 
+              value={newProduct.category}
+              onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}
+            />
             {!newProduct.isComposite && (
               <Input 
                 label="Opening Stock" 
@@ -468,7 +458,7 @@ const Products = () => {
                     type="checkbox" 
                     className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                     checked={newProduct.isComposite}
-                    onChange={(e) => setNewProduct({...newProduct, isComposite: e.target.checked, components: e.target.checked ? [{name: '', quantity: 1}] : [], opening: 0, sku: ''})}
+                    onChange={(e) => setNewProduct({...newProduct, isComposite: e.target.checked, packSize: e.target.checked ? 1 : 1, components: e.target.checked ? [{name: '', quantity: 1}] : [], opening: 0, sku: ''})}
                   />
                   <span className="text-sm font-semibold text-slate-700 group-hover:text-indigo-600 transition-colors">Composite Product / Bundle?</span>
                </label>
@@ -594,7 +584,7 @@ const Products = () => {
                 </div>
             </div>
           </div>
-          <Table headers={['Category', 'SKU Code', 'Product / SKU Name', 'Status', 'Pack', 'Available Stock', 'Actions']}>
+          <Table headers={['Category', 'SKU Code', 'Product / SKU Name', 'Status', 'Available Stock', 'Actions']}>
             {paginatedStock.map((product) => (
               <tr key={product.id} className="hover:bg-slate-50/80 transition-colors">
                 <td className="py-4 px-6 text-sm text-slate-600">
@@ -643,9 +633,6 @@ const Products = () => {
                    ) : (
                      <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-black tracking-tighter uppercase">Solo</span>
                    )}
-                </td>
-                <td className="py-4 px-6 text-sm text-slate-500 font-bold">
-                    <span className="text-indigo-600">x{product.packSize || 1}</span>
                 </td>
                 <td className="py-4 px-6 text-sm text-center font-black">
                   <span className={getAvailableStock(product.name) <= 0 ? 'text-rose-600' : 'text-emerald-600'}>
@@ -801,19 +788,11 @@ const Products = () => {
                 onChange={(e) => setEditingProduct({...editingProduct, name: e.target.value})}
                 required
               />
-              <div className="grid grid-cols-2 gap-3">
-                <Input 
-                  label="Category" 
-                  value={editingProduct.category}
-                  onChange={(e) => setEditingProduct({...editingProduct, category: e.target.value})}
-                />
-                <Input 
-                  label="Pack Size" 
-                  type="number" 
-                  value={editingProduct.packSize}
-                  onChange={(e) => setEditingProduct({...editingProduct, packSize: e.target.value})}
-                />
-              </div>
+              <Input 
+                label="Category" 
+                value={editingProduct.category}
+                onChange={(e) => setEditingProduct({...editingProduct, category: e.target.value})}
+              />
 
               <div className="pt-2 border-t border-slate-100">
                  <label className="flex items-center gap-2 cursor-pointer">
@@ -824,6 +803,7 @@ const Products = () => {
                       onChange={(e) => setEditingProduct({
                         ...editingProduct, 
                         isComposite: e.target.checked,
+                        packSize: e.target.checked ? 1 : editingProduct.packSize || 1,
                         components: e.target.checked && (!editingProduct.components || editingProduct.components.length === 0) 
                           ? [{ id: Date.now(), name: '', quantity: 1 }] 
                           : (editingProduct.components || [])

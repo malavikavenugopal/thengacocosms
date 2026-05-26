@@ -320,10 +320,10 @@ const Returns = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <SearchableSelect 
                   label="Product / SKU" 
-                  options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)} 
-                  value={formData.productName ? stock.find(s => s.name === formData.productName) ? `[${stock.find(s => s.name === formData.productName).sku || 'N/A'}] ${formData.productName} (Pack: ${stock.find(s => s.name === formData.productName).packSize || 1})` : '' : ''}
+                  options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name}`)} 
+                  value={formData.productName ? stock.find(s => s.name === formData.productName) ? `[${stock.find(s => s.name === formData.productName).sku || 'N/A'}] ${formData.productName}` : '' : ''}
                   onChange={(val) => {
-                    const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
+                    const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name}` === val)?.name;
                     setFormData({...formData, productName: selectedName || ''});
                   }}
                   required
@@ -478,10 +478,10 @@ const Returns = () => {
                       <div className="md:col-span-8">
                         <SearchableSelect 
                           label={idx === 0 ? "Product to Send" : ""} 
-                          options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})`)} 
-                          value={p.name ? stock.find(s => s.name === p.name) ? `[${stock.find(s => s.name === p.name).sku || 'N/A'}] ${p.name} (Pack: ${stock.find(s => s.name === p.name).packSize || 1})` : '' : ''}
+                          options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name}`)} 
+                          value={p.name ? stock.find(s => s.name === p.name) ? `[${stock.find(s => s.name === p.name).sku || 'N/A'}] ${p.name}` : '' : ''}
                           onChange={(val) => {
-                            const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name} (Pack: ${s.packSize || 1})` === val)?.name;
+                            const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name}` === val)?.name;
                             const newProducts = [...repForm.products];
                             newProducts[idx].name = selectedName || '';
                             setRepForm({...repForm, products: newProducts});
