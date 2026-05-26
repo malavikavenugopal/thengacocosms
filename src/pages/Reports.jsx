@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Card, Input, Select, Button, Table } from '../components/ui';
+import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
 import { Download, Filter, FileSpreadsheet, Package, ShoppingCart, AlertCircle, RotateCcw, Eye, X } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import { exportFormattedGeneric } from '../utils/exportUtils';
@@ -776,11 +776,11 @@ const Reports = () => {
             onChange={(e) => setFilter({...filter, endDate: e.target.value})}
             className="text-xs"
           />
-          <Select 
+          <SearchableSelect 
             label="SKU" 
             options={skuOptions} 
             value={filter.sku}
-            onChange={(e) => setFilter({...filter, sku: e.target.value})}
+            onChange={(val) => setFilter({...filter, sku: val})}
             className="text-xs"
           />
           <Select 
