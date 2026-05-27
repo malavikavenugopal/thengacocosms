@@ -1138,7 +1138,7 @@ const Reports = () => {
                           <td className="py-3.5 px-4 text-sm font-bold text-slate-900 text-center bg-slate-50/30">
                             {rec.qty} units
                           </td>
-                          <td className="py-3.5 px-4 text-xs text-slate-500 font-medium max-w-[250px] truncate" title={rec.detail}>
+                          <td className="py-3.5 px-4 text-xs text-slate-500 font-medium min-w-[250px] break-words whitespace-normal" title={rec.detail}>
                             {rec.detail}
                           </td>
                         </tr>
