@@ -90,6 +90,7 @@ const Reports = () => {
     } else if (type === 'B2C') {
       metric = channel ? `B2C Sales (${channel})` : 'B2C Sales';
       b2cShipments.forEach(s => {
+        if (s.channel === 'Amazon FBA') return;
         const dateMatch = (!filter.startDate || s.date >= filter.startDate) && 
                           (!filter.endDate || s.date <= filter.endDate);
         const channelMatch = channel 
@@ -279,7 +280,8 @@ const Reports = () => {
       const channelMatch = filter.channel === 'All Channels' || 
                            filter.channel === 'B2C Shipments' || 
                            s.channel === filter.channel;
-      return dateMatch && channelMatch;
+      const isFBA = s.channel === 'Amazon FBA';
+      return dateMatch && channelMatch && !isFBA;
     });
 
     // 1. Get unique channels from active shipments to ensure FBA and others are included
