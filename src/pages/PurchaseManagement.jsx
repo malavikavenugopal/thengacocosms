@@ -7,7 +7,25 @@ import Swal from 'sweetalert2';
 import { isRecordEditable } from '../utils/dateUtils';
 
 const PurchaseManagement = () => {
-  const { stock, purchaseRecords, addPurchaseRecord, updatePurchaseRecord, deletePurchaseRecord, drafts, updateDraft, clearDraft, qcRecords, vendors, addVendor, updateVendor, deleteVendor } = useGlobalState();
+  const { 
+    stock, 
+    purchaseRecords, 
+    addPurchaseRecord, 
+    updatePurchaseRecord, 
+    deletePurchaseRecord, 
+    drafts, 
+    updateDraft, 
+    clearDraft, 
+    qcRecords, 
+    vendors, 
+    addVendor, 
+    updateVendor, 
+    deleteVendor, 
+    standardRecipients, 
+    addStandardRecipient, 
+    updateStandardRecipient, 
+    deleteStandardRecipient 
+  } = useGlobalState();
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   
@@ -15,15 +33,67 @@ const PurchaseManagement = () => {
   const [newVendor, setNewVendor] = useState({ 
     name: '', 
     whatsappName: '', 
-    email: 'malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com' 
+    email: standardRecipients.filter(r => r.label.toLowerCase() !== 'dhanya').map(r => r.email).join(', ') 
   });
-  const STANDARD_EMAILS = [
-    { email: 'malavikavenu914@gmail.com', label: 'Malavika' },
-    { email: 'sudha.thenga@gmail.com', label: 'Sudha' },
-    { email: 'sumitha@thengacoco.com', label: 'Sumitha' },
-    { email: 'maria@thengacoco.com', label: 'Maria' },
-    { email: 'dhanya.thenga@gmail.com', label: 'Dhanya' }
-  ];
+
+  const [showManageStandards, setShowManageStandards] = useState(false);
+  const [newStandard, setNewStandard] = useState({ label: '', email: '' });
+
+  React.useEffect(() => {
+    // Only update email if name/whatsapp are empty (not currently typing vendor details)
+    if (!newVendor.name && !newVendor.whatsappName && (newVendor.email === '' || newVendor.email === 'sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com')) {
+      setNewVendor(prev => ({ ...prev, email: standardRecipients.filter(r => r.label.toLowerCase() !== 'dhanya').map(r => r.email).join(', ') }));
+    }
+  }, [standardRecipients]);
+
+  const handleAddStandard = async () => {
+    if (!newStandard.label.trim() || !newStandard.email.trim()) {
+      toast.error('Both label and email are required');
+      return;
+    }
+    try {
+      await addStandardRecipient({
+        label: newStandard.label.trim(),
+        email: newStandard.email.trim().toLowerCase()
+      });
+      setNewStandard({ label: '', email: '' });
+      toast.success('Standard recipient added!');
+    } catch (e) {
+      toast.error('Error adding standard recipient');
+    }
+  };
+
+  const handleDeleteStandard = async (item) => {
+    Swal.fire({
+      title: 'Remove Standard Recipient?',
+      text: `Delete "${item.label}" from standard list?`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#e11d48',
+      confirmButtonText: 'Yes, delete'
+    }).then(async (res) => {
+      if (res.isConfirmed) {
+        try {
+          if (item.id) {
+            await deleteStandardRecipient(item.id);
+            toast.success('Deleted standard recipient');
+          } else {
+            const nonDeletedDefaults = standardRecipients
+              .filter(x => x.email !== item.email)
+              .map(x => ({ label: x.label, email: x.email }));
+            
+            // Populate remaining defaults to Firestore
+            for (const d of nonDeletedDefaults) {
+              await addStandardRecipient(d);
+            }
+            toast.success('Deleted standard recipient');
+          }
+        } catch (err) {
+          toast.error('Error deleting standard recipient');
+        }
+      }
+    });
+  };
 
   const [editingVendor, setEditingVendor] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -162,7 +232,7 @@ const PurchaseManagement = () => {
     setNewVendor({ 
       name: v.name, 
       whatsappName: v.whatsappName || '',
-      email: v.email || 'malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com'
+      email: v.email || 'sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com'
     });
     window.scrollTo({ top: document.getElementById('vendor-form')?.offsetTop || 0, behavior: 'smooth' });
   };
@@ -578,9 +648,67 @@ const PurchaseManagement = () => {
             </div>
             
             <div className="mt-4 p-4 bg-white/60 rounded-xl border border-indigo-100">
-              <p className="text-[10px] font-bold text-slate-400 uppercase mb-3 tracking-widest">Standard Recipients (Check to include)</p>
+              <div className="flex justify-between items-center mb-3">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Standard Recipients (Check to include)</p>
+                <button
+                  type="button"
+                  onClick={() => setShowManageStandards(!showManageStandards)}
+                  className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
+                >
+                  {showManageStandards ? 'Done' : 'Manage Standards'}
+                </button>
+              </div>
+
+              {showManageStandards && (
+                <div className="mb-4 p-3 bg-indigo-50/50 rounded-xl border border-indigo-100/50 space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <p className="text-xs font-semibold text-indigo-800">Add New Standard Recipient</p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      placeholder="Name (e.g. John)"
+                      value={newStandard.label}
+                      onChange={(e) => setNewStandard({ ...newStandard, label: e.target.value })}
+                      className="px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 flex-1"
+                    />
+                    <input
+                      type="email"
+                      placeholder="Email Address"
+                      value={newStandard.email}
+                      onChange={(e) => setNewStandard({ ...newStandard, email: e.target.value })}
+                      className="px-3 py-1.5 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddStandard}
+                      className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 shrink-0"
+                    >
+                      <Plus size={14} className="inline mr-0.5" /> Add
+                    </button>
+                  </div>
+                  
+                  <div className="mt-2 space-y-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Standards (Click x to delete)</p>
+                    <div className="flex flex-wrap gap-2">
+                      {standardRecipients.map(item => (
+                        <div key={item.id || item.email} className="flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded-lg text-xs">
+                          <span className="font-medium text-slate-700">{item.label} ({item.email})</span>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteStandard(item)}
+                            className="text-rose-600 font-bold ml-1 hover:text-rose-800"
+                            title="Delete standard recipient"
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-wrap gap-4">
-                {STANDARD_EMAILS.map(item => (
+                {standardRecipients.map(item => (
                   <label key={item.email} className="flex items-center gap-2 cursor-pointer group">
                     <input 
                       type="checkbox" 
@@ -623,7 +751,7 @@ const PurchaseManagement = () => {
                       setNewVendor({ 
                         name: '', 
                         whatsappName: '', 
-                        email: 'malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com' 
+                        email: standardRecipients.filter(r => r.label.toLowerCase() !== 'dhanya').map(r => r.email).join(', ') 
                       });
                       setIsSavingVendor(false);
                     }
@@ -639,7 +767,7 @@ const PurchaseManagement = () => {
                     setNewVendor({ 
                       name: '', 
                       whatsappName: '', 
-                      email: 'malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com' 
+                      email: standardRecipients.filter(r => r.label.toLowerCase() !== 'dhanya').map(r => r.email).join(', ') 
                     });
                   }} className="h-11">Cancel</Button>
                 )}

@@ -11,7 +11,7 @@ import { isRecordEditable } from '../utils/dateUtils';
 import emailjs from 'emailjs-com';
 
 const DamageTracking = () => {
-  const { stock, damageRecords, addDamageRecord, updateDamageRecord, deleteDamageRecord, qcRecords, addQCRecord, updateQCRecord, deleteQCRecord, drafts, updateDraft, clearDraft, purchaseRecords, vendors, uploadQCImages, getQCImageBase64 } = useGlobalState();
+  const { stock, damageRecords, addDamageRecord, updateDamageRecord, deleteDamageRecord, qcRecords, addQCRecord, updateQCRecord, deleteQCRecord, drafts, updateDraft, clearDraft, purchaseRecords, vendors, uploadQCImages, getQCImageBase64, standardRecipients } = useGlobalState();
 
   const REJECTION_REASONS = [
     "Crack / Chipping",
@@ -72,7 +72,7 @@ const DamageTracking = () => {
       : '';
 
     // Combined recipients: Vendor's email + default accounts
-    const defaultRecipients = "malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com";
+    const defaultRecipients = standardRecipients.map(r => r.email).join(', ');
     const recipients = customRecipients || defaultRecipients; 
 
     // Header with Title, Vendor, and Date
@@ -990,7 +990,7 @@ const DamageTracking = () => {
                     }
 
                     const vendor = vendors.find(v => v.name === (vendorFilter === 'All Vendors' ? '' : vendorFilter));
-                    const defaultRecipients = vendor?.email || "malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com";
+                    const defaultRecipients = vendor?.email || standardRecipients.map(r => r.email).join(', ');
 
                     Swal.fire({
                       title: 'Customize Email Recipients',
@@ -1202,7 +1202,7 @@ const DamageTracking = () => {
                               onClick={() => {
                                 if (r.emailSent) return;
                                   const vendor = vendors.find(v => v.name === r.vendorName);
-                                  const defaultRecipients = vendor?.email || "malavikavenu914@gmail.com, sudha.thenga@gmail.com, sumitha@thengacoco.com, maria@thengacoco.com, dhanya.thenga@gmail.com";
+                                  const defaultRecipients = vendor?.email || standardRecipients.map(r => r.email).join(', ');
 
                                   Swal.fire({
                                     title: 'Customize QC Email',

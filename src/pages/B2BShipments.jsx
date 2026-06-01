@@ -20,6 +20,7 @@ const B2BShipments = () => {
       whoParceled: Array.isArray(saved?.whoParceled) ? saved.whoParceled : saved?.whoParceled ? [saved.whoParceled] : [],
       clientName: saved?.clientName || '',
       isStore: saved?.isStore || false,
+      isSample: saved?.isSample || false,
       courierName: saved?.courierName || '',
       boxes: saved?.boxes || '',
       date: saved?.date || defaultDate,
@@ -219,6 +220,7 @@ const B2BShipments = () => {
       whoParceled: Array.isArray(s.whoParceled) ? s.whoParceled : s.whoParceled ? [s.whoParceled] : [],
       clientName: s.clientName,
       isStore: s.isStore || false,
+      isSample: s.isSample || false,
       courierName: s.courierName,
       boxes: s.boxes,
       date: s.date,
@@ -233,7 +235,7 @@ const B2BShipments = () => {
     setIsEditing(false);
     setEditingId(null);
     const today = new Date().toISOString().split('T')[0];
-    setFormData({ whoParceled: [], clientName: '', isStore: false, courierName: '', boxes: '', date: today, status: 'Dispatched', dispatchDate: today });
+    setFormData({ whoParceled: [], clientName: '', isStore: false, isSample: false, courierName: '', boxes: '', date: today, status: 'Dispatched', dispatchDate: today });
     setProducts([{ id: Date.now(), name: '', quantity: '', isPacked: true, packedDate: today }]);
   };
 
@@ -398,6 +400,17 @@ const B2BShipments = () => {
                 required
               />
             )}
+            <div className="flex items-center h-10 mt-6 pl-2">
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700">
+                <input 
+                  type="checkbox"
+                  checked={formData.isSample || false}
+                  onChange={(e) => setFormData({...formData, isSample: e.target.checked})}
+                  className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                />
+                Send as Sample
+              </label>
+            </div>
           </div>
 
           <div className="border-t border-gray-100 pt-6">
@@ -657,6 +670,11 @@ const B2BShipments = () => {
                     {s.isStore && (
                       <span className="text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-indigo-50 text-indigo-600 border border-indigo-100">
                         Store
+                      </span>
+                    )}
+                    {s.isSample && (
+                      <span className="text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-100">
+                        Sample
                       </span>
                     )}
                     {s.isStore && (

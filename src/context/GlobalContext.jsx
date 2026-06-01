@@ -44,6 +44,7 @@ export const useGlobalState = () => {
       reworkRecords: [],
       amazonReturnRecords: [],
       storeReminders: [],
+      standardRecipients: [],
       loading: true,
       drafts: { b2b: null, b2c: null, purchase: null, return: null, damage: null, qc: null, replacement: null, production: null, rework: null },
       updateDraft: () => {},
@@ -101,6 +102,9 @@ export const useGlobalState = () => {
       addAmazonReturnRecords: async () => {},
       updateAmazonReturnRecord: async () => {},
       deleteAmazonReturnRecord: async () => {},
+      addStandardRecipient: async () => {},
+      updateStandardRecipient: async () => {},
+      deleteStandardRecipient: async () => {},
       logout: async () => {}
     };
   }
@@ -127,6 +131,12 @@ export const GlobalProvider = ({ children }) => {
   const [stores, setStores] = useState([]);
   const [storeSales, setStoreSales] = useState([]);
   const [storeReminders, setStoreReminders] = useState([]);
+  const [standardRecipients, setStandardRecipients] = useState([
+    { email: 'sudha.thenga@gmail.com', label: 'Sudha' },
+    { email: 'sumitha@thengacoco.com', label: 'Sumitha' },
+    { email: 'maria@thengacoco.com', label: 'Maria' },
+    { email: 'dhanya.thenga@gmail.com', label: 'Dhanya' }
+  ]);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
@@ -414,6 +424,11 @@ export const GlobalProvider = ({ children }) => {
     const unsubStoreReminders = onSnapshot(query(collection(db, 'storeReminders'), orderBy('date', 'desc')), (snapshot) => {
       setStoreReminders(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
+    const unsubStandardRecipients = onSnapshot(collection(db, 'standardRecipients'), (snapshot) => {
+      if (!snapshot.empty) {
+        setStandardRecipients(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      }
+    });
 
     // Fallback: If data takes too long (e.g. empty database), stop loading after 3 seconds
     const timeout = setTimeout(() => setLoading(false), 3000);
@@ -423,7 +438,7 @@ export const GlobalProvider = ({ children }) => {
       unsubStock(); unsubB2B(); unsubB2C(); unsubDamage();
       unsubReturns(); unsubQC(); unsubStaff(); unsubChannels(); unsubCouriers();
       unsubMonthly(); unsubPurchases(); unsubVendors(); unsubReplacements(); unsubProduction(); unsubRework(); unsubAmazonReturns();
-      unsubStores(); unsubStoreSales(); unsubStoreReminders();
+      unsubStores(); unsubStoreSales(); unsubStoreReminders(); unsubStandardRecipients();
     };
   }, [currentUser]);
 
@@ -804,6 +819,10 @@ export const GlobalProvider = ({ children }) => {
   const addVendor = async (data) => { await addDoc(collection(db, 'vendors'), data); };
   const updateVendor = async (id, data) => { await updateDoc(doc(db, 'vendors', id), data); };
   const deleteVendor = async (id) => { await deleteDoc(doc(db, 'vendors', id)); };
+  
+  const addStandardRecipient = async (data) => { await addDoc(collection(db, 'standardRecipients'), data); };
+  const updateStandardRecipient = async (id, data) => { await updateDoc(doc(db, 'standardRecipients', id), data); };
+  const deleteStandardRecipient = async (id) => { await deleteDoc(doc(db, 'standardRecipients', id)); };
   const addSKU = async (sku) => {
     const finalized = { ...sku, packSize: sku.isComposite ? 1 : (Number(sku.packSize) || 1) };
     await addDoc(collection(db, 'stock'), { ...finalized, in: 0, out: 0, damage: 0, returned: 0, produced: 0, used: 0, physical: '' });
@@ -891,6 +910,7 @@ export const GlobalProvider = ({ children }) => {
       stores, addStore, updateStore, deleteStore,
       storeSales, addStoreSale, updateStoreSale, deleteStoreSale,
       storeReminders, addStoreReminder,
+      standardRecipients, addStandardRecipient, updateStandardRecipient, deleteStandardRecipient,
       monthlyStockData, saveMonthlyStock: async (month, productId, updates) => {
         const id = `${month}_${productId}`;
         await setDoc(doc(db, 'monthlyStockData', id), { ...updates, month, productId }, { merge: true });
