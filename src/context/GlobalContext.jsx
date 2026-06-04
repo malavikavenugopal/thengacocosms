@@ -248,9 +248,13 @@ export const GlobalProvider = ({ children }) => {
           .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
 
         damage: (damageRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date))
-          .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0) +
-          (qcRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date) && r.deducted)
-            .reduce((s, r) => s + (Number(r.damaged) * Number(r.packSize || 1)), 0),
+          .reduce((s, r) => s + (Number(r.quantity) * Number(r.packSize || 1)), 0),
+
+        qcAccepted: (qcRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date))
+          .reduce((s, r) => {
+            const accepted = Number(r.checked) - (Number(r.damaged) || 0) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0) - (Number(r.hole) || 0);
+            return s + (Math.max(0, accepted) * Number(r.packSize || 1));
+          }, 0),
 
         rejected: (qcRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date) && r.deducted)
           .reduce((s, r) => s + (Number(r.rejected) * Number(r.packSize || 1)), 0),
@@ -280,6 +284,41 @@ export const GlobalProvider = ({ children }) => {
             .reduce((s2, rm) => s2 + (Number(rm.quantity) * (Number(rm.packSize) || 1)), 0), 0)
       };
 
+      const productQC = (qcRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date));
+      const qcStatsByVendor = {};
+      productQC.forEach(r => {
+        const vendorName = r.vendorName || 'Unknown';
+        const vendorKey = vendorName.trim().toLowerCase();
+        if (!qcStatsByVendor[vendorKey]) {
+          qcStatsByVendor[vendorKey] = { checked: 0, accepted: 0 };
+        }
+        const checkedVal = Number(r.checked) || 0;
+        const acceptedVal = checkedVal - (Number(r.damaged) || 0) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0) - (Number(r.hole) || 0);
+        qcStatsByVendor[vendorKey].checked += checkedVal * Number(r.packSize || 1);
+        qcStatsByVendor[vendorKey].accepted += Math.max(0, acceptedVal) * Number(r.packSize || 1);
+      });
+
+      const purchasesByVendor = {};
+      const productPurchases = (purchaseRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date));
+      productPurchases.forEach(r => {
+        const vendorName = r.vendorName || 'Unknown';
+        const vendorKey = vendorName.trim().toLowerCase();
+        purchasesByVendor[vendorKey] = (purchasesByVendor[vendorKey] || 0) + (Number(r.quantity) * Number(r.packSize || 1));
+      });
+
+      let qcAcceptedOrPurchase = 0;
+      const allVendors = new Set([
+        ...Object.keys(qcStatsByVendor),
+        ...Object.keys(purchasesByVendor)
+      ]);
+
+      allVendors.forEach(vendorKey => {
+        const A = qcStatsByVendor[vendorKey]?.accepted || 0;
+        const C = qcStatsByVendor[vendorKey]?.checked || 0;
+        const P = purchasesByVendor[vendorKey] || 0;
+        qcAcceptedOrPurchase += A + Math.max(0, P - C);
+      });
+
       if (!mData) {
         const legacyReplacements = (replacementRecords || []).filter(r => !r.products && r.productName === productName && r.deducted)
           .reduce((s, r) => s + (Number(r.quantity) * (Number(r.packSize) || 1)), 0);
@@ -289,7 +328,7 @@ export const GlobalProvider = ({ children }) => {
             .filter(p => p.name === productName)
             .reduce((s2, p) => s2 + (Number(p.quantity) * (Number(p.packSize) || 1)), 0), 0);
 
-        return (Number(item.opening) || 0) + (Number(item.in) || 0) + (Number(item.returned) || 0) + (Number(item.produced) || 0) - (Number(item.out) || 0) - (Number(item.damage) || 0) - (Number(item.rejected) || 0) - (Number(item.replacement) || 0) - legacyReplacements - multiReplacements - (Number(item.used) || 0);
+        return (Number(item.opening) || 0) + (Number(item.returned) || 0) + (Number(item.produced) || 0) + qcAcceptedOrPurchase - (Number(item.out) || 0) - (Number(item.damage) || 0) - (Number(item.replacement) || 0) - legacyReplacements - multiReplacements - (Number(item.used) || 0);
       }
 
       // If we have a reconciled 'expected' value in the DB, use it as the primary truth.
@@ -298,8 +337,8 @@ export const GlobalProvider = ({ children }) => {
         return Number(mData.expected);
       }
 
-      const totalIn = (Number(mData.in) || 0) + movements.in + (Number(movements.produced) || 0) + (Number(movements.returned) || 0);
-      const totalOut = (Number(movements.out) || 0) + (Number(movements.packed) || 0) + (Number(movements.damage) || 0) + (Number(movements.rejected) || 0) + (Number(movements.baseless) || 0) + (Number(movements.hole) || 0) + (Number(movements.replacement) || 0) + (Number(movements.usedInProduction) || 0);
+      const totalIn = (Number(mData.in) || 0) + (Number(movements.produced) || 0) + (Number(movements.returned) || 0) + qcAcceptedOrPurchase;
+      const totalOut = (Number(movements.out) || 0) + (Number(movements.packed) || 0) + (Number(movements.damage) || 0) + (Number(movements.replacement) || 0) + (Number(movements.usedInProduction) || 0);
 
       return (Number(mData.opening) || 0) + totalIn - totalOut;
     }
