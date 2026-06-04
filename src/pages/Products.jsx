@@ -729,7 +729,7 @@ const Products = () => {
               </button>
             </div>
             
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto max-h-[65vh]">
               {getBundlesIncluding(viewBundlesFor.name).length > 0 ? (
                 <div className="space-y-2">
                   {getBundlesIncluding(viewBundlesFor.name).map((bundle, idx) => (

@@ -28,8 +28,40 @@ const PurchaseManagement = () => {
   } = useGlobalState();
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  
+  const [historySubTab, setHistorySubTab] = useState('qc');
   const [activeTab, setActiveTab] = useState('entry');
+  const [qcPage, setQcPage] = useState(1);
+  const [purchasePage, setPurchasePage] = useState(1);
+  const itemsPerPage = 10;
+
+  const cleanVendor = (name) => (name || '').trim().toLowerCase();
+
+  const getQcAcceptedForPurchase = (purchaseRec) => {
+    const sameProductVendorPurchases = purchaseRecords
+      .filter(p => p.productName === purchaseRec.productName && cleanVendor(p.vendorName) === cleanVendor(purchaseRec.vendorName))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const currentIndex = sameProductVendorPurchases.findIndex(p => p.id === purchaseRec.id);
+    if (currentIndex === -1) return null;
+
+    const nextPurchase = sameProductVendorPurchases[currentIndex + 1];
+    const nextPurchaseDate = nextPurchase ? nextPurchase.date : null;
+
+    const matchingQcs = qcRecords.filter(q => 
+      q.productName === purchaseRec.productName && 
+      cleanVendor(q.vendorName) === cleanVendor(purchaseRec.vendorName) &&
+      q.date >= purchaseRec.date &&
+      (!nextPurchaseDate || q.date < nextPurchaseDate)
+    );
+    if (matchingQcs.length === 0) return null;
+    
+    return matchingQcs.reduce((sum, q) => {
+      const checked = Number(q.checked) || 0;
+      const accepted = checked - (Number(q.damaged) || 0) - (Number(q.rejected) || 0) - (Number(q.baseless) || 0) - (Number(q.hole) || 0);
+      return sum + Math.max(0, accepted);
+    }, 0);
+  };
+  
   const [newVendor, setNewVendor] = useState({ 
     name: '', 
     whatsappName: '', 
@@ -138,6 +170,11 @@ const PurchaseManagement = () => {
       updateDraft('purchase', formData);
     }
   }, [formData, isEditing]);
+
+  React.useEffect(() => {
+    setQcPage(1);
+    setPurchasePage(1);
+  }, [historyFilters]);
 
   const addRow = () => {
     setFormData(prev => ({
@@ -417,7 +454,26 @@ const PurchaseManagement = () => {
           })
           .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        return (
+        const filteredQc = qcRecords
+          .filter(r => {
+            const matchDate = (!historyFilters.startDate || r.date >= historyFilters.startDate) && 
+                            (!historyFilters.endDate || r.date <= historyFilters.endDate);
+            const matchVendor = !historyFilters.vendor || r.vendorName === historyFilters.vendor;
+            const matchProduct = !historyFilters.product || r.productName === historyFilters.product;
+            const matchSearch = !historyFilters.search || 
+                               (r.vendorName || '').toLowerCase().includes(historyFilters.search.toLowerCase()) || 
+                               r.productName.toLowerCase().includes(historyFilters.search.toLowerCase());
+            return matchDate && matchVendor && matchProduct && matchSearch;
+          })
+          .sort((a,b) => new Date(b.date) - new Date(a.date));
+
+        const totalPurchasePages = Math.ceil(filteredHistory.length / itemsPerPage);
+        const paginatedHistory = filteredHistory.slice((purchasePage - 1) * itemsPerPage, purchasePage * itemsPerPage);
+
+        const totalQcPages = Math.ceil(filteredQc.length / itemsPerPage);
+        const paginatedQc = filteredQc.slice((qcPage - 1) * itemsPerPage, qcPage * itemsPerPage);
+
+         return (
           <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
             <Card className="mb-4 border-slate-200/60 shadow-sm overflow-visible">
               <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
@@ -457,7 +513,7 @@ const PurchaseManagement = () => {
                   <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">Search</label>
                   <div className="relative">
                     <Input 
-                      placeholder="Search SKU, Name, Vendor..."
+                      placeholder="Search SKU, Name..." 
                       value={historyFilters.search}
                       onChange={e => setHistoryFilters(f => ({ ...f, search: e.target.value }))}
                       className="pl-9"
@@ -470,149 +526,241 @@ const PurchaseManagement = () => {
               </div>
             </Card>
 
-            <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
-              <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white">
-                <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                  <History size={18} className="text-slate-400" />
-                  Purchase History
-                  <span className="ml-2 bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">
-                    {filteredHistory.length} Records
-                  </span>
-                </h3>
-              </div>
-              <div className="overflow-x-auto">
-                <Table headers={['Date', 'Product / SKU', 'Vendor', 'Place', 'Quantity', 'Action']}>
-                  {filteredHistory.length === 0 ? (
-                    <tr><td colSpan="6" className="py-12 text-center text-slate-400 font-medium">No purchase records found matching your filters.</td></tr>
-                  ) : (
-                    filteredHistory.map(r => (
-                      <tr key={r.id} className="hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 font-medium">
-                        <td className="py-4 px-6 text-sm text-slate-500">{r.date}</td>
-                        <td className="py-4 px-6">
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-mono font-bold text-indigo-500 uppercase tracking-tighter">{soloProducts.find(s => s.name === r.productName)?.sku || 'N/A'}</span>
-                            <span className="text-sm font-bold text-slate-900">{r.productName}</span>
-                          </div>
-                        </td>
-                        <td className="py-4 px-6 text-sm font-semibold text-slate-900">{r.vendorName}</td>
-                        <td className="py-4 px-6 text-sm text-slate-500 flex items-center gap-1.5">
-                          <MapPin size={14} className="text-slate-400" />
-                          {r.place || 'N/A'}
-                        </td>
-                        <td className="py-4 px-6 text-sm">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold ring-4 ring-emerald-50">
-                            +{r.quantity}
-                          </span>
-                        </td>
-                        <td className="py-4 px-6 text-center">
-                              <div className="flex items-center justify-center gap-2">
-                                <button onClick={() => handleEdit(r)} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
-                                  <Edit2 size={18} />
-                                </button>
-                                <button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
-                                  <Trash2 size={18} />
-                                </button>
-                              </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </Table>
-              </div>
-            </Card>
-
-
-          <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
-            <div className="p-6 border-b border-slate-100 bg-indigo-50/10 flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                  <ClipboardCheck size={20} className="text-indigo-500" />
-                  Quality Check Report (Last Arrivals)
-                </h3>
-                <p className="text-xs text-slate-500 mt-1">Inspection logs for products received from vendors</p>
-              </div>
-              <span className="bg-white text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-200">
-                Filtered: {qcRecords.filter(r => {
-                  const matchDate = (!historyFilters.startDate || r.date >= historyFilters.startDate) && 
-                                  (!historyFilters.endDate || r.date <= historyFilters.endDate);
-                  const matchVendor = !historyFilters.vendor || r.vendorName === historyFilters.vendor;
-                  const matchProduct = !historyFilters.product || r.productName === historyFilters.product;
-                  const matchSearch = !historyFilters.search || 
-                                     (r.vendorName || '').toLowerCase().includes(historyFilters.search.toLowerCase()) || 
-                                     r.productName.toLowerCase().includes(historyFilters.search.toLowerCase());
-                  return matchDate && matchVendor && matchProduct && matchSearch;
-                }).length}
-              </span>
+            <div className="flex bg-slate-100 p-1 rounded-xl w-full md:w-fit overflow-x-auto no-scrollbar whitespace-nowrap mb-2">
+              <button
+                type="button"
+                onClick={() => setHistorySubTab('qc')}
+                className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all ${
+                  historySubTab === 'qc' 
+                  ? 'bg-white text-indigo-600 shadow-sm' 
+                  : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <ClipboardCheck size={16} />
+                QC Reports
+              </button>
+              <button
+                type="button"
+                onClick={() => setHistorySubTab('purchase')}
+                className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all ${
+                  historySubTab === 'purchase' 
+                  ? 'bg-white text-indigo-600 shadow-sm' 
+                  : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <History size={16} />
+                Purchase History
+              </button>
             </div>
-            <div className="overflow-x-auto">
-              <Table headers={['Date', 'Product / SKU', 'Vendor', 'Checked', 'Good', 'Damaged', 'Rejected', 'Status']}>
-                {qcRecords.filter(r => {
-                  const matchDate = (!historyFilters.startDate || r.date >= historyFilters.startDate) && 
-                                  (!historyFilters.endDate || r.date <= historyFilters.endDate);
-                  const matchVendor = !historyFilters.vendor || r.vendorName === historyFilters.vendor;
-                  const matchProduct = !historyFilters.product || r.productName === historyFilters.product;
-                  const matchSearch = !historyFilters.search || 
-                                     (r.vendorName || '').toLowerCase().includes(historyFilters.search.toLowerCase()) || 
-                                     r.productName.toLowerCase().includes(historyFilters.search.toLowerCase());
-                  return matchDate && matchVendor && matchProduct && matchSearch;
-                }).length === 0 ? (
-                  <tr><td colSpan="8" className="py-12 text-center text-slate-400 font-medium">No QC reports available matching your filters.</td></tr>
-                ) : (
-                  qcRecords
-                    .filter(r => {
-                      const matchDate = (!historyFilters.startDate || r.date >= historyFilters.startDate) && 
-                                      (!historyFilters.endDate || r.date <= historyFilters.endDate);
-                      const matchVendor = !historyFilters.vendor || r.vendorName === historyFilters.vendor;
-                      const matchProduct = !historyFilters.product || r.productName === historyFilters.product;
-                      const matchSearch = !historyFilters.search || 
-                                         (r.vendorName || '').toLowerCase().includes(historyFilters.search.toLowerCase()) || 
-                                         r.productName.toLowerCase().includes(historyFilters.search.toLowerCase());
-                      return matchDate && matchVendor && matchProduct && matchSearch;
-                    })
-                    .sort((a,b) => new Date(b.date) - new Date(a.date))
-                    .map(r => (
-                    <tr key={r.id} className="hover:bg-slate-50 border-b border-slate-50 last:border-0 font-medium">
-                      <td className="py-4 px-6 text-sm text-slate-500">{r.date}</td>
-                      <td className="py-4 px-6">
-                         <div className="flex flex-col">
-                            <span className="text-[10px] font-bold text-indigo-500 font-mono italic">{soloProducts.find(s => s.name === r.productName)?.sku || 'N/A'}</span>
-                            <span className="text-sm font-bold text-slate-900">{r.productName}</span>
-                         </div>
-                      </td>
-                      <td className="py-4 px-6 text-sm text-slate-600 font-semibold">{r.vendorName || 'N/A'}</td>
-                      <td className="py-4 px-6 text-sm font-bold text-slate-700">{r.checked}</td>
-                      <td className="py-4 px-6 text-sm">
-                        <div className="flex items-center gap-1.5 text-emerald-600 font-black">
-                          <CheckCircle2 size={14} />
-                          {r.good}
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-sm">
-                         <div className={`flex items-center gap-1.5 font-black ${Number(r.damaged) > 0 ? 'text-rose-600' : 'text-slate-300'}`}>
-                          <XCircle size={14} />
-                          {r.damaged}
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-sm">
-                         <div className={`flex items-center gap-1.5 font-black ${Number(r.rejected) > 0 ? 'text-rose-400' : 'text-slate-200'}`}>
-                          <XCircle size={14} />
-                          {r.rejected || 0}
-                        </div>
-                      </td>
-                      <td className="py-4 px-6 text-sm">
-                         {r.deducted ? (
-                           <span className="inline-flex items-center px-2 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold italic">DEDUCTED</span>
-                         ) : (
-                           <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-bold">LOG ONLY</span>
-                         )}
-                      </td>
-                    </tr>
-                  ))
+
+            {historySubTab === 'purchase' ? (
+              <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white">
+                  <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                    <History size={18} className="text-slate-400" />
+                    Purchase History
+                    <span className="ml-2 bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[10px]">
+                      {filteredHistory.length} Records
+                    </span>
+                  </h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table headers={['Date', 'Product / SKU', 'Vendor', 'Place', 'Quantity', 'Action']}>
+                    {paginatedHistory.length === 0 ? (
+                      <tr><td colSpan="6" className="py-12 text-center text-slate-400 font-medium">No purchase records found matching your filters.</td></tr>
+                    ) : (
+                      paginatedHistory.map(r => (
+                        <tr key={r.id} className="hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 font-medium">
+                          <td className="py-4 px-6 text-sm text-slate-500">{r.date}</td>
+                          <td className="py-4 px-6">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-mono font-bold text-indigo-500 uppercase tracking-tighter">{soloProducts.find(s => s.name === r.productName)?.sku || 'N/A'}</span>
+                              <span className="text-sm font-bold text-slate-900">{r.productName}</span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-6 text-sm font-semibold text-slate-900">{r.vendorName}</td>
+                          <td className="py-4 px-6 text-sm text-slate-500 flex items-center gap-1.5">
+                            <MapPin size={14} className="text-slate-400" />
+                            {r.place || 'N/A'}
+                          </td>
+                          <td className="py-4 px-6 text-sm">
+                            <div className="flex flex-col items-start gap-1">
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold ring-4 ring-emerald-50">
+                                +{r.quantity}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button onClick={() => handleEdit(r)} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
+                                    <Edit2 size={18} />
+                                  </button>
+                                  <button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
+                                    <Trash2 size={18} />
+                                  </button>
+                                </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </Table>
+                </div>
+
+                {filteredHistory.length > 0 && (
+                  <div className="mt-4 flex items-center justify-between p-4 border-t border-slate-100 bg-slate-50/50">
+                    <p className="text-[10px] sm:text-xs text-slate-500 font-medium">
+                      Showing <span className="text-indigo-600 font-bold">{(purchasePage - 1) * itemsPerPage + 1}</span> to <span className="text-indigo-600 font-bold">{Math.min(purchasePage * itemsPerPage, filteredHistory.length)}</span> of <span className="text-slate-900 font-bold">{filteredHistory.length}</span> records
+                    </p>
+                    <div className="flex items-center gap-1 bg-slate-100/50 p-1 rounded-xl">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        disabled={purchasePage === 1}
+                        onClick={() => setPurchasePage(p => p - 1)}
+                        className="h-8 px-2 text-[10px] font-bold"
+                      >
+                        PREV
+                      </Button>
+                      <div className="flex gap-1 px-1">
+                        {(() => {
+                          let start = Math.max(1, purchasePage - 1);
+                          let end = Math.min(totalPurchasePages, start + 2);
+                          if (end === totalPurchasePages) start = Math.max(1, end - 2);
+                          const pages = [];
+                          for (let i = start; i <= end; i++) {
+                            pages.push(
+                              <button
+                                key={i}
+                                onClick={() => setPurchasePage(i)}
+                                className={`w-8 h-8 text-[10px] font-black rounded-lg transition-all ${
+                                  purchasePage === i 
+                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 scale-110' 
+                                    : 'text-slate-500 hover:bg-white hover:shadow-sm'
+                                }`}
+                              >
+                                {i}
+                              </button>
+                            );
+                          }
+                          return pages;
+                        })()}
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        disabled={purchasePage === totalPurchasePages || totalPurchasePages === 0}
+                        onClick={() => setPurchasePage(p => p + 1)}
+                        className="h-8 px-2 text-[10px] font-bold text-indigo-600"
+                      >
+                        NEXT
+                      </Button>
+                    </div>
+                  </div>
                 )}
-              </Table>
-            </div>
-          </Card>
-        </div>
+              </Card>
+            ) : (
+              <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
+                <div className="p-6 border-b border-slate-100 bg-indigo-50/10 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                      <ClipboardCheck size={20} className="text-indigo-500" />
+                      Quality Check Report (Last Arrivals)
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">Inspection logs for products received from vendors</p>
+                  </div>
+                  <span className="bg-white text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-200">
+                    Filtered: {filteredQc.length}
+                  </span>
+                </div>
+                <div className="overflow-x-auto">
+                  <Table headers={['Date', 'Product / SKU', 'Vendor', 'Checked', 'Accepted', 'Status']}>
+                    {paginatedQc.length === 0 ? (
+                      <tr><td colSpan="6" className="py-12 text-center text-slate-400 font-medium">No QC reports available matching your filters.</td></tr>
+                    ) : (
+                      paginatedQc.map(r => (
+                        <tr key={r.id} className="hover:bg-slate-50 border-b border-slate-50 last:border-0 font-medium">
+                          <td className="py-4 px-6 text-sm text-slate-500">{r.date}</td>
+                          <td className="py-4 px-6">
+                             <div className="flex flex-col">
+                                <span className="text-[10px] font-bold text-indigo-500 font-mono italic">{soloProducts.find(s => s.name === r.productName)?.sku || 'N/A'}</span>
+                                <span className="text-sm font-bold text-slate-900">{r.productName}</span>
+                             </div>
+                          </td>
+                          <td className="py-4 px-6 text-sm text-slate-600 font-semibold">{r.vendorName || 'N/A'}</td>
+                          <td className="py-4 px-6 text-sm font-bold text-slate-700">{r.checked}</td>
+                          <td className="py-4 px-6 text-sm">
+                            <div className="flex items-center gap-1.5 text-emerald-600 font-black">
+                              <CheckCircle2 size={14} />
+                              {Number(r.checked) - (Number(r.damaged) || 0) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0) - (Number(r.hole) || 0)}
+                            </div>
+                          </td>
+                          <td className="py-4 px-6 text-sm">
+                             {r.deducted ? (
+                               <span className="inline-flex items-center px-2 py-0.5 rounded bg-rose-100 text-rose-700 text-[10px] font-bold italic">DEDUCTED</span>
+                             ) : (
+                               <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-bold">LOG ONLY</span>
+                             )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </Table>
+                </div>
+
+                {filteredQc.length > 0 && (
+                  <div className="mt-4 flex items-center justify-between p-4 border-t border-slate-100 bg-slate-50/50">
+                    <p className="text-[10px] sm:text-xs text-slate-500 font-medium">
+                      Showing <span className="text-indigo-600 font-bold">{(qcPage - 1) * itemsPerPage + 1}</span> to <span className="text-indigo-600 font-bold">{Math.min(qcPage * itemsPerPage, filteredQc.length)}</span> of <span className="text-slate-900 font-bold">{filteredQc.length}</span> reports
+                    </p>
+                    <div className="flex items-center gap-1 bg-slate-100/50 p-1 rounded-xl">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        disabled={qcPage === 1}
+                        onClick={() => setQcPage(p => p - 1)}
+                        className="h-8 px-2 text-[10px] font-bold"
+                      >
+                        PREV
+                      </Button>
+                      <div className="flex gap-1 px-1">
+                        {(() => {
+                          let start = Math.max(1, qcPage - 1);
+                          let end = Math.min(totalQcPages, start + 2);
+                          if (end === totalQcPages) start = Math.max(1, end - 2);
+                          const pages = [];
+                          for (let i = start; i <= end; i++) {
+                            pages.push(
+                              <button
+                                key={i}
+                                onClick={() => setQcPage(i)}
+                                className={`w-8 h-8 text-[10px] font-black rounded-lg transition-all ${
+                                  qcPage === i 
+                                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 scale-110' 
+                                    : 'text-slate-500 hover:bg-white hover:shadow-sm'
+                                }`}
+                              >
+                                {i}
+                              </button>
+                            );
+                          }
+                          return pages;
+                        })()}
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        disabled={qcPage === totalQcPages || totalQcPages === 0}
+                        onClick={() => setQcPage(p => p + 1)}
+                        className="h-8 px-2 text-[10px] font-bold text-indigo-600"
+                      >
+                        NEXT
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            )}
+          </div>
         );
       })()}
 
