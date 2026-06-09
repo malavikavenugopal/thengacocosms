@@ -112,6 +112,11 @@ const MonthlyStockCheck = () => {
       sums[item.id] = { out: 0, b2cOut: 0, b2bOut: 0, packed: 0, stockDeduction: 0, returned: 0, damage: 0, purchased: 0, rejected: 0, replacement: 0, produced: 0, used: 0, qcAccepted: 0, purchasedNoQC: 0 }; 
     });
     
+    const [pYear, pWNum] = periodStr.split('-W').map(Number);
+    const pD = new Date(pYear, 0, 1 + (pWNum - 1) * 7);
+    pD.setDate(pD.getDate() - 7);
+    const prevPeriodStr = getWeekStr(pD);
+
     b2bShipments.forEach(s => { 
       if (!s.products || s.deducted === false || s.deducted === 'false') return;
       s.products.forEach(p => { 
@@ -140,8 +145,9 @@ const MonthlyStockCheck = () => {
               t.b2bOut += amount; // Packed and dispatched this week
             }
           }
-          // Only show as packed if it hasn't been dispatched at all (not this week, not previous weeks)
-          if (packedThisWeek && !dispatchedThisWeek && !dispatchedPrevWeek) {
+          // Only show as packed if it has been packed in the current week or previous week, and hasn't been dispatched yet
+          const packedBeforeOrThisWeek = !noPacking && packedDate && (getWeekStr(packedDate) === periodStr || getWeekStr(packedDate) === prevPeriodStr);
+          if (packedBeforeOrThisWeek && s.status !== 'Dispatched' && !dispatchedThisWeek && !dispatchedPrevWeek) {
             t.packed += amount;
           }
 
@@ -167,50 +173,72 @@ const MonthlyStockCheck = () => {
       // FBA shipments: use dispatchDate for dispatched, packedDate for packed
       // Non-FBA: use date as before
       const isFBA = s.isFBA;
-      let shouldCountAsOut = false;
-      let shouldCountAsPacked = false;
-
+      
       if (isFBA) {
-        if (s.status === 'Dispatched') {
-          // Count as Out on dispatch date
-          shouldCountAsOut = isTarget(s.dispatchDate, periodStr);
-        } else {
-          // Still packed — count as packed (no stock deduction) on packed date
-          shouldCountAsPacked = isTarget(s.packedDate || s.date, periodStr);
-        }
+        const packedDate = s.packedDate || s.date;
+        const packedThisWeek = packedDate && isTarget(packedDate, periodStr);
+        const packedPrevWeek = packedDate && !isTarget(packedDate, periodStr) && getWeekStr(packedDate) < periodStr;
+        const dispatchedThisWeek = s.status === 'Dispatched' && isTarget(s.dispatchDate, periodStr);
+        const dispatchedPrevWeek = s.status === 'Dispatched' && s.dispatchDate && !isTarget(s.dispatchDate, periodStr) && getWeekStr(s.dispatchDate) < periodStr;
+
+        s.products.forEach(p => { 
+          const pName = p.name || p.productName;
+          const master = stock.find(item => compareNames(item.name, pName));
+          const qty = Number(p.quantity) || 0;
+
+          const applyB2C = (id, amount) => {
+            if (!sums[id]) return;
+            
+            if (dispatchedThisWeek) {
+              sums[id].b2cOut += amount;
+              if (!packedPrevWeek) {
+                sums[id].stockDeduction += amount;
+              }
+            }
+            
+            const packedBeforeOrThisWeek = packedDate && (getWeekStr(packedDate) === periodStr || getWeekStr(packedDate) === prevPeriodStr);
+            if (packedBeforeOrThisWeek && s.status !== 'Dispatched' && !dispatchedThisWeek && !dispatchedPrevWeek) {
+              sums[id].packed = (sums[id].packed || 0) + amount;
+              if (packedThisWeek) {
+                sums[id].stockDeduction += amount;
+              }
+            }
+          };
+          
+          if (master?.isComposite && master.components) {
+            master.components.forEach(comp => {
+              const compMaster = stock.find(m => m.id === comp.productId || compareNames(m.name, comp.name));
+              if (compMaster) { applyB2C(compMaster.id, (Number(p.quantity) || 0) * (Number(comp.quantity) || 1)); }
+            });
+          }
+          if (master) { applyB2C(master.id, qty); }
+        });
       } else {
         // Normal B2C: count as Out on shipment date
-        shouldCountAsOut = isTarget(s.date, periodStr);
-      }
+        const shouldCountAsOut = isTarget(s.date, periodStr);
+        if (shouldCountAsOut) {
+          s.products.forEach(p => { 
+            const pName = p.name || p.productName;
+            const master = stock.find(item => compareNames(item.name, pName));
+            
+            const qty = Number(p.quantity) || 0;
 
-      if (!shouldCountAsOut && !shouldCountAsPacked) return;
+            const applyB2C = (id, amount) => {
+              if (!sums[id]) return;
+              sums[id].b2cOut += amount;
+              sums[id].stockDeduction += amount;
+            };
 
-      s.products.forEach(p => { 
-        const pName = p.name || p.productName;
-        const master = stock.find(item => compareNames(item.name, pName));
-        
-        const qty = Number(p.quantity) || 0;
-
-        const applyB2C = (id, amount) => {
-          if (!sums[id]) return;
-          if (shouldCountAsOut) {
-            sums[id].b2cOut += amount;
-            sums[id].stockDeduction += amount;
-          } else if (shouldCountAsPacked) {
-            // FBA packed but not yet dispatched: show as packed, deduct from stock
-            sums[id].packed = (sums[id].packed || 0) + amount;
-            sums[id].stockDeduction += amount;
-          }
-        };
-
-        if (master?.isComposite && master.components) {
-          master.components.forEach(comp => {
-            const compMaster = stock.find(m => m.id === comp.productId || compareNames(m.name, comp.name));
-            if (compMaster) { applyB2C(compMaster.id, (Number(p.quantity) || 0) * (Number(comp.quantity) || 1)); }
-          });
+            if (master?.isComposite && master.components) {
+              master.components.forEach(comp => {
+                const compMaster = stock.find(m => m.id === comp.productId || compareNames(m.name, comp.name));
+                if (compMaster) { applyB2C(compMaster.id, (Number(p.quantity) || 0) * (Number(comp.quantity) || 1)); }
+              });
+            }
+            if (master) { applyB2C(master.id, qty); }
+          }); 
         }
-        if (master) { applyB2C(master.id, qty); }
-      }); 
+      }
     });
 
     damageRecords.filter(r => isTarget(r.date, periodStr)).forEach(r => { 
@@ -309,6 +337,12 @@ const MonthlyStockCheck = () => {
       return clean(n1) === clean(n2);
     };
 
+    const targetPeriod = period || activePeriod;
+    const [pYear, pWNum] = targetPeriod.split('-W').map(Number);
+    const pD = new Date(pYear, 0, 1 + (pWNum - 1) * 7);
+    pD.setDate(pD.getDate() - 7);
+    const prevPeriodStr = getWeekStr(pD);
+
     // B2B Shipments
     b2bShipments.forEach(s => {
       if (!s.products || !Array.isArray(s.products) || s.deducted === false || s.deducted === 'false') return;
@@ -346,12 +380,13 @@ const MonthlyStockCheck = () => {
             detail: viaText
           };
           
+          const packedBeforeOrThisWeek = !noPacking && pDate && (getWeekStr(pDate) === targetPeriod || getWeekStr(pDate) === prevPeriodStr);
           const dispatchedPrevWeek = dDate && !isTarget(dDate, period) && getWeekStr(dDate) < (period || activePeriod);
 
           if (dispatchedThisWeek) {
             if (noPacking || packedThisWeek) results.b2bOut.push(item);
             else results.sent.push(item);
-          } else if (packedThisWeek && !dispatchedPrevWeek) {
+          } else if (packedBeforeOrThisWeek && s.status !== 'Dispatched' && !dispatchedThisWeek && !dispatchedPrevWeek) {
              results.packed.push(item);
           }
         }
@@ -363,18 +398,21 @@ const MonthlyStockCheck = () => {
       const isFBA = s.isFBA;
       let isOutThisPeriod = false;
       let isPackedThisPeriod = false;
+      let isPackedBeforeOrThisPeriod = false;
 
       if (isFBA) {
-        if (s.status === 'Dispatched') {
-          isOutThisPeriod = isTarget(s.dispatchDate, period);
-        } else {
-          isPackedThisPeriod = isTarget(s.packedDate || s.date, period);
-        }
+        const packedDate = s.packedDate || s.date;
+        const dispatchedThisWeek = s.status === 'Dispatched' && isTarget(s.dispatchDate, period);
+        const dispatchedPrevWeek = s.status === 'Dispatched' && s.dispatchDate && !isTarget(s.dispatchDate, period) && getWeekStr(s.dispatchDate) < (period || activePeriod);
+        
+        isOutThisPeriod = dispatchedThisWeek;
+        isPackedThisPeriod = packedDate && isTarget(packedDate, period);
+        isPackedBeforeOrThisPeriod = packedDate && (getWeekStr(packedDate) === targetPeriod || getWeekStr(packedDate) === prevPeriodStr) && s.status !== 'Dispatched' && !dispatchedThisWeek && !dispatchedPrevWeek;
       } else {
         isOutThisPeriod = isTarget(s.date, period);
       }
 
-      if (!isOutThisPeriod && !isPackedThisPeriod) return;
+      if (!isOutThisPeriod && !isPackedThisPeriod && !isPackedBeforeOrThisPeriod) return;
 
       s.products.forEach(p => {
         const master = stock.find(item => compareNames(item.name, p.name));
@@ -400,7 +438,7 @@ const MonthlyStockCheck = () => {
               detail: viaText,
               impact
             });
-          } else if (isPackedThisPeriod) {
+          } else if (isPackedBeforeOrThisPeriod) {
             results.packed.push({
               id: `${s.id}-${p.name}`,
               label: `${s.channel || 'Amazon FBA'} (Packed)`,
