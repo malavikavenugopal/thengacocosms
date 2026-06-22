@@ -21,6 +21,7 @@ const B2BShipments = () => {
       clientName: saved?.clientName || '',
       isStore: saved?.isStore || false,
       isSample: saved?.isSample || false,
+      isExpo: saved?.isExpo || false,
       courierName: saved?.courierName || '',
       boxes: saved?.boxes || '',
       date: saved?.date || defaultDate,
@@ -221,6 +222,7 @@ const B2BShipments = () => {
       clientName: s.clientName,
       isStore: s.isStore || false,
       isSample: s.isSample || false,
+      isExpo: s.isExpo || false,
       courierName: s.courierName,
       boxes: s.boxes,
       date: s.date,
@@ -235,7 +237,7 @@ const B2BShipments = () => {
     setIsEditing(false);
     setEditingId(null);
     const today = new Date().toISOString().split('T')[0];
-    setFormData({ whoParceled: [], clientName: '', isStore: false, isSample: false, courierName: '', boxes: '', date: today, status: 'Dispatched', dispatchDate: today });
+    setFormData({ whoParceled: [], clientName: '', isStore: false, isSample: false, isExpo: false, courierName: '', boxes: '', date: today, status: 'Dispatched', dispatchDate: today });
     setProducts([{ id: Date.now(), name: '', quantity: '', isPacked: true, packedDate: today }]);
   };
 
@@ -400,7 +402,7 @@ const B2BShipments = () => {
                 required
               />
             )}
-            <div className="flex items-center h-10 mt-6 pl-2">
+            <div className="flex items-center gap-6 h-10 mt-6 pl-2">
               <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700">
                 <input 
                   type="checkbox"
@@ -409,6 +411,15 @@ const B2BShipments = () => {
                   className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
                 />
                 Send as Sample
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-slate-700">
+                <input 
+                  type="checkbox"
+                  checked={formData.isExpo || false}
+                  onChange={(e) => setFormData({...formData, isExpo: e.target.checked})}
+                  className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500"
+                />
+                Expo Shipment?
               </label>
             </div>
           </div>
@@ -675,6 +686,11 @@ const B2BShipments = () => {
                     {s.isSample && (
                       <span className="text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-100">
                         Sample
+                      </span>
+                    )}
+                    {s.isExpo && (
+                      <span className="text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider bg-purple-50 text-purple-600 border border-purple-100">
+                        Expo
                       </span>
                     )}
                     {s.isStore && (

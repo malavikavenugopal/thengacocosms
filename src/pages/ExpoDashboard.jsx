@@ -89,8 +89,10 @@ const ExpoDashboard = () => {
       const clientLower = selectedB2BClient.toLowerCase();
 
       // Process B2B Shipments
+      const hasExpoB2BShipments = b2bShipments.some(s => s.isExpo);
       b2bShipments.forEach(s => {
-        if (s.clientName?.toLowerCase() === clientLower && isWithinRange(s.date)) {
+        const matchesExpo = hasExpoB2BShipments ? s.isExpo : true;
+        if (matchesExpo && s.clientName?.toLowerCase() === clientLower && isWithinRange(s.date)) {
           (s.products || []).forEach(p => {
             const master = stock.find(item => item.name === p.name);
             const packSize = Number(p.packSize) || Number(master?.packSize) || 1;
@@ -182,8 +184,10 @@ const ExpoDashboard = () => {
       if (!selectedB2BClient) return [];
       const clientLower = selectedB2BClient.toLowerCase();
 
+      const hasExpoB2BShipments = b2bShipments.some(s => s.isExpo);
       b2bShipments.forEach(s => {
-        if (s.clientName?.toLowerCase() === clientLower) {
+        const matchesExpo = hasExpoB2BShipments ? s.isExpo : true;
+        if (matchesExpo && s.clientName?.toLowerCase() === clientLower) {
           records.push({
             id: s.id,
             date: s.date,
@@ -215,6 +219,10 @@ const ExpoDashboard = () => {
       toast.error('No data to export');
       return;
     }
+    const selectedName = expoType === 'B2C' ? selectedChannel : selectedB2BClient;
+    const displayName = selectedName || 'Expo';
+    const sanitizedName = displayName.replace(/[\s\(\)]+/g, '_');
+
     exportFormattedGeneric(
       expoData.map(p => ({
         'SKU': p.sku,
@@ -223,8 +231,8 @@ const ExpoDashboard = () => {
         'Qty Returned': p.returned,
         'Actual Sold': p.sold
       })),
-      `${selectedChannel}_Dashboard`,
-      `${selectedChannel}_Dashboard_${filterStartDate}_to_${filterEndDate}.xlsx`
+      `${sanitizedName}_Dashboard`,
+      `${sanitizedName}_Dashboard_${filterStartDate}_to_${filterEndDate}.xlsx`
     );
     toast.success('Exporting Dashboard...');
   };
@@ -330,55 +338,57 @@ const ExpoDashboard = () => {
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
-          {/* B2B/B2C Toggle */}
-          <select 
-            className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer font-bold text-slate-700"
-            value={expoType}
-            onChange={e => setExpoType(e.target.value)}
-            disabled={isRenaming}
-          >
-            <option value="B2C">B2C</option>
-            <option value="B2B">B2B</option>
-          </select>
-
-          {/* Conditional Selector */}
-          {expoType === 'B2C' ? (
-            <div className="flex items-center gap-2">
-              <select 
-                className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer font-bold text-slate-700"
-                value={selectedChannel}
-                onChange={e => setSelectedChannel(e.target.value)}
-                disabled={isRenaming}
-              >
-                <option value="">Select Channel</option>
-                {[...channels].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
-                ))}
-              </select>
+          <div className="flex items-center gap-2">
+            <select 
+              className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer font-bold text-slate-700"
+              value={expoType === 'B2C' ? `B2C:${selectedChannel}` : `B2B:${selectedB2BClient}`}
+              onChange={e => {
+                const parts = e.target.value.split(':');
+                if (parts.length < 2) return;
+                const type = parts[0];
+                const val = parts.slice(1).join(':');
+                if (type === 'B2C') {
+                  setExpoType('B2C');
+                  setSelectedChannel(val);
+                  setSelectedB2BClient('');
+                } else if (type === 'B2B') {
+                  setExpoType('B2B');
+                  setSelectedB2BClient(val);
+                  setSelectedChannel('');
+                }
+              }}
+              disabled={isRenaming}
+            >
+              <option value="">Select Channel / B2B Client</option>
               
+              <optgroup label="B2C Retail Channels">
+                {[...channels].sort((a, b) => a.name.localeCompare(b.name)).map(c => (
+                  <option key={`B2C:${c.name}`} value={`B2C:${c.name}`}>{c.name}</option>
+                ))}
+              </optgroup>
+
+              <optgroup label="B2B Expo Clients">
+                {(() => {
+                  const expoClients = Array.from(new Set(b2bShipments.filter(s => s.isExpo).map(s => s.clientName).filter(Boolean)));
+                  const list = expoClients.length > 0 ? expoClients : Array.from(new Set(b2bShipments.map(s => s.clientName).filter(Boolean)));
+                  return list.sort((a, b) => a.localeCompare(b)).map(client => (
+                    <option key={`B2B:${client}`} value={`B2B:${client}`}>{client}</option>
+                  ));
+                })()}
+              </optgroup>
+            </select>
+            
+            {expoType === 'B2C' && (
               <button
                 onClick={handleRenameChannel}
-                className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors"
+                className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors shrink-0"
                 title="Rename Channel and Update Records"
                 disabled={!selectedChannel || isRenaming}
               >
                 <Edit2 size={14} />
               </button>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <select 
-                className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer font-bold text-slate-700"
-                value={selectedB2BClient}
-                onChange={e => setSelectedB2BClient(e.target.value)}
-              >
-                <option value="">Select B2B Client</option>
-                {Array.from(new Set(b2bShipments.map(s => s.clientName).filter(Boolean))).sort((a, b) => a.localeCompare(b)).map(client => (
-                  <option key={client} value={client}>{client}</option>
-                ))}
-              </select>
-            </div>
-          )}
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -416,12 +426,22 @@ const ExpoDashboard = () => {
       <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl text-amber-800 text-sm flex items-start gap-2">
         <Filter size={18} className="shrink-0 mt-0.5" />
         <div>
-          <p className="font-bold">Dashboard Logic (for selected channel: <span className="text-indigo-700">{selectedChannel || 'None'}</span>):</p>
-          <p className="text-xs mt-0.5">
-            • <strong>Taken to Expo:</strong> Quantity recorded in B2C Shipments with Channel = '{selectedChannel}'.<br />
-            • <strong>Returned:</strong> Quantity recorded in Returns with Channel = '{selectedChannel}'.<br />
-            • <strong>Actual Sold:</strong> Calculated as `Taken - Returned`.
-          </p>
+          <p className="font-bold">Dashboard Logic (for selected {expoType === 'B2C' ? 'channel' : 'B2B client'}: <span className="text-indigo-700">{expoType === 'B2C' ? selectedChannel : selectedB2BClient}</span>):</p>
+          <div className="text-xs mt-1 space-y-1">
+            {expoType === 'B2C' ? (
+              <>
+                <p>• <strong>Taken to Expo:</strong> Quantity recorded in B2C Shipments with Channel = '{selectedChannel}'.</p>
+                <p>• <strong>Returned:</strong> Quantity recorded in Returns with Channel = '{selectedChannel}'.</p>
+                <p>• <strong>Actual Sold:</strong> Calculated as `Taken - Returned`.</p>
+              </>
+            ) : (
+              <>
+                <p>• <strong>Taken to Expo:</strong> Quantity recorded in B2B Shipments with Client Name = '{selectedB2BClient}' and marked as Expo.</p>
+                <p>• <strong>Returned:</strong> Quantity recorded in Returns with Channel = '{selectedB2BClient}'.</p>
+                <p>• <strong>Actual Sold:</strong> Calculated as `Taken - Returned`.</p>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

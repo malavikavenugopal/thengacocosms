@@ -66,11 +66,13 @@ const Returns = () => {
     }
   }, [formData, isEditing]);
 
-  React.useEffect(() => {
-    if (!isEditing) {
-      updateDraft('replacement', repForm);
-    }
-  }, [repForm, isEditing]);
+  const expoClients = React.useMemo(() => {
+    return Array.from(new Set(b2bShipments.filter(s => s.isExpo).map(s => s.clientName).filter(Boolean))).sort();
+  }, [b2bShipments]);
+
+  const channelOptions = React.useMemo(() => {
+    return [...channels.map(c => c.name), ...expoClients];
+  }, [channels, expoClients]);
 
   const filteredReturns = returnRecords
     .filter(r => {
@@ -345,7 +347,7 @@ const Returns = () => {
                 />
                 <SearchableSelect 
                   label="From Channel" 
-                  options={channels.map(c => c.name)} 
+                  options={channelOptions} 
                   value={formData.channel}
                   onChange={(val) => setFormData({...formData, channel: val})}
                   required
@@ -585,7 +587,7 @@ const Returns = () => {
               onChange={e => setFilters(f => ({ ...f, channel: e.target.value === 'All Channels' ? '' : e.target.value }))}
             >
               <option>All Channels</option>
-              {channels.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+              {channelOptions.map((name, idx) => <option key={idx} value={name}>{name}</option>)}
             </select>
             
             <div className="flex items-center gap-2 border-l border-slate-200 pl-3 ml-1">

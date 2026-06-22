@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
+import { Card, Input, Select, SearchableSelect, MultiSelect, Button, Table } from '../components/ui';
 import { Download, Filter, FileSpreadsheet, Package, ShoppingCart, AlertCircle, RotateCcw, Eye, X } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import { exportFormattedGeneric } from '../utils/exportUtils';
@@ -17,7 +17,7 @@ const Reports = () => {
     })(),
     endDate: new Date().toISOString().split('T')[0],
     sku: 'All SKUs',
-    channel: 'All Channels',
+    channels: [],
     status: 'All Status'
   });
   const [isExporting, setIsExporting] = useState(false);
@@ -51,7 +51,9 @@ const Reports = () => {
           dateMatch = matchP || matchD;
         }
         
-        const channelMatch = filter.channel === 'All Channels' || filter.channel === 'B2B Shipments';
+        const channelMatch = !filter.channels || filter.channels.length === 0 || 
+                             filter.channels.includes('All Channels') || 
+                             filter.channels.includes('B2B Shipments');
         const statusFilterVal = filter.status || 'All Status';
         const statusMatch = statusFilterVal === 'All Status' || s.status === statusFilterVal;
         
@@ -95,7 +97,10 @@ const Reports = () => {
                           (!filter.endDate || s.date <= filter.endDate);
         const channelMatch = channel 
           ? s.channel === channel 
-          : (filter.channel === 'All Channels' || filter.channel === 'B2C Shipments' || s.channel === filter.channel);
+          : (!filter.channels || filter.channels.length === 0 || 
+             filter.channels.includes('All Channels') || 
+             filter.channels.includes('B2C Shipments') || 
+             filter.channels.includes(s.channel));
 
         if (!dateMatch || !channelMatch) return;
 
@@ -134,9 +139,10 @@ const Reports = () => {
       returnRecords.forEach(r => {
         const dateMatch = (!filter.startDate || r.date >= filter.startDate) && 
                           (!filter.endDate || r.date <= filter.endDate);
-        const channelMatch = filter.channel === 'All Channels' || 
-                             filter.channel === 'B2C Shipments' || 
-                             r.channel === filter.channel;
+        const channelMatch = !filter.channels || filter.channels.length === 0 || 
+                             filter.channels.includes('All Channels') || 
+                             filter.channels.includes('B2C Shipments') || 
+                             filter.channels.includes(r.channel);
         if (!dateMatch || !channelMatch) return;
 
         if (r.productName === productName) {
@@ -175,7 +181,9 @@ const Reports = () => {
           dateMatch = matchP || matchD;
         }
         
-        const channelMatch = filter.channel === 'All Channels' || filter.channel === 'B2B Shipments';
+        const channelMatch = !filter.channels || filter.channels.length === 0 || 
+                             filter.channels.includes('All Channels') || 
+                             filter.channels.includes('B2B Shipments');
         const statusFilterVal = filter.status || 'All Status';
         const statusMatch = statusFilterVal === 'All Status' || s.status === statusFilterVal;
         
@@ -216,9 +224,10 @@ const Reports = () => {
       b2cShipments.forEach(s => {
         const dateMatch = (!filter.startDate || s.date >= filter.startDate) && 
                           (!filter.endDate || s.date <= filter.endDate);
-        const channelMatch = filter.channel === 'All Channels' || 
-                             filter.channel === 'B2C Shipments' || 
-                             s.channel === filter.channel;
+        const channelMatch = !filter.channels || filter.channels.length === 0 || 
+                             filter.channels.includes('All Channels') || 
+                             filter.channels.includes('B2C Shipments') || 
+                             filter.channels.includes(s.channel);
 
         if (!dateMatch || !channelMatch) return;
 
@@ -277,9 +286,10 @@ const Reports = () => {
     const activeB2C = b2cShipments.filter(s => {
       const dateMatch = (!filter.startDate || s.date >= filter.startDate) && 
                         (!filter.endDate || s.date <= filter.endDate);
-      const channelMatch = filter.channel === 'All Channels' || 
-                           filter.channel === 'B2C Shipments' || 
-                           s.channel === filter.channel;
+      const channelMatch = !filter.channels || filter.channels.length === 0 || 
+                           filter.channels.includes('All Channels') || 
+                           filter.channels.includes('B2C Shipments') || 
+                           filter.channels.includes(s.channel);
       const isFBA = s.channel === 'Amazon FBA';
       return dateMatch && channelMatch && !isFBA;
     });
@@ -372,8 +382,9 @@ const Reports = () => {
       }
       if (!dateMatch) return;
 
-      const channelMatch = filter.channel === 'All Channels' || 
-                           filter.channel === 'B2B Shipments';
+      const channelMatch = !filter.channels || filter.channels.length === 0 || 
+                           filter.channels.includes('All Channels') || 
+                           filter.channels.includes('B2B Shipments');
       if (!channelMatch) return;
 
       const statusFilterVal = filter.status || 'All Status';
@@ -449,10 +460,11 @@ const Reports = () => {
       
       const skuMatch = filter.sku === 'All SKUs' || 
                            (s.products || []).some(p => p.name === filter.sku);
-      const channelMatch = filter.channel === 'All Channels' || 
-                           (s.type === 'B2B' && filter.channel === 'B2B Shipments') ||
-                           (s.type === 'B2C' && filter.channel === 'B2C Shipments') ||
-                           (s.type === 'B2C' && s.channel === filter.channel);
+      const channelMatch = !filter.channels || filter.channels.length === 0 || 
+                           filter.channels.includes('All Channels') || 
+                           (s.type === 'B2B' && filter.channels.includes('B2B Shipments')) ||
+                           (s.type === 'B2C' && filter.channels.includes('B2C Shipments')) ||
+                           (s.type === 'B2C' && filter.channels.includes(s.channel));
                            
       const statusFilterVal = filter.status || 'All Status';
       const statusMatch = s.type !== 'B2B' || statusFilterVal === 'All Status' || s.status === statusFilterVal;
@@ -475,9 +487,10 @@ const Reports = () => {
       const dateMatch = (!filter.startDate || r.date >= filter.startDate) && 
                         (!filter.endDate || r.date <= filter.endDate);
       const skuMatch = filter.sku === 'All SKUs' || r.productName === filter.sku;
-      const channelMatch = filter.channel === 'All Channels' || 
-                           (filter.channel === 'B2C Shipments') || 
-                           r.channel === filter.channel;
+      const channelMatch = !filter.channels || filter.channels.length === 0 || 
+                           filter.channels.includes('All Channels') || 
+                           filter.channels.includes('B2C Shipments') || 
+                           filter.channels.includes(r.channel);
       return dateMatch && skuMatch && channelMatch;
     }).sort((a, b) => new Date(b.date) - new Date(a.date));
   }, [returnRecords, filter]);
@@ -509,7 +522,9 @@ const Reports = () => {
             
             dateMatch = matchP || matchD;
           }
-          const channelMatch = filter.channel === 'All Channels' || filter.channel === 'B2B Shipments';
+          const channelMatch = !filter.channels || filter.channels.length === 0 || 
+                               filter.channels.includes('All Channels') || 
+                               filter.channels.includes('B2B Shipments');
           if (!dateMatch || !channelMatch) return sum;
 
           const statusFilterVal = filter.status || 'All Status';
@@ -536,9 +551,10 @@ const Reports = () => {
         const b2cQty = b2cShipments.reduce((sum, s) => {
           const dateMatch = (!filter.startDate || s.date >= filter.startDate) && 
                             (!filter.endDate || s.date <= filter.endDate);
-          const channelMatch = filter.channel === 'All Channels' || 
-                               filter.channel === 'B2C Shipments' || 
-                               s.channel === filter.channel;
+          const channelMatch = !filter.channels || filter.channels.length === 0 || 
+                               filter.channels.includes('All Channels') || 
+                               filter.channels.includes('B2C Shipments') || 
+                               filter.channels.includes(s.channel);
           if (!dateMatch || !channelMatch) return sum;
 
           let direct = 0;
@@ -561,9 +577,10 @@ const Reports = () => {
         const returnsQty = returnRecords.reduce((sum, r) => {
           const dateMatch = (!filter.startDate || r.date >= filter.startDate) && 
                             (!filter.endDate || r.date <= filter.endDate);
-          const channelMatch = filter.channel === 'All Channels' || 
-                               (filter.channel === 'B2C Shipments') || 
-                               r.channel === filter.channel;
+          const channelMatch = !filter.channels || filter.channels.length === 0 || 
+                               filter.channels.includes('All Channels') || 
+                               filter.channels.includes('B2C Shipments') || 
+                               filter.channels.includes(r.channel);
           if (!dateMatch || !channelMatch) return sum;
 
           return sum + (r.productName === p.name ? Number(r.quantity) : 0);
@@ -751,11 +768,12 @@ const Reports = () => {
             onChange={(val) => setFilter({...filter, sku: val})}
             className="text-xs"
           />
-          <Select 
+          <MultiSelect 
             label="Channel" 
             options={channelOptions} 
-            value={filter.channel}
-            onChange={(e) => setFilter({...filter, channel: e.target.value})}
+            value={filter.channels || []}
+            onChange={(vals) => setFilter({...filter, channels: vals})}
+            placeholder="All Channels"
             className="text-xs"
           />
           <Select 
@@ -1091,7 +1109,7 @@ const Reports = () => {
                   Product: <span className="text-slate-900 font-semibold">{drilldownData.productName}</span>
                 </p>
                 <p className="text-xs text-slate-400 font-medium mt-1">
-                  Filters applied: {filter.startDate || 'Anytime'} to {filter.endDate || 'Anytime'} | Channel: {filter.channel}
+                  Filters applied: {filter.startDate || 'Anytime'} to {filter.endDate || 'Anytime'} | Channel: {filter.channels && filter.channels.length > 0 ? filter.channels.join(', ') : 'All Channels'}
                 </p>
               </div>
               <button 
