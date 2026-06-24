@@ -342,11 +342,11 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
       </tbody>
     </table>
     
-    ${shipmentsWithBase64.some(s => s.base64Images && s.base64Images.length > 0) ? `
+    ${shipmentsWithBase64.some(s => s.base64Images && s.base64Images.filter(img => img).length > 0) ? `
       <div style="margin-top: 30px; page-break-before: auto;">
         <h3 style="color: ${theme.color}; font-size: 14px; text-transform: uppercase; margin-bottom: 12px; border-bottom: 2px solid ${theme.color}; padding-bottom: 5px;">Inspection Photos</h3>
         <div style="display: flex; flex-wrap: wrap; gap: 12px;">
-          ${shipmentsWithBase64.flatMap(s => s.base64Images.map(img => `
+          ${shipmentsWithBase64.flatMap(s => s.base64Images.filter(img => img).map(img => `
             <div style="width: 170px; height: 170px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #f8fafc;">
               <img src="${img}" style="width: 100%; height: 100%; object-fit: cover;" />
             </div>
@@ -522,7 +522,7 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
       </tbody>
     </table>
 
-    ${shipmentsWithBase64.some(s => s.base64Images && s.base64Images.length > 0) ? `
+    ${shipmentsWithBase64.some(s => s.base64Images && s.base64Images.filter(img => img && img.startsWith('data:')).length > 0) ? `
       <div style="margin-top: 30px;">
         <h3 style="color: ${themeColor}; font-size: 14px; text-transform: uppercase; margin-bottom: 12px; border-bottom: 2px solid ${themeColor}; padding-bottom: 5px;">Inspection Photos</h3>
         <div style="display: flex; flex-wrap: wrap; gap: 12px;">
@@ -589,9 +589,9 @@ const getProxyImageBase64 = async (url) => {
 
   // Try multiple proxies in order
   const proxies = [
-    `https://images.weserv.nl/?url=${encodeURIComponent(url)}&output=jpg&q=80`,
-    `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
+    `https://corsproxy.io/?url=${encodeURIComponent(url)}`,
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    `https://images.weserv.nl/?url=${encodeURIComponent(url)}&output=jpg&q=80`
   ];
 
   for (const proxy of proxies) {

@@ -972,7 +972,21 @@ export const GlobalProvider = ({ children }) => {
         try {
           if (!url) return null;
           if (url.startsWith('data:')) return url;
-          const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+          
+          // Try direct fetch first (if CORS allowed)
+          try {
+            const directResp = await fetch(url, { mode: 'cors', cache: 'no-cache' });
+            if (directResp.ok) {
+              const blob = await directResp.blob();
+              return await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.readAsDataURL(blob);
+              });
+            }
+          } catch (e) { }
+
+          const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(url)}`;
           try {
             const response = await fetch(proxyUrl);
             if (response.ok) {
