@@ -822,27 +822,31 @@ export const GlobalProvider = ({ children }) => {
     }
   };
 
-  const updateProductionRecord = async (id, updatedRecord) => {
+  const updateProductionRecord = async (id, updatedRecord, skipStockAdjustment = false) => {
     const oldRecord = productionRecords.find(r => r.id === id);
     if (!oldRecord) return;
     // Revert old
-    const oldProducedUnits = (Number(oldRecord.quantity) || 0) * (Number(oldRecord.packSize) || 1);
-    await updateFirestoreStock(oldRecord.productName, oldProducedUnits, 'sub', 'produced');
-    for (const rm of (oldRecord.rawMaterials || [])) {
-      const rmSKU = stock.find(s => s.name === rm.name);
-      const oldUsedUnits = (Number(rm.quantity) || 0) * (Number(rmSKU?.packSize) || 1);
-      await updateFirestoreStock(rm.name, oldUsedUnits, 'sub', 'used');
+    if (!skipStockAdjustment) {
+      const oldProducedUnits = (Number(oldRecord.quantity) || 0) * (Number(oldRecord.packSize) || 1);
+      await updateFirestoreStock(oldRecord.productName, oldProducedUnits, 'sub', 'produced');
+      for (const rm of (oldRecord.rawMaterials || [])) {
+        const rmSKU = stock.find(s => s.name === rm.name);
+        const oldUsedUnits = (Number(rm.quantity) || 0) * (Number(rmSKU?.packSize) || 1);
+        await updateFirestoreStock(rm.name, oldUsedUnits, 'sub', 'used');
+      }
     }
     // Apply new
     const masterSKU = stock.find(s => s.name === updatedRecord.productName);
     const finalized = { ...updatedRecord, packSize: masterSKU?.packSize || 1 };
     await updateDoc(doc(db, 'productionRecords', id), finalized);
-    const newProducedUnits = (Number(updatedRecord.quantity) || 0) * (masterSKU?.packSize || 1);
-    await updateFirestoreStock(updatedRecord.productName, newProducedUnits, 'add', 'produced');
-    for (const rm of (updatedRecord.rawMaterials || [])) {
-      const rmSKU = stock.find(s => s.name === rm.name);
-      const newUsedUnits = (Number(rm.quantity) || 0) * (rmSKU?.packSize || 1);
-      await updateFirestoreStock(rm.name, newUsedUnits, 'add', 'used');
+    if (!skipStockAdjustment) {
+      const newProducedUnits = (Number(updatedRecord.quantity) || 0) * (masterSKU?.packSize || 1);
+      await updateFirestoreStock(updatedRecord.productName, newProducedUnits, 'add', 'produced');
+      for (const rm of (updatedRecord.rawMaterials || [])) {
+        const rmSKU = stock.find(s => s.name === rm.name);
+        const newUsedUnits = (Number(rm.quantity) || 0) * (rmSKU?.packSize || 1);
+        await updateFirestoreStock(rm.name, newUsedUnits, 'add', 'used');
+      }
     }
   };
 

@@ -1,13 +1,14 @@
 import React, { useState, useMemo } from 'react';
 import { Card, Input, Select, SearchableSelect, Button, Table } from '../components/ui';
-import { Plus, Trash2, Save, Hammer, History, Lock, Download, Filter, Package, Box, Layers, User, Search, Edit, X } from 'lucide-react';
+import { Plus, Trash2, Save, Hammer, History, Lock, Download, Filter, Package, Box, Layers, User, Search, Edit, X, Mail } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import { isRecordEditable } from '../utils/dateUtils';
+import emailjs from 'emailjs-com';
 
 const CandleManufacturing = () => {
-  const { stock, staff, productionRecords, addProductionRecord, updateProductionRecord, deleteProductionRecord, drafts, updateDraft, clearDraft, getAvailableStock } = useGlobalState();
+  const { stock, staff, productionRecords, addProductionRecord, updateProductionRecord, deleteProductionRecord, drafts, updateDraft, clearDraft, getAvailableStock, standardRecipients } = useGlobalState();
   const [editingId, setEditingId] = useState(null);
   
   const [formData, setFormData] = useState(() => {
@@ -28,6 +29,11 @@ const CandleManufacturing = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [locationFilter, setLocationFilter] = useState('All Locations');
+  const [staffFilter, setStaffFilter] = useState('All Staff');
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   // Sync draft
   React.useEffect(() => {
@@ -38,14 +44,25 @@ const CandleManufacturing = () => {
 
   const filteredRecords = useMemo(() => {
     return (productionRecords || []).filter(r => {
-      if (!searchTerm) return true;
-      const term = searchTerm.toLowerCase();
-      return r.productName.toLowerCase().includes(term) || 
-             r.staffName.toLowerCase().includes(term) ||
-             (r.location || '').toLowerCase().includes(term) ||
-             (r.rawMaterials || []).some(rm => rm.name.toLowerCase().includes(term));
+      // Search term match
+      const matchesSearch = !searchTerm || 
+        r.productName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        r.staffName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (r.location || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (r.rawMaterials || []).some(rm => rm.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      // Date match
+      const matchesDate = (!startDate || r.date >= startDate) && (!endDate || r.date <= endDate);
+
+      // Location match
+      const matchesLocation = locationFilter === 'All Locations' || r.location === locationFilter;
+
+      // Staff match
+      const matchesStaff = staffFilter === 'All Staff' || r.staffName === staffFilter;
+
+      return matchesSearch && matchesDate && matchesLocation && matchesStaff;
     });
-  }, [productionRecords, searchTerm]);
+  }, [productionRecords, searchTerm, startDate, endDate, locationFilter, staffFilter]);
 
   const handleAddRawMaterial = () => setRawMaterials([...rawMaterials, { id: Date.now() + rawMaterials.length, name: '', quantity: '' }]);
   const handleRemoveRawMaterial = (id) => setRawMaterials(rawMaterials.filter((rm) => rm.id !== id));
@@ -132,6 +149,159 @@ const CandleManufacturing = () => {
       if (result.isConfirmed) {
         deleteProductionRecord(id);
         toast.success('Record deleted and stock reverted.');
+      }
+    });
+  };
+
+  const sendProductionEmail = (title, dateText, records, customRecipients = null) => {
+    const SERVICE_ID = "service_0xl3c02";
+    const TEMPLATE_ID = "template_5t3ip0b";
+    const PUBLIC_KEY = "EKtXoYJRPVHgAB_cA";
+
+    // Format record details in HTML
+    const recordDetailsHtml = records.map(r => `
+      <div style="font-size: 16px; font-family: sans-serif; line-height: 1.5; margin-bottom: 20px; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #f8fafc;">
+        <b style="font-size: 20px; color: #4338ca; display: block; margin-bottom: 10px;">${r.productName}</b>
+        <div style="margin-left: 10px; margin-bottom: 12px;">
+          • Date: <b>${r.date}</b><br/>
+          • Produced By: <b>${r.staffName}</b><br/>
+          • Location: <b>${r.location || '-'}</b><br/>
+          • Quantity Produced: <b style="color: #4338ca;">${r.quantity}</b>
+        </div>
+        <div style="margin-top: 10px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
+          <b style="color: #64748b; font-size: 13px; text-transform: uppercase;">Raw Materials Consumed:</b>
+          <div style="margin-top: 5px; margin-left: 10px;">
+            ${(r.rawMaterials || []).map(rm => `
+              • ${rm.name}: <b>${rm.quantity}</b><br/>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    const defaultRecipients = 'malavikavenu914@gmail.com, sudha.thenga@gmail.com, dhanya.thenga@gmail.com, accounts@thengacoco.com';
+    const recipients = customRecipients || defaultRecipients;
+
+    // Header with Title, Date
+    const headerHtml = `
+      <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #4338ca;">
+        <h1 style="color: #4338ca; font-size: 32px; font-family: 'Georgia', serif; margin: 0; text-transform: uppercase; letter-spacing: 3px;">ThengaCoco</h1>
+        <p style="color: #64748b; font-size: 14px; font-weight: bold; margin: 5px 0 10px 0; text-transform: uppercase; letter-spacing: 1px;">Candle Manufacturing Report</p>
+        <div style="margin-top: 15px; color: #334155; font-family: sans-serif; font-size: 16px; background: #f1f5f9; padding: 10px; border-radius: 6px; display: inline-block;">
+          Report: <b style="color: #4338ca;">${title}</b> &nbsp; | &nbsp; Date/Period: <b style="color: #4338ca;">${dateText}</b>
+        </div>
+      </div>
+    `;
+
+    const templateParams = {
+      to_email: recipients,
+      from_email: "remasudheesh70@gmail.com",
+      reply_to: "remasudheesh70@gmail.com",
+      vendor_name: "Candle Manufacturing Report",
+      date: dateText,
+      subject: "Candle Manufacturing Report",
+      product_details: headerHtml + recordDetailsHtml
+    };
+
+    return emailjs.send(SERVICE_ID, TEMPLATE_ID, templateParams, PUBLIC_KEY)
+      .then((res) => {
+        console.log("Production Email sent successfully:", res.status);
+        toast.success("Production report emailed successfully.");
+        return true;
+      })
+      .catch((err) => {
+        console.error("Production Email send failure:", err);
+        toast.error("Failed to send email. Check console for details.");
+        throw err;
+      });
+  };
+
+  const handleSendEmail = (record) => {
+    if (record.emailSent) return;
+    const defaultRecipients = 'malavikavenu914@gmail.com, sudha.thenga@gmail.com, dhanya.thenga@gmail.com, accounts@thengacoco.com';
+
+    Swal.fire({
+      title: 'Customize Production Email',
+      text: 'Enter recipient emails (comma separated):',
+      input: 'text',
+      inputValue: defaultRecipients,
+      showCancelButton: true,
+      confirmButtonColor: '#4338ca',
+      confirmButtonText: 'Send Email',
+      inputValidator: (value) => {
+        if (!value) return 'At least one email is required!';
+      }
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        setIsSendingEmail(true);
+        try {
+          const success = await sendProductionEmail(
+            `Single Log (${record.productName})`,
+            record.date,
+            [record],
+            result.value
+          );
+          if (success) {
+            // Update Firestore record, skipStockAdjustment = true
+            await updateProductionRecord(record.id, { ...record, emailSent: true }, true);
+          }
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setIsSendingEmail(false);
+        }
+      }
+    });
+  };
+
+  const handleEmailDailyReport = () => {
+    if (filteredRecords.length === 0) {
+      toast.error("No records found to email.");
+      return;
+    }
+
+    const defaultRecipients = 'malavikavenu914@gmail.com, sudha.thenga@gmail.com, dhanya.thenga@gmail.com, accounts@thengacoco.com';
+
+    Swal.fire({
+      title: 'Email Filtered Production Report',
+      text: 'Enter recipient emails (comma separated):',
+      input: 'text',
+      inputValue: defaultRecipients,
+      showCancelButton: true,
+      confirmButtonColor: '#4338ca',
+      confirmButtonText: 'Send Report',
+      inputValidator: (value) => {
+        if (!value) return 'At least one email is required!';
+      }
+    }).then(async (result) => {
+      if (result.isConfirmed) {
+        setIsSendingEmail(true);
+        try {
+          const dateText = startDate === endDate 
+            ? (startDate || "All Dates") 
+            : `${startDate || "Start"} to ${endDate || "End"}`;
+          const title = `Filtered Report (${filteredRecords.length} record${filteredRecords.length > 1 ? 's' : ''})`;
+
+          const success = await sendProductionEmail(
+            title,
+            dateText,
+            filteredRecords,
+            result.value
+          );
+
+          if (success) {
+            // Update all records that were included in the report to mark emailSent = true
+            for (const record of filteredRecords) {
+              if (!record.emailSent) {
+                await updateProductionRecord(record.id, { ...record, emailSent: true }, true);
+              }
+            }
+          }
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setIsSendingEmail(false);
+        }
       }
     });
   };
@@ -279,25 +449,70 @@ const CandleManufacturing = () => {
       </Card>
 
       <Card className="overflow-hidden">
-        <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <h3 className="font-bold text-slate-900 flex items-center gap-2">
+        <div className="p-6 border-b border-slate-100 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
+          <h3 className="font-bold text-slate-900 flex items-center gap-2 whitespace-nowrap">
             <History size={18} className="text-slate-400" />
             Manufacturing History Logs
           </h3>
-          <div className="relative w-full sm:w-64">
-             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-             <input 
-              type="text" 
-              placeholder="Search history..." 
-              className="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-             />
+          <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
+            <div className="relative flex-1 sm:min-w-[200px]">
+               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+               <input 
+                type="text" 
+                placeholder="Search history..." 
+                className="w-full pl-9 pr-4 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+               />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                className="px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                title="Start Date"
+              />
+              <span className="text-slate-400 text-xs">-</span>
+              <input
+                type="date"
+                className="px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                title="End Date"
+              />
+            </div>
+            <select
+              className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer"
+              value={locationFilter}
+              onChange={(e) => setLocationFilter(e.target.value)}
+            >
+              <option>All Locations</option>
+              <option>Palakkad</option>
+              <option>Thrissur</option>
+            </select>
+            <select
+              className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500/20 outline-none cursor-pointer"
+              value={staffFilter}
+              onChange={(e) => setStaffFilter(e.target.value)}
+            >
+              <option>All Staff</option>
+              {staff.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+            </select>
+            <Button
+              onClick={handleEmailDailyReport}
+              variant="primary"
+              size="sm"
+              loading={isSendingEmail}
+              className="text-[10px] h-8 px-2 bg-indigo-600 hover:bg-indigo-700 border-none shadow-md text-white flex items-center gap-1"
+            >
+              <Mail size={14} /> Email Report
+            </Button>
           </div>
         </div>
         <Table headers={['Date', 'Staff', 'Location', 'Product Manufactured', 'Raw Materials Consumed', 'Action']}>
           {filteredRecords.length === 0 ? (
-            <tr><td colSpan="5" className="py-16 text-center text-slate-400 font-medium">No manufacturing records found.</td></tr>
+            <tr><td colSpan="6" className="py-16 text-center text-slate-400 font-medium">No manufacturing records found.</td></tr>
           ) : (
             filteredRecords
               .sort((a,b) => b.timestamp - a.timestamp)
@@ -323,6 +538,18 @@ const CandleManufacturing = () => {
                 </td>
                 <td className="py-4 px-6 text-center">
                   <div className="flex items-center justify-center gap-2">
+                    <button 
+                      onClick={() => handleSendEmail(r)} 
+                      disabled={r.emailSent}
+                      className={`p-1.5 rounded-lg border border-transparent transition-all shadow-sm ${
+                        r.emailSent 
+                          ? 'text-slate-300 bg-slate-50 cursor-not-allowed' 
+                          : 'text-indigo-500 hover:text-indigo-600 hover:bg-white hover:border-indigo-100 hover:border'
+                      }`}
+                      title={r.emailSent ? "Email already sent" : "Send Email"}
+                    >
+                      <Mail size={18} />
+                    </button>
                     <button 
                       onClick={() => handleEdit(r)} 
                       className="p-1.5 text-slate-300 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
