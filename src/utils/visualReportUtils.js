@@ -34,7 +34,8 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
     Damage: { color: [6, 95, 70] },
     QC: { color: [6, 95, 70] },
     Return: { color: [6, 95, 70] },
-    Replacement: { color: [6, 95, 70] }
+    Replacement: { color: [6, 95, 70] },
+    Rework: { color: [79, 70, 229] }
   };
   const theme = themes[type] || themes.B2B;
 
@@ -129,6 +130,35 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
         ]);
       });
     });
+  } else if (type === 'Rework') {
+    headers = [['Out Date', 'Destination', 'Status', 'Product Out', 'Qty Out', 'Return Details']];
+    shipments.forEach(s => {
+      const products = s.products && s.products.length > 0 
+        ? s.products 
+        : [{ productName: s.productName || 'Unknown', quantity: s.quantity || 0 }];
+      
+      products.forEach((p, idx) => {
+        let returnText = '-';
+        if (s.status === 'Reworked') {
+          if (s.returnProducts && s.returnProducts.length > 0) {
+            returnText = `${s.returnDate}\n` + s.returnProducts.map(rp => `${rp.returnQuantity}x ${rp.returnProductName}${rp.returnNotes ? ` (${rp.returnNotes})` : ''}`).join('\n');
+          } else if (s.returnProductName) {
+            returnText = `${s.returnDate}\n${s.returnQuantity}x ${s.returnProductName}${s.returnNotes ? ` (${s.returnNotes})` : ''}`;
+          }
+        }
+        
+        const row = [
+          s.outDate || '',
+          s.destination || '',
+          s.status === 'Reworked' ? 'COMPLETED' : 'PENDING',
+          p.productName,
+          p.quantity,
+          returnText
+        ];
+        row._isFirst = (idx === 0);
+        body.push(row);
+      });
+    });
   }
 
   autoTable(doc, {
@@ -146,7 +176,9 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
     },
     alternateRowStyles: { fillColor: [245, 247, 250] },
     didParseCell: (data) => {
-      if ((type === 'B2B' || type === 'B2C') && data.section === 'body' && [0, 1, 2].includes(data.column.index)) {
+      const isMergeType = (type === 'B2B' || type === 'B2C' || type === 'Rework');
+      const mergeCols = type === 'Rework' ? [0, 1, 2, 5] : [0, 1, 2];
+      if (isMergeType && data.section === 'body' && mergeCols.includes(data.column.index)) {
         const isFirst = data.row.raw._isFirst !== false;
         
         // Track the first row of each page to ensure text repeats on page break
@@ -164,7 +196,9 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
       }
     },
     didDrawCell: (data) => {
-      if ((type === 'B2B' || type === 'B2C') && data.section === 'body' && [0, 1, 2].includes(data.column.index)) {
+      const isMergeType = (type === 'B2B' || type === 'B2C' || type === 'Rework');
+      const mergeCols = type === 'Rework' ? [0, 1, 2, 5] : [0, 1, 2];
+      if (isMergeType && data.section === 'body' && mergeCols.includes(data.column.index)) {
         const isFirst = data.row.raw._isFirst !== false;
         const isFirstOnPage = data.row.index === data.table._firstRowOnPage;
 
@@ -248,7 +282,8 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
     Damage: { color: '#9f1239' }, 
     QC: { color: '#134e4a' },
     Return: { color: '#065f46' },
-    Replacement: { color: '#4338ca' }
+    Replacement: { color: '#4338ca' },
+    Rework: { color: '#4f46e5' }
   };
   const theme = themes[type] || themes.B2B;
 
@@ -274,12 +309,12 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
       <thead>
         <tr style="background-color: ${theme.color}; color: white; text-align: left;">
           <th style="padding: 12px; border: 1px solid #ddd;">Date</th>
-          <th style="padding: 12px; border: 1px solid #ddd;">${type === 'QC' ? 'Vendor' : type === 'Damage' ? 'Product' : type === 'B2B' ? 'Client' : type === 'Replacement' ? 'Target' : 'Channel'}</th>
+          <th style="padding: 12px; border: 1px solid #ddd;">${type === 'QC' ? 'Vendor' : type === 'Damage' ? 'Product' : type === 'B2B' ? 'Client' : type === 'Replacement' ? 'Target' : type === 'Rework' ? 'Destination' : 'Channel'}</th>
           <th style="padding: 12px; border: 1px solid #ddd;">Product Details</th>
-          ${type === 'B2B' || type === 'B2C' ? `
+          ${type === 'B2B' || type === 'B2C' || type === 'Rework' ? `
             <th style="padding: 12px; border: 1px solid #ddd; text-align: center; width: 50px;">Qty</th>
-            <th style="padding: 12px; border: 1px solid #ddd; text-align: center; width: 50px;">Pack</th>
-            <th style="padding: 12px; border: 1px solid #ddd; text-align: center; width: 60px;">Total</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center; width: 80px;">Status</th>
+            <th style="padding: 12px; border: 1px solid #ddd; text-align: center; width: 140px;">Return Details</th>
           ` : `
             <th style="padding: 12px; border: 1px solid #ddd; text-align: center;">Units</th>
           `}
@@ -289,6 +324,38 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
         ${shipmentsWithBase64.map((s, idx) => {
           const products = s.products || [];
           const rowBg = idx % 2 === 0 ? '#ffffff' : '#fcfcfc';
+          
+          if (type === 'Rework') {
+            const products = s.products && s.products.length > 0 
+              ? s.products 
+              : [{ productName: s.productName || 'Unknown', quantity: s.quantity || 0 }];
+            return products.map((p, pIdx) => {
+              let returnText = '-';
+              if (s.status === 'Reworked') {
+                if (s.returnProducts && s.returnProducts.length > 0) {
+                  returnText = `<b>${s.returnDate}</b><br/>` + s.returnProducts.map(rp => `• ${rp.returnQuantity}x ${rp.returnProductName}${rp.returnNotes ? ` (${rp.returnNotes})` : ''}`).join('<br/>');
+                } else if (s.returnProductName) {
+                  returnText = `<b>${s.returnDate}</b><br/>• ${s.returnQuantity}x ${s.returnProductName}${s.returnNotes ? ` (${s.returnNotes})` : ''}`;
+                }
+              }
+              return `
+                <tr style="background-color: ${rowBg};">
+                  <td style="padding: 12px; border: 1px solid #ddd; white-space: nowrap; font-size: 11px;">${pIdx === 0 ? s.outDate : ''}</td>
+                  <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">
+                    ${pIdx === 0 ? s.destination : ''}
+                  </td>
+                  <td style="padding: 12px; border: 1px solid #ddd;">• ${p.productName}</td>
+                  <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">${p.quantity}</td>
+                  <td style="padding: 12px; border: 1px solid #ddd; text-align: center;">
+                    ${pIdx === 0 ? `<span style="font-weight: bold; color: ${s.status === 'Reworked' ? '#059669' : '#d97706'}">${s.status === 'Reworked' ? 'COMPLETED' : 'PENDING'}</span>` : ''}
+                  </td>
+                  <td style="padding: 12px; border: 1px solid #ddd; font-size: 11px;">
+                    ${pIdx === 0 ? returnText : ''}
+                  </td>
+                </tr>
+              `;
+            }).join('');
+          }
           
           if ((type === 'B2B' || type === 'B2C') && products.length > 0) {
             return products.map((p, pIdx) => `
@@ -411,7 +478,8 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
     Damage: { color: '#9f1239' }, 
     QC: { color: '#134e4a' },
     Return: { color: '#065f46' },
-    Replacement: { color: '#4338ca' }
+    Replacement: { color: '#4338ca' },
+    Rework: { color: '#4f46e5' }
   };
   const themeColor = themes[type]?.color || '#065f46';
   const dateFrom = dateRange.startDate ? `<span style="margin-right: 15px;"><b>From:</b> ${dateRange.startDate}</span>` : '';
@@ -434,8 +502,8 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
       <thead>
         <tr style="background-color: ${themeColor}; color: white; text-align: left;">
           <th style="padding: 10px; border: 1px solid #ddd;">Date</th>
-          <th style="padding: 10px; border: 1px solid #ddd;">${type === 'QC' ? 'Vendor' : (type === 'B2B' ? 'Client' : type === 'Replacement' ? 'Target' : 'Channel')}</th>
-          <th style="padding: 10px; border: 1px solid #ddd;">${type === 'QC' ? 'Product' : (type === 'Replacement' ? 'Type' : (type === 'B2B' ? 'Courier' : 'Parceled By'))}</th>
+          <th style="padding: 10px; border: 1px solid #ddd;">${type === 'QC' ? 'Vendor' : (type === 'B2B' ? 'Client' : type === 'Replacement' ? 'Target' : type === 'Rework' ? 'Destination' : 'Channel')}</th>
+          <th style="padding: 10px; border: 1px solid #ddd;">${type === 'QC' ? 'Product' : (type === 'Replacement' ? 'Type' : (type === 'B2B' ? 'Courier' : type === 'Rework' ? 'Status' : 'Parceled By'))}</th>
           ${type === 'QC' ? `
             <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Checked</th>
             <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Damaged</th>
@@ -444,11 +512,10 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
             <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Holes</th>
             <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Approved</th>
           ` : `
-            <th style="padding: 10px; border: 1px solid #ddd;">${type === 'B2B' || type === 'B2C' ? 'Product' : 'Details'}</th>
-            ${type === 'B2B' || type === 'B2C' ? `
+            <th style="padding: 10px; border: 1px solid #ddd;">${type === 'B2B' || type === 'B2C' || type === 'Rework' ? 'Product' : 'Details'}</th>
+            ${type === 'B2B' || type === 'B2C' || type === 'Rework' ? `
               <th style="padding: 10px; border: 1px solid #ddd; text-align: center; width: 40px;">Qty</th>
-              <th style="padding: 10px; border: 1px solid #ddd; text-align: center; width: 40px;">Pack</th>
-              <th style="padding: 10px; border: 1px solid #ddd; text-align: center; width: 50px;">Total</th>
+              <th style="padding: 10px; border: 1px solid #ddd; text-align: center; width: 120px;">Return Details</th>
             ` : `
               <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">Units</th>
             `}
@@ -457,9 +524,40 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
       </thead>
       <tbody>
         ${shipmentsWithBase64.map((s, idx) => {
-          const products = s.products || [];
+          const products = s.products && s.products.length > 0 
+            ? s.products 
+            : [{ productName: s.productName || 'Unknown', quantity: s.quantity || 0 }];
           const rowBg = idx % 2 === 0 ? '#ffffff' : '#f8fafc';
           
+          if (type === 'Rework') {
+             return products.map((p, pIdx) => {
+              let returnText = '-';
+              if (s.status === 'Reworked') {
+                if (s.returnProducts && s.returnProducts.length > 0) {
+                  returnText = `<b>${s.returnDate}</b><br/>` + s.returnProducts.map(rp => `• ${rp.returnQuantity}x ${rp.returnProductName}${rp.returnNotes ? ` (${rp.returnNotes})` : ''}`).join('<br/>');
+                } else if (s.returnProductName) {
+                  returnText = `<b>${s.returnDate}</b><br/>• ${s.returnQuantity}x ${s.returnProductName}${s.returnNotes ? ` (${s.returnNotes})` : ''}`;
+                }
+              }
+              return `
+               <tr style="background-color: ${rowBg};">
+                 ${pIdx === 0 ? `
+                   <td rowspan="${products.length}" style="padding: 10px; border: 1px solid #ddd; font-size: 11px;">${s.outDate}</td>
+                   <td rowspan="${products.length}" style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">
+                     ${s.destination}
+                   </td>
+                   <td rowspan="${products.length}" style="padding: 10px; border: 1px solid #ddd; font-size: 11px;">
+                     <span style="font-weight: bold; color: ${s.status === 'Reworked' ? '#059669' : '#d97706'}">${s.status === 'Reworked' ? 'COMPLETED' : 'PENDING'}</span>
+                   </td>
+                 ` : ''}
+                 <td style="padding: 10px; border: 1px solid #ddd;">• ${p.productName}</td>
+                 <td style="padding: 10px; border: 1px solid #ddd; text-align: center;">${p.quantity}</td>
+                 ${pIdx === 0 ? `<td rowspan="${products.length}" style="padding: 10px; border: 1px solid #ddd; font-size: 11px;">${returnText}</td>` : ''}
+               </tr>
+             `;
+             }).join('');
+          }
+
           if ((type === 'B2B' || type === 'B2C') && products.length > 0) {
              return products.map((p, pIdx) => `
               <tr style="background-color: ${rowBg};">
