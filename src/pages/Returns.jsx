@@ -18,6 +18,7 @@ const Returns = () => {
   } = useGlobalState();
   
   const [activeTab, setActiveTab] = useState('returns');
+  const [b2bReturnsList, setB2bReturnsList] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,6 +36,10 @@ const Returns = () => {
     const defaultDate = new Date().toISOString().split('T')[0];
     const saved = drafts.return;
     return {
+      type: saved?.type || 'B2C',
+      orderId: saved?.orderId || '',
+      manualName: saved?.manualName || '',
+      filterDispatchDate: saved?.filterDispatchDate || '',
       productName: saved?.productName || '',
       quantity: saved?.quantity || '',
       channel: saved?.channel || '',
@@ -73,6 +78,59 @@ const Returns = () => {
   const channelOptions = React.useMemo(() => {
     return [...channels.map(c => c.name), ...expoClients];
   }, [channels, expoClients]);
+
+  // B2B Order and Product helper state
+  const filteredB2BOrders = React.useMemo(() => {
+    if (!formData.filterDispatchDate) {
+      return b2bShipments;
+    }
+    return b2bShipments.filter(s => s.dispatchDate === formData.filterDispatchDate || s.date === formData.filterDispatchDate);
+  }, [b2bShipments, formData.filterDispatchDate]);
+
+  const selectedB2BShipment = React.useMemo(() => {
+    if (formData.type === 'B2B' && formData.orderId && formData.orderId !== 'manual') {
+      return b2bShipments.find(s => s.id === formData.orderId);
+    }
+    return null;
+  }, [formData.type, formData.orderId, b2bShipments]);
+
+  const selectedProductInShipment = React.useMemo(() => {
+    if (formData.type === 'B2B' && selectedB2BShipment && formData.productName) {
+      return selectedB2BShipment.products?.find(p => p.name === formData.productName);
+    }
+    return null;
+  }, [formData.type, selectedB2BShipment, formData.productName]);
+
+  const productOptions = React.useMemo(() => {
+    if (formData.type === 'B2B' && selectedB2BShipment && selectedB2BShipment.products) {
+      const shipmentProducts = selectedB2BShipment.products.map(p => {
+        const s = stock.find(item => item.name === p.name);
+        return `[${s?.sku || 'N/A'}] ${p.name}`;
+      });
+      const otherProducts = stock
+        .filter(s => !selectedB2BShipment.products.some(p => p.name === s.name))
+        .map(s => `[${s.sku || 'N/A'}] ${s.name}`);
+      return [...shipmentProducts, ...otherProducts];
+    }
+    return stock.map(s => `[${s.sku || 'N/A'}] ${s.name}`);
+  }, [formData.type, selectedB2BShipment, stock]);
+
+  // Sync B2B Returns list when B2B Shipment is selected
+  React.useEffect(() => {
+    if (!isEditing && formData.type === 'B2B' && selectedB2BShipment) {
+      setB2bReturnsList(
+        (selectedB2BShipment.products || []).map((p, idx) => ({
+          id: idx,
+          name: p.name,
+          shippedQty: p.quantity,
+          quantity: '',
+          condition: 'Good (Reuse)'
+        }))
+      );
+    } else {
+      setB2bReturnsList([]);
+    }
+  }, [formData.orderId, formData.type, selectedB2BShipment, isEditing]);
 
   const filteredReturns = returnRecords
     .filter(r => {
@@ -116,6 +174,10 @@ const Returns = () => {
     const defaultDate = new Date().toISOString().split('T')[0];
     if (activeTab === 'returns') {
       setFormData({
+        type: 'B2C',
+        orderId: '',
+        manualName: '',
+        filterDispatchDate: '',
         productName: '',
         quantity: '',
         channel: '',
@@ -138,49 +200,168 @@ const Returns = () => {
 
   const handleReturnSubmit = async (e) => {
     e.preventDefault();
-    const newRecord = {
-      ...formData,
-      isReusable: formData.condition === 'Good (Reuse)' || formData.condition === 'Recovered (From Rejected)',
-      isDamaged: formData.condition === 'Damaged (Waste)',
-      isFromRejected: formData.condition === 'Recovered (From Rejected)',
-      id: Date.now()
-    };
 
-    let confirmText = '';
-    if (formData.condition === 'Recovered (From Rejected)') {
-      confirmText = `Record for ${formData.quantity} units recovered from Rejected stock. Apply stock in?`;
-    } else if (newRecord.isReusable) {
-      confirmText = `Record for ${formData.quantity} reusable units. Apply stock change?`;
-    } else {
-      confirmText = `Record for ${formData.quantity} damaged units. History only (No stock change).`;
-    }
+    const showMultipleProducts = formData.type === 'B2B' && formData.orderId && formData.orderId !== 'manual' && !isEditing;
 
-    Swal.fire({
-      title: isEditing ? 'Update Log?' : 'Log Entry?',
-      text: confirmText,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#10b981',
-      confirmButtonText: 'Yes, Confirm',
-      cancelButtonText: 'Cancel'
-    }).then(async (result) => {
-      if (!result.isConfirmed) return;
-      
-      setIsSubmitting(true);
-      try {
-        if (isEditing) {
-          await updateReturnRecord(editingId, newRecord, newRecord.isReusable);
-          toast.success('Return updated!');
-        } else {
-          await addReturnRecord(newRecord, newRecord.isReusable);
-          toast.success(newRecord.isReusable ? 'Return logged & Stock adjusted!' : 'Return logged.');
-          clearDraft('return');
-        }
-        handleCancel();
-      } finally {
-        setIsSubmitting(false);
+    if (showMultipleProducts) {
+      // Multiple products B2B return submission
+      const activeReturns = b2bReturnsList.filter(item => Number(item.quantity) > 0);
+      if (activeReturns.length === 0) {
+        toast.error('Please enter a return quantity (> 0) for at least one product.');
+        return;
       }
-    });
+
+      // Check quantity warnings
+      let confirmRequired = false;
+      let warningText = '';
+      for (const item of activeReturns) {
+        const shippedQty = Number(item.shippedQty) || 0;
+        const returnQty = Number(item.quantity) || 0;
+        if (returnQty > shippedQty) {
+          confirmRequired = true;
+          warningText += `\n- ${item.name}: returning ${returnQty} (shipped ${shippedQty})`;
+        }
+      }
+
+      if (confirmRequired) {
+        const confirmOver = await Swal.fire({
+          title: 'Quantity Warning',
+          text: `The return quantity exceeds the quantity originally shipped for these products:${warningText}\n\nDo you still want to proceed?`,
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonColor: '#d33',
+          confirmButtonText: 'Yes, proceed',
+          cancelButtonText: 'No, adjust'
+        });
+        if (!confirmOver.isConfirmed) return;
+      }
+
+      let finalChannel = formData.channel;
+      if (formData.orderId === 'manual') {
+        finalChannel = formData.manualName;
+      } else {
+        const selectedShipment = b2bShipments.find(s => s.id === formData.orderId);
+        finalChannel = selectedShipment ? selectedShipment.clientName : '';
+      }
+
+      Swal.fire({
+        title: 'Log Return Entries?',
+        text: `Log returns for ${activeReturns.length} product(s)?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'Yes, Confirm',
+        cancelButtonText: 'Cancel'
+      }).then(async (result) => {
+        if (!result.isConfirmed) return;
+        
+        setIsSubmitting(true);
+        try {
+          // Log each item sequentially
+          for (let i = 0; i < activeReturns.length; i++) {
+            const item = activeReturns[i];
+            const isReusable = item.condition === 'Good (Reuse)' || item.condition === 'Recovered (From Rejected)';
+            const newRecord = {
+              type: 'B2B',
+              orderId: formData.orderId,
+              manualName: '',
+              filterDispatchDate: formData.filterDispatchDate,
+              productName: item.name,
+              quantity: item.quantity,
+              channel: finalChannel,
+              date: formData.date,
+              reason: formData.reason,
+              condition: item.condition,
+              isReusable,
+              isDamaged: item.condition === 'Damaged (Waste)',
+              isFromRejected: item.condition === 'Recovered (From Rejected)',
+              id: Date.now() + i // Offset ID slightly to prevent collision
+            };
+            await addReturnRecord(newRecord, isReusable);
+          }
+          toast.success('Returns logged & Stock adjusted!');
+          clearDraft('return');
+          handleCancel();
+        } finally {
+          setIsSubmitting(false);
+        }
+      });
+
+    } else {
+      // Standard Single Product submission
+      // Check quantity warning for B2B orders
+      if (formData.type === 'B2B' && selectedProductInShipment) {
+        const shippedQty = Number(selectedProductInShipment.quantity) || 0;
+        const returnQty = Number(formData.quantity) || 0;
+        if (returnQty > shippedQty) {
+          const confirmOver = await Swal.fire({
+            title: 'Quantity Warning',
+            text: `The return quantity (${returnQty}) exceeds the quantity originally shipped (${shippedQty}) in this B2B order. Do you still want to proceed?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'Yes, proceed',
+            cancelButtonText: 'No, adjust'
+          });
+          if (!confirmOver.isConfirmed) return;
+        }
+      }
+
+      let finalChannel = formData.channel;
+      if (formData.type === 'B2B') {
+        if (formData.orderId === 'manual') {
+          finalChannel = formData.manualName;
+        } else {
+          const selectedShipment = b2bShipments.find(s => s.id === formData.orderId);
+          finalChannel = selectedShipment ? selectedShipment.clientName : '';
+        }
+      }
+
+      const newRecord = {
+        ...formData,
+        channel: finalChannel,
+        isReusable: formData.condition === 'Good (Reuse)' || formData.condition === 'Recovered (From Rejected)',
+        isDamaged: formData.condition === 'Damaged (Waste)',
+        isFromRejected: formData.condition === 'Recovered (From Rejected)',
+        id: isEditing ? editingId : Date.now()
+      };
+
+      let confirmText = '';
+      if (formData.condition === 'Recovered (From Rejected)') {
+        confirmText = `Record for ${formData.quantity} units recovered from Rejected stock. Apply stock in?`;
+      } else if (newRecord.isReusable) {
+        confirmText = `Record for ${formData.quantity} reusable units. Apply stock change?`;
+      } else {
+        confirmText = `Record for ${formData.quantity} damaged units. History only (No stock change).`;
+      }
+
+      Swal.fire({
+        title: isEditing ? 'Update Log?' : 'Log Entry?',
+        text: confirmText,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'Yes, Confirm',
+        cancelButtonText: 'Cancel'
+      }).then(async (result) => {
+        if (!result.isConfirmed) return;
+        
+        setIsSubmitting(true);
+        try {
+          if (isEditing) {
+            await updateReturnRecord(editingId, newRecord, newRecord.isReusable);
+            toast.success('Return updated!');
+          } else {
+            await addReturnRecord(newRecord, newRecord.isReusable);
+            toast.success(newRecord.isReusable ? 'Return logged & Stock adjusted!' : 'Return logged.');
+            clearDraft('return');
+          }
+          handleCancel();
+        } finally {
+          setIsSubmitting(false);
+        }
+      });
+    }
   };
 
   const handleRepSubmit = async (e) => {
@@ -218,7 +399,38 @@ const Returns = () => {
     setEditingId(record.id);
     setActiveTab(tab);
     if (tab === 'returns') {
+      let detectedType = record.type;
+      let orderId = record.orderId || '';
+      let manualName = record.manualName || '';
+      let filterDispatchDate = record.filterDispatchDate || '';
+
+      if (!detectedType) {
+        // Try to detect if it's B2B
+        const isB2B = b2bShipments.some(s => s.clientName === record.channel);
+        detectedType = isB2B ? 'B2B' : 'B2C';
+        if (isB2B) {
+          const matchingShipment = b2bShipments.find(s => s.clientName === record.channel && s.products.some(p => p.name === record.productName));
+          if (matchingShipment) {
+            orderId = matchingShipment.id;
+          } else {
+            orderId = 'manual';
+            manualName = record.channel;
+          }
+        }
+      }
+
+      if (detectedType === 'B2B' && orderId && orderId !== 'manual') {
+        const shipment = b2bShipments.find(s => s.id === orderId);
+        if (shipment) {
+          filterDispatchDate = shipment.dispatchDate || shipment.date || '';
+        }
+      }
+
       setFormData({
+        type: detectedType,
+        orderId,
+        manualName,
+        filterDispatchDate,
         productName: record.productName,
         quantity: record.quantity,
         channel: record.channel,
@@ -272,6 +484,8 @@ const Returns = () => {
     });
   };
 
+  const showMultipleProducts = formData.type === 'B2B' && formData.orderId && formData.orderId !== 'manual' && !isEditing;
+
   return (
     <div className="space-y-6">
       {/* Header & Tab Switcher (Matching DamageTracking design) */}
@@ -319,39 +533,60 @@ const Returns = () => {
             </div>
             
             <form onSubmit={handleReturnSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                <SearchableSelect 
-                  label="Product / SKU" 
-                  options={stock.map(s => `[${s.sku || 'N/A'}] ${s.name}`)} 
-                  value={formData.productName ? stock.find(s => s.name === formData.productName) ? `[${stock.find(s => s.name === formData.productName).sku || 'N/A'}] ${formData.productName}` : '' : ''}
-                  onChange={(val) => {
-                    const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name}` === val)?.name;
-                    setFormData({...formData, productName: selectedName || ''});
-                  }}
-                  required
-                />
-                <Input 
-                  label="Quantity" 
-                  type="number" 
-                  min="1"
-                  value={formData.quantity}
-                  onChange={(e) => setFormData({...formData, quantity: e.target.value})}
-                  required
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <Select 
-                  label="Condition" 
-                  options={['Good (Reuse)', 'Damaged (Waste)', 'Recovered (From Rejected)']}
-                  value={formData.condition}
-                  onChange={(e) => setFormData({...formData, condition: e.target.value})}
-                  required
+                  label="Return Type" 
+                  options={['B2C', 'B2B']}
+                  value={formData.type}
+                  onChange={(e) => setFormData({...formData, type: e.target.value, orderId: '', channel: '', manualName: '', productName: ''})}
                 />
-                <SearchableSelect 
-                  label="From Channel" 
-                  options={channelOptions} 
-                  value={formData.channel}
-                  onChange={(val) => setFormData({...formData, channel: val})}
-                  required
-                />
+                
+                {formData.type === 'B2B' && (
+                  <Input 
+                    label="Filter B2B Orders by Date" 
+                    type="date"
+                    value={formData.filterDispatchDate}
+                    onChange={(e) => setFormData({...formData, filterDispatchDate: e.target.value})}
+                  />
+                )}
+                
+                {formData.type === 'B2B' ? (
+                  <div className="flex flex-col gap-2">
+                    <SearchableSelect 
+                      label="Select B2B Order" 
+                      options={['Manual Entry (Enter Name)', ...filteredB2BOrders.slice(0, 50).map(s => `${s.clientName} - ${s.date} (#${s.id.toString().slice(-4)})`)]}
+                      value={formData.orderId === 'manual' ? 'Manual Entry (Enter Name)' : formData.orderId ? b2bShipments.find(s => s.id === formData.orderId) ? `${b2bShipments.find(s => s.id === formData.orderId).clientName} - ${b2bShipments.find(s => s.id === formData.orderId).date} (#${formData.orderId.toString().slice(-4)})` : '' : ''}
+                      onChange={(val) => {
+                        if (val === 'Manual Entry (Enter Name)') {
+                          setFormData({...formData, orderId: 'manual', channel: '', manualName: '', productName: ''});
+                        } else {
+                          const selected = b2bShipments.find(s => `${s.clientName} - ${s.date} (#${s.id.toString().slice(-4)})` === val);
+                          const firstProduct = selected?.products?.[0]?.name || '';
+                          setFormData({...formData, orderId: selected?.id || '', channel: selected?.clientName || '', manualName: '', productName: firstProduct});
+                        }
+                      }}
+                      required
+                    />
+                    {formData.orderId === 'manual' && (
+                      <Input 
+                        label="Client Name (Manual)" 
+                        placeholder="Enter client name"
+                        value={formData.manualName}
+                        onChange={(e) => setFormData({...formData, manualName: e.target.value, channel: e.target.value})}
+                        required
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <SearchableSelect 
+                    label="From B2C Channel" 
+                    options={channels.map(c => c.name)} 
+                    value={formData.channel}
+                    onChange={(val) => setFormData({...formData, channel: val})}
+                    required
+                  />
+                )}
+
                 <Input 
                   label="Return Date" 
                   type="date"
@@ -359,6 +594,99 @@ const Returns = () => {
                   onChange={(e) => setFormData({...formData, date: e.target.value})}
                   required
                 />
+
+                {showMultipleProducts ? (
+                  <div className="col-span-full border-t border-emerald-100/50 pt-4 mt-2">
+                    <h4 className="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-3">
+                      Products in Shipment (Specify Return Quantities)
+                    </h4>
+                    <div className="space-y-3">
+                      {b2bReturnsList.map((item, idx) => {
+                        const s = stock.find(p => p.name === item.name);
+                        return (
+                          <div key={item.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-white p-3 rounded-xl border border-emerald-100/80 shadow-sm transition-all hover:bg-slate-50">
+                            <div className="md:col-span-5">
+                              <span className="text-[10px] font-mono font-bold text-indigo-500 italic block">
+                                {s?.sku || 'N/A'}
+                              </span>
+                              <span className="font-semibold text-slate-900 text-sm">{item.name}</span>
+                            </div>
+                            
+                            <div className="md:col-span-2 text-slate-500 text-sm font-medium">
+                              Shipped: <span className="font-bold text-slate-700">{item.shippedQty}</span>
+                            </div>
+
+                            <div className="md:col-span-2">
+                              <Input 
+                                label="Return Qty"
+                                type="number"
+                                min="0"
+                                max={item.shippedQty}
+                                placeholder="0"
+                                value={item.quantity}
+                                onChange={(e) => {
+                                  const newList = [...b2bReturnsList];
+                                  newList[idx].quantity = e.target.value;
+                                  setB2bReturnsList(newList);
+                                }}
+                              />
+                            </div>
+
+                            <div className="md:col-span-3">
+                              <Select 
+                                label="Condition"
+                                options={['Good (Reuse)', 'Damaged (Waste)', 'Recovered (From Rejected)']}
+                                value={item.condition}
+                                onChange={(e) => {
+                                  const newList = [...b2bReturnsList];
+                                  newList[idx].condition = e.target.value;
+                                  setB2bReturnsList(newList);
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <SearchableSelect 
+                      label="Product / SKU" 
+                      options={productOptions} 
+                      value={formData.productName ? stock.find(s => s.name === formData.productName) ? `[${stock.find(s => s.name === formData.productName).sku || 'N/A'}] ${formData.productName}` : '' : ''}
+                      onChange={(val) => {
+                        const selectedName = stock.find(s => `[${s.sku || 'N/A'}] ${s.name}` === val)?.name;
+                        setFormData({...formData, productName: selectedName || ''});
+                      }}
+                      required
+                    />
+
+                    <div className="flex flex-col">
+                      <Input 
+                        label="Quantity" 
+                        type="number" 
+                        min="1"
+                        value={formData.quantity}
+                        onChange={(e) => setFormData({...formData, quantity: e.target.value})}
+                        required
+                      />
+                      {selectedProductInShipment && (
+                        <span className="text-[10px] text-indigo-500 font-bold block mt-1">
+                          Shipped quantity: {selectedProductInShipment.quantity} units
+                        </span>
+                      )}
+                    </div>
+
+                    <Select 
+                      label="Condition" 
+                      options={['Good (Reuse)', 'Damaged (Waste)', 'Recovered (From Rejected)']}
+                      value={formData.condition}
+                      onChange={(e) => setFormData({...formData, condition: e.target.value})}
+                      required
+                    />
+                  </>
+                )}
               </div>
               <div className="flex flex-col sm:flex-row gap-4 items-end justify-between bg-white/40 p-4 rounded-xl border border-emerald-100/50">
                 <div className="flex-1 w-full">
@@ -625,7 +953,14 @@ const Returns = () => {
                         <span className="text-[10px] font-bold text-slate-400 uppercase">LOG ONLY</span>
                       )}
                     </td>
-                    <td className="py-4 px-6 text-sm font-semibold text-slate-900">{r.channel}</td>
+                    <td className="py-4 px-6 text-sm">
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-slate-900">{r.channel}</span>
+                        {r.type === 'B2B' && r.orderId && r.orderId !== 'manual' && (
+                          <span className="text-[10px] font-mono text-indigo-500 font-bold">Order: #{r.orderId.toString().slice(-4)}</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-4 px-6 text-sm">
                       <div className="flex flex-col">
                         <span className="text-[10px] font-mono font-bold text-indigo-500 italic">{stock.find(s => s.name === r.productName)?.sku || 'N/A'}</span>

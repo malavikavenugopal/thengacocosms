@@ -141,9 +141,26 @@ const downloadAsPDF = async (shipments, type, title, fileName, dateRange) => {
         let returnText = '-';
         if (s.status === 'Reworked') {
           if (s.returnProducts && s.returnProducts.length > 0) {
-            returnText = `${s.returnDate}\n` + s.returnProducts.map(rp => `${rp.returnQuantity}x ${rp.returnProductName}${rp.returnNotes ? ` (${rp.returnNotes})` : ''}`).join('\n');
+            returnText = `${s.returnDate}\n` + s.returnProducts.map((rp, rpIdx) => {
+              const outgoingProduct = s.products?.[rpIdx] || (rpIdx === 0 ? { productName: s.productName, quantity: s.quantity } : null);
+              const sentQty = outgoingProduct ? Number(outgoingProduct.quantity) : 0;
+              const returnedQty = Number(rp.returnQuantity);
+              const shortage = sentQty - returnedQty;
+              let shortageText = '';
+              if (shortage > 0) {
+                shortageText = ` [Shortage: ${shortage} not returned${rp.notReturnedReason ? ` - Reason: ${rp.notReturnedReason}` : ''}]`;
+              }
+              return `${rp.returnQuantity}x ${rp.returnProductName}${shortageText}${rp.returnNotes ? ` (${rp.returnNotes})` : ''}`;
+            }).join('\n');
           } else if (s.returnProductName) {
-            returnText = `${s.returnDate}\n${s.returnQuantity}x ${s.returnProductName}${s.returnNotes ? ` (${s.returnNotes})` : ''}`;
+            const sentQty = Number(s.quantity || 0);
+            const returnedQty = Number(s.returnQuantity || 0);
+            const shortage = sentQty - returnedQty;
+            let shortageText = '';
+            if (shortage > 0) {
+              shortageText = ` [Shortage: ${shortage} not returned${s.notReturnedReason ? ` - Reason: ${s.notReturnedReason}` : ''}]`;
+            }
+            returnText = `${s.returnDate}\n${s.returnQuantity}x ${s.returnProductName}${shortageText}${s.returnNotes ? ` (${s.returnNotes})` : ''}`;
           }
         }
         
@@ -333,9 +350,26 @@ const downloadAsImage = async (shipments, type, title, fileName, dateRange) => {
               let returnText = '-';
               if (s.status === 'Reworked') {
                 if (s.returnProducts && s.returnProducts.length > 0) {
-                  returnText = `<b>${s.returnDate}</b><br/>` + s.returnProducts.map(rp => `• ${rp.returnQuantity}x ${rp.returnProductName}${rp.returnNotes ? ` (${rp.returnNotes})` : ''}`).join('<br/>');
+                  returnText = `<b>${s.returnDate}</b><br/>` + s.returnProducts.map((rp, rpIdx) => {
+                    const outgoingProduct = s.products?.[rpIdx] || (rpIdx === 0 ? { productName: s.productName, quantity: s.quantity } : null);
+                    const sentQty = outgoingProduct ? Number(outgoingProduct.quantity) : 0;
+                    const returnedQty = Number(rp.returnQuantity);
+                    const shortage = sentQty - returnedQty;
+                    let shortageText = '';
+                    if (shortage > 0) {
+                      shortageText = ` <span style="color: #dc2626; font-weight: bold;">[Shortage: ${shortage} not returned${rp.notReturnedReason ? ` - Reason: ${rp.notReturnedReason}` : ''}]</span>`;
+                    }
+                    return `• ${rp.returnQuantity}x ${rp.returnProductName}${shortageText}${rp.returnNotes ? ` (${rp.returnNotes})` : ''}`;
+                  }).join('<br/>');
                 } else if (s.returnProductName) {
-                  returnText = `<b>${s.returnDate}</b><br/>• ${s.returnQuantity}x ${s.returnProductName}${s.returnNotes ? ` (${s.returnNotes})` : ''}`;
+                  const sentQty = Number(s.quantity || 0);
+                  const returnedQty = Number(s.returnQuantity || 0);
+                  const shortage = sentQty - returnedQty;
+                  let shortageText = '';
+                  if (shortage > 0) {
+                    shortageText = ` <span style="color: #dc2626; font-weight: bold;">[Shortage: ${shortage} not returned${s.notReturnedReason ? ` - Reason: ${s.notReturnedReason}` : ''}]</span>`;
+                  }
+                  returnText = `<b>${s.returnDate}</b><br/>• ${s.returnQuantity}x ${s.returnProductName}${shortageText}${s.returnNotes ? ` (${s.returnNotes})` : ''}`;
                 }
               }
               return `
@@ -534,9 +568,26 @@ export const shareVisualReport = async (shipments, type, title, dateRange = {}) 
               let returnText = '-';
               if (s.status === 'Reworked') {
                 if (s.returnProducts && s.returnProducts.length > 0) {
-                  returnText = `<b>${s.returnDate}</b><br/>` + s.returnProducts.map(rp => `• ${rp.returnQuantity}x ${rp.returnProductName}${rp.returnNotes ? ` (${rp.returnNotes})` : ''}`).join('<br/>');
+                  returnText = `<b>${s.returnDate}</b><br/>` + s.returnProducts.map((rp, rpIdx) => {
+                    const outgoingProduct = s.products?.[rpIdx] || (rpIdx === 0 ? { productName: s.productName, quantity: s.quantity } : null);
+                    const sentQty = outgoingProduct ? Number(outgoingProduct.quantity) : 0;
+                    const returnedQty = Number(rp.returnQuantity);
+                    const shortage = sentQty - returnedQty;
+                    let shortageText = '';
+                    if (shortage > 0) {
+                      shortageText = ` <span style="color: #dc2626; font-weight: bold;">[Shortage: ${shortage} not returned${rp.notReturnedReason ? ` - Reason: ${rp.notReturnedReason}` : ''}]</span>`;
+                    }
+                    return `• ${rp.returnQuantity}x ${rp.returnProductName}${shortageText}${rp.returnNotes ? ` (${rp.returnNotes})` : ''}`;
+                  }).join('<br/>');
                 } else if (s.returnProductName) {
-                  returnText = `<b>${s.returnDate}</b><br/>• ${s.returnQuantity}x ${s.returnProductName}${s.returnNotes ? ` (${s.returnNotes})` : ''}`;
+                  const sentQty = Number(s.quantity || 0);
+                  const returnedQty = Number(s.returnQuantity || 0);
+                  const shortage = sentQty - returnedQty;
+                  let shortageText = '';
+                  if (shortage > 0) {
+                    shortageText = ` <span style="color: #dc2626; font-weight: bold;">[Shortage: ${shortage} not returned${s.notReturnedReason ? ` - Reason: ${s.notReturnedReason}` : ''}]</span>`;
+                  }
+                  returnText = `<b>${s.returnDate}</b><br/>• ${s.returnQuantity}x ${s.returnProductName}${shortageText}${s.returnNotes ? ` (${s.returnNotes})` : ''}`;
                 }
               }
               return `

@@ -167,7 +167,8 @@ const ReworkLog = () => {
         returnProducts: receiveData.products.map(p => ({
           returnProductName: p.returnProductName,
           returnQuantity: p.returnQuantity,
-          returnNotes: p.returnNotes
+          returnNotes: p.returnNotes,
+          notReturnedReason: (Number(p.originalQuantity) - Number(p.returnQuantity) > 0) ? (p.notReturnedReason || '') : ''
         })),
         status: 'Reworked'
       });
@@ -219,7 +220,8 @@ const ReworkLog = () => {
         originalQuantity: p.quantity,
         returnProductName: p.productName,
         returnQuantity: p.quantity,
-        returnNotes: ''
+        returnNotes: '',
+        notReturnedReason: ''
       }))
     });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -364,6 +366,21 @@ const ReworkLog = () => {
                           }}
                         />
                       </div>
+                      {Number(p.originalQuantity) - Number(p.returnQuantity) > 0 && (
+                        <div className="w-full mt-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <Input 
+                            label={`Reason why ${Number(p.originalQuantity) - Number(p.returnQuantity)} units did not return`} 
+                            placeholder="e.g. Broken, lost in transport, kept at workshop" 
+                            value={p.notReturnedReason || ''}
+                            onChange={(e) => {
+                              const newProducts = [...receiveData.products];
+                              newProducts[idx].notReturnedReason = e.target.value;
+                              setReceiveData({...receiveData, products: newProducts});
+                            }}
+                            required
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -603,19 +620,56 @@ const ReworkLog = () => {
                         <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100 w-fit">
                           {r.returnDate}
                         </div>
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1.5">
                           {r.returnProducts && r.returnProducts.length > 0 ? (
-                            r.returnProducts.map((rp, idx) => (
-                              <div key={idx} className="text-[11px] font-medium text-slate-700">
-                                {rp.returnQuantity}x {rp.returnProductName}
-                                {rp.returnNotes && <span className="block text-[9px] text-slate-400 italic">Note: {rp.returnNotes}</span>}
-                              </div>
-                            ))
+                            r.returnProducts.map((rp, idx) => {
+                              const outgoingProduct = r.products?.[idx] || (idx === 0 ? { productName: r.productName, quantity: r.quantity } : null);
+                              const sentQty = outgoingProduct ? Number(outgoingProduct.quantity) : 0;
+                              const returnedQty = Number(rp.returnQuantity);
+                              const shortage = sentQty - returnedQty;
+                              return (
+                                <div key={idx} className="text-[11px] font-medium text-slate-700 border-b border-slate-100 last:border-0 pb-1.5 last:pb-0 mb-1.5 last:mb-0">
+                                  <span className="font-semibold text-emerald-700">{rp.returnQuantity}x {rp.returnProductName}</span>
+                                  {shortage > 0 && (
+                                    <div className="mt-1">
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
+                                        Shortage: {shortage} not returned
+                                      </span>
+                                      {rp.notReturnedReason && (
+                                        <span className="block text-[10px] text-slate-500 mt-0.5 font-normal">
+                                          Reason: <span className="italic text-slate-600 font-medium">{rp.notReturnedReason}</span>
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {rp.returnNotes && <span className="block text-[9px] text-slate-400 italic mt-0.5">Note: {rp.returnNotes}</span>}
+                                </div>
+                              );
+                            })
                           ) : (
-                            <div className="text-[11px] font-medium text-slate-700">
-                              {r.returnQuantity}x {r.returnProductName}
-                              {r.returnNotes && <span className="block text-[9px] text-slate-400 italic">Note: {r.returnNotes}</span>}
-                            </div>
+                            (() => {
+                              const sentQty = Number(r.quantity || 0);
+                              const returnedQty = Number(r.returnQuantity || 0);
+                              const shortage = sentQty - returnedQty;
+                              return (
+                                <div className="text-[11px] font-medium text-slate-700">
+                                  <span className="font-semibold text-emerald-700">{r.returnQuantity}x {r.returnProductName}</span>
+                                  {shortage > 0 && (
+                                    <div className="mt-1">
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-100">
+                                        Shortage: {shortage} not returned
+                                      </span>
+                                      {r.notReturnedReason && (
+                                        <span className="block text-[10px] text-slate-500 mt-0.5 font-normal">
+                                          Reason: <span className="italic text-slate-600 font-medium">{r.notReturnedReason}</span>
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                  {r.returnNotes && <span className="block text-[9px] text-slate-400 italic mt-0.5">Note: {r.returnNotes}</span>}
+                                </div>
+                              );
+                            })()
                           )}
                         </div>
                       </div>
