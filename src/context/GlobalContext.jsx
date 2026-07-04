@@ -281,7 +281,27 @@ export const GlobalProvider = ({ children }) => {
         usedInProduction: (productionRecords || []).filter(r => isTargetMonth(r.date))
           .reduce((s, r) => s + (r.rawMaterials || [])
             .filter(rm => rm.name === productName)
-            .reduce((s2, rm) => s2 + (Number(rm.quantity) * (Number(rm.packSize) || 1)), 0), 0)
+            .reduce((s2, rm) => s2 + (Number(rm.quantity) * (Number(rm.packSize) || 1)), 0), 0),
+
+        reworkOut: (reworkRecords || []).filter(r => isTargetMonth(r.outDate))
+          .reduce((total, r) => {
+            const products = r.products && r.products.length > 0 
+              ? r.products 
+              : [{ productName: r.productName, quantity: r.quantity }];
+            return total + products
+              .filter(p => p.productName === productName)
+              .reduce((sum, p) => sum + (Number(p.quantity) || 0), 0);
+          }, 0),
+
+        reworkIn: (reworkRecords || []).filter(r => r.status === 'Reworked' && isTargetMonth(r.returnDate))
+          .reduce((total, r) => {
+            const returnProducts = r.returnProducts && r.returnProducts.length > 0
+              ? r.returnProducts
+              : [{ returnProductName: r.returnProductName, returnQuantity: r.returnQuantity }];
+            return total + returnProducts
+              .filter(rp => rp.returnProductName === productName)
+              .reduce((sum, rp) => sum + (Number(rp.returnQuantity) || 0), 0);
+          }, 0)
       };
 
       const productQC = (qcRecords || []).filter(r => r.productName === productName && isTargetMonth(r.date));
@@ -328,7 +348,25 @@ export const GlobalProvider = ({ children }) => {
             .filter(p => p.name === productName)
             .reduce((s2, p) => s2 + (Number(p.quantity) * (Number(p.packSize) || 1)), 0), 0);
 
-        return (Number(item.opening) || 0) + (Number(item.returned) || 0) + (Number(item.produced) || 0) + qcAcceptedOrPurchase - (Number(item.out) || 0) - (Number(item.damage) || 0) - (Number(item.replacement) || 0) - legacyReplacements - multiReplacements - (Number(item.used) || 0);
+        const legacyReworkOut = (reworkRecords || []).reduce((total, r) => {
+          const products = r.products && r.products.length > 0 
+            ? r.products 
+            : [{ productName: r.productName, quantity: r.quantity }];
+          return total + products
+            .filter(p => p.productName === productName)
+            .reduce((sum, p) => sum + (Number(p.quantity) || 0), 0);
+        }, 0);
+
+        const legacyReworkIn = (reworkRecords || []).filter(r => r.status === 'Reworked').reduce((total, r) => {
+          const returnProducts = r.returnProducts && r.returnProducts.length > 0
+            ? r.returnProducts
+            : [{ returnProductName: r.returnProductName, returnQuantity: r.returnQuantity }];
+          return total + returnProducts
+            .filter(rp => rp.returnProductName === productName)
+            .reduce((sum, rp) => sum + (Number(rp.returnQuantity) || 0), 0);
+        }, 0);
+
+        return (Number(item.opening) || 0) + (Number(item.returned) || 0) + (Number(item.produced) || 0) + qcAcceptedOrPurchase + legacyReworkIn - (Number(item.out) || 0) - (Number(item.damage) || 0) - (Number(item.replacement) || 0) - legacyReplacements - multiReplacements - (Number(item.used) || 0) - legacyReworkOut;
       }
 
       // If we have a reconciled 'expected' value in the DB, use it as the primary truth.
@@ -337,8 +375,8 @@ export const GlobalProvider = ({ children }) => {
         return Number(mData.expected);
       }
 
-      const totalIn = (Number(mData.in) || 0) + (Number(movements.produced) || 0) + (Number(movements.returned) || 0) + qcAcceptedOrPurchase;
-      const totalOut = (Number(movements.out) || 0) + (Number(movements.packed) || 0) + (Number(movements.damage) || 0) + (Number(movements.replacement) || 0) + (Number(movements.usedInProduction) || 0);
+      const totalIn = (Number(mData.in) || 0) + (Number(movements.produced) || 0) + (Number(movements.returned) || 0) + qcAcceptedOrPurchase + (Number(movements.reworkIn) || 0);
+      const totalOut = (Number(movements.out) || 0) + (Number(movements.packed) || 0) + (Number(movements.damage) || 0) + (Number(movements.replacement) || 0) + (Number(movements.usedInProduction) || 0) + (Number(movements.reworkOut) || 0);
 
       return (Number(mData.opening) || 0) + totalIn - totalOut;
     }
@@ -921,9 +959,96 @@ export const GlobalProvider = ({ children }) => {
     }
   };
 
-  const addReworkRecord = async (record) => { await addDoc(collection(db, 'reworkRecords'), record); };
-  const updateReworkRecord = async (id, record) => { await updateDoc(doc(db, 'reworkRecords', id), record); };
-  const deleteReworkRecord = async (id) => { await deleteDoc(doc(db, 'reworkRecords', id)); };
+  const addReworkRecord = async (record) => {
+    await addDoc(collection(db, 'reworkRecords'), record);
+    const products = record.products && record.products.length > 0 
+      ? record.products 
+      : [{ productName: record.productName, quantity: record.quantity }];
+    for (const p of products) {
+      if (p.productName && p.quantity) {
+        await updateFirestoreStock(p.productName, p.quantity, 'sub', 'out');
+      }
+    }
+  };
+
+  const updateReworkRecord = async (id, record) => {
+    const oldRecord = reworkRecords.find(r => r.id === id);
+    await updateDoc(doc(db, 'reworkRecords', id), record);
+    if (oldRecord) {
+      // 1. Revert old outgoing products (add back to stock)
+      const oldProducts = oldRecord.products && oldRecord.products.length > 0
+        ? oldRecord.products
+        : [{ productName: oldRecord.productName, quantity: oldRecord.quantity }];
+      for (const p of oldProducts) {
+        if (p.productName && p.quantity) {
+          await updateFirestoreStock(p.productName, p.quantity, 'add', 'out');
+        }
+      }
+
+      // 2. Apply new outgoing products (subtract from stock)
+      const newProducts = record.products && record.products.length > 0
+        ? record.products
+        : [{ productName: record.productName, quantity: record.quantity }];
+      for (const p of newProducts) {
+        if (p.productName && p.quantity) {
+          await updateFirestoreStock(p.productName, p.quantity, 'sub', 'out');
+        }
+      }
+
+      // 3. Revert old returned products if status was Reworked (subtract from stock)
+      if (oldRecord.status === 'Reworked') {
+        const oldReturnProducts = oldRecord.returnProducts && oldRecord.returnProducts.length > 0
+          ? oldRecord.returnProducts
+          : [{ returnProductName: oldRecord.returnProductName, returnQuantity: oldRecord.returnQuantity }];
+        for (const rp of oldReturnProducts) {
+          if (rp.returnProductName && rp.returnQuantity) {
+            await updateFirestoreStock(rp.returnProductName, rp.returnQuantity, 'sub', 'out');
+          }
+        }
+      }
+
+      // 4. Apply new returned products if new status is Reworked (add to stock)
+      if (record.status === 'Reworked') {
+        const newReturnProducts = record.returnProducts && record.returnProducts.length > 0
+          ? record.returnProducts
+          : [{ returnProductName: record.returnProductName, returnQuantity: record.returnQuantity }];
+        for (const rp of newReturnProducts) {
+          if (rp.returnProductName && rp.returnQuantity) {
+            await updateFirestoreStock(rp.returnProductName, rp.returnQuantity, 'add', 'out');
+          }
+        }
+      }
+    }
+  };
+
+  const deleteReworkRecord = async (id) => {
+    if (!id) return;
+    const record = reworkRecords.find(r => r.id === id);
+    await deleteDoc(doc(db, 'reworkRecords', id));
+    if (record) {
+      // Revert outgoing stock deduction (add it back)
+      const products = record.products && record.products.length > 0 
+        ? record.products 
+        : [{ productName: record.productName, quantity: record.quantity }];
+      for (const p of products) {
+        if (p.productName && p.quantity) {
+          await updateFirestoreStock(p.productName, p.quantity, 'add', 'out');
+        }
+      }
+
+      // If it was already completed (Reworked), revert incoming stock addition (subtract it)
+      if (record.status === 'Reworked') {
+        const returnProducts = record.returnProducts && record.returnProducts.length > 0
+          ? record.returnProducts
+          : [{ returnProductName: record.returnProductName, returnQuantity: record.returnQuantity }];
+        for (const rp of returnProducts) {
+          if (rp.returnProductName && rp.returnQuantity) {
+            await updateFirestoreStock(rp.returnProductName, rp.returnQuantity, 'sub', 'out');
+          }
+        }
+      }
+    }
+  };
 
   // Amazon Returns CRUD
   const addAmazonReturnRecords = async (records) => {

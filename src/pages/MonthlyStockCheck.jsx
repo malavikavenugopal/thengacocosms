@@ -17,7 +17,8 @@ const MonthlyStockCheck = () => {
     replacementRecords,
     monthlyStockData,
     saveMonthlyStock,
-    productionRecords
+    productionRecords,
+    reworkRecords
   } = useGlobalState();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -301,9 +302,40 @@ const MonthlyStockCheck = () => {
       }); 
     });
 
-    // Final UI cleanup: Out = B2C + B2B Dispatched
+    (reworkRecords || []).forEach(r => {
+      // 1. Rework Outward: subtract from stock
+      if (isTarget(r.outDate, periodStr)) {
+        const products = r.products && r.products.length > 0 
+          ? r.products 
+          : [{ productName: r.productName, quantity: r.quantity }];
+        
+        products.forEach(p => {
+          const master = stock.find(s => compareNames(s.name, p.productName));
+          if (master && sums[master.id]) {
+            sums[master.id].stockDeduction += Number(p.quantity) || 0;
+            sums[master.id].reworkOut = (sums[master.id].reworkOut || 0) + (Number(p.quantity) || 0);
+          }
+        });
+      }
+
+      // 2. Rework Inward: add to stock
+      if (r.status === 'Reworked' && isTarget(r.returnDate, periodStr)) {
+        const returnProducts = r.returnProducts && r.returnProducts.length > 0
+          ? r.returnProducts
+          : [{ returnProductName: r.returnProductName, returnQuantity: r.returnQuantity }];
+        
+        returnProducts.forEach(rp => {
+          const master = stock.find(s => compareNames(s.name, rp.returnProductName));
+          if (master && sums[master.id]) {
+            sums[master.id].returned += Number(rp.returnQuantity) || 0;
+          }
+        });
+      }
+    });
+
+    // Final UI cleanup: Out = B2C + B2B Dispatched + Rework Out
     Object.keys(sums).forEach(id => {
-      sums[id].out = sums[id].b2cOut + sums[id].b2bOut;
+      sums[id].out = sums[id].b2cOut + sums[id].b2bOut + (sums[id].reworkOut || 0);
       
       let totalQCAccepted = 0;
       let effectiveQCAndPurchase = 0;
@@ -517,12 +549,50 @@ const MonthlyStockCheck = () => {
       results.adjustments.push({ id: r.id, label: 'Damage/Loss', impact: r.quantity, color: 'red' });
     });
 
+    (reworkRecords || []).forEach(r => {
+      // 1. Rework Outward
+      if (isTarget(r.outDate, period)) {
+        const products = r.products && r.products.length > 0 
+          ? r.products 
+          : [{ productName: r.productName, quantity: r.quantity }];
+        
+        products.forEach(p => {
+          if (compareNames(p.productName, product.name)) {
+            results.adjustments.push({
+              id: `${r.id}-out`,
+              label: `Rework Outward (Sent to ${r.destination || 'External'})`,
+              impact: Number(p.quantity) || 0,
+              color: 'indigo'
+            });
+          }
+        });
+      }
+
+      // 2. Rework Inward Return
+      if (r.status === 'Reworked' && isTarget(r.returnDate, period)) {
+        const returnProducts = r.returnProducts && r.returnProducts.length > 0
+          ? r.returnProducts
+          : [{ returnProductName: r.returnProductName, returnQuantity: r.returnQuantity }];
+        
+        returnProducts.forEach(rp => {
+          if (compareNames(rp.returnProductName, product.name)) {
+            results.in.push({
+              id: `${r.id}-in`,
+              label: `Rework Return (${r.returnNotes || 'Rework Completed'})`,
+              impact: Number(rp.returnQuantity) || 0,
+              color: 'indigo'
+            });
+          }
+        });
+      }
+    });
+
     return results;
   };
 
-  const monthlyMovements = useMemo(() => getMovements(activePeriod), [activePeriod, b2bShipments, b2cShipments, damageRecords, returnRecords, qcRecords, purchaseRecords, replacementRecords, productionRecords, stock]);
+  const monthlyMovements = useMemo(() => getMovements(activePeriod), [activePeriod, b2bShipments, b2cShipments, damageRecords, returnRecords, qcRecords, purchaseRecords, replacementRecords, productionRecords, stock, reworkRecords]);
 
-  const productMovements = useMemo(() => getProductMovements(selectedProductDetails, activePeriod), [selectedProductDetails, activePeriod, b2bShipments, b2cShipments, purchaseRecords, productionRecords, returnRecords, damageRecords, qcRecords, stock]);
+  const productMovements = useMemo(() => getProductMovements(selectedProductDetails, activePeriod), [selectedProductDetails, activePeriod, b2bShipments, b2cShipments, purchaseRecords, productionRecords, returnRecords, damageRecords, qcRecords, stock, reworkRecords]);
 
   const calculateExpected = (opening, otherIn, purchased, produced, returned, stockDeduction, replacement, damage, rejected, used, qcAcceptedOrPurchase = 0) => 
     Number(opening || 0) + Number(otherIn || 0) + Number(produced || 0) + Number(returned || 0) + Number(qcAcceptedOrPurchase || 0) - Number(stockDeduction || 0) - Number(replacement || 0) - Number(damage || 0) - Number(used || 0);
@@ -853,8 +923,8 @@ const MonthlyStockCheck = () => {
                     <span className="text-[9px] text-slate-400 uppercase font-bold block mb-1">Opening Stock</span>
                     <input type="number" className="w-full px-2 py-1.5 text-sm font-bold bg-slate-50 border border-slate-200 rounded outline-none focus:border-indigo-500" value={mData.opening || ''} onChange={(e) => {
                       const val = e.target.value === '' ? '' : Number(e.target.value);
-                      const m = monthlyMovements[item.id] || { out: 0, packed: 0, dispatchedDeduct: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-                      const expected = calculateExpected(val, mData.in, m.purchased, m.produced, m.returned, m.out, m.packed, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
+                      const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
+                      const expected = calculateExpected(val, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
                       saveMonthlyStock(activePeriod, item.id, { opening: val, expected });
                     }} />
                   </div>
