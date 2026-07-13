@@ -46,6 +46,7 @@ const B2CShipments = () => {
   
   const [filterEndDate, setFilterEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
 
   // Sync draft
   React.useEffect(() => {
@@ -70,6 +71,13 @@ const B2CShipments = () => {
 
   const filteredShipments = useMemo(() => {
     return shipments.filter(shipment => {
+      // Status Filter
+      if (statusFilter !== 'All') {
+        if (!shipment.isFBA) return false;
+        const shipmentStatus = shipment.status || 'Packed';
+        if (shipmentStatus !== statusFilter) return false;
+      }
+
       // Date Filter
       let dateMatch = true;
       if (filterStartDate || filterEndDate) {
@@ -95,7 +103,7 @@ const B2CShipments = () => {
 
       return true;
     });
-  }, [shipments, filterStartDate, filterEndDate, searchTerm, stock]);
+  }, [shipments, filterStartDate, filterEndDate, searchTerm, stock, statusFilter]);
 
   const exportToExcel = async () => {
     setIsExporting(true);
@@ -499,9 +507,22 @@ const B2CShipments = () => {
                   />
                 </div>
              </div>
-             {(filterStartDate || filterEndDate || searchTerm) && (
+             <div className="w-full md:w-auto">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 block">Status</label>
+                <select 
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 transition-all outline-none"
+                >
+                  <option value="All">All Status</option>
+                  <option value="Packed">Packed</option>
+                  <option value="Dispatched">Dispatched</option>
+                </select>
+                <p className="text-[9px] text-slate-400 mt-1 italic leading-tight">*Filters apply only to FBA shipments</p>
+             </div>
+             {(filterStartDate || filterEndDate || searchTerm || statusFilter !== 'All') && (
                <button 
-                onClick={() => { setFilterStartDate(''); setFilterEndDate(''); setSearchTerm(''); }}
+                onClick={() => { setFilterStartDate(''); setFilterEndDate(''); setSearchTerm(''); setStatusFilter('All'); }}
                 className="text-xs font-bold text-rose-500 hover:text-rose-600 underline flex items-center md:pt-6"
                >
                  Clear All
