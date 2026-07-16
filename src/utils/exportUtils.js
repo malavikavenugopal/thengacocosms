@@ -213,7 +213,7 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
   let tableHtml = `<table>`;
   
   // Row 1: Title
-  const totalColSpan = type === 'B2B' ? 12 : 8;
+  const totalColSpan = type === 'B2B' ? 12 : 9;
   tableHtml += `
     <tr>
       <th colspan="${totalColSpan}" class="header-main">${title}</th>
@@ -230,7 +230,7 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
   // Row 3: Headers
   const headers = type === 'B2B' 
     ? ['Packed Date', 'Dispatch Date', 'Client Name', 'Courier', 'Parceled By', 'Boxes', 'Type', 'Product Name', 'Order Qty', 'Pack Size', 'Total Units', 'Item Status']
-    : ['Date', 'Sales Channel', 'Orders', 'Parceled By', 'Product Name', 'Order Qty', 'Pack Size', 'Total Units'];
+    : ['Date', 'Sales Channel', 'Order Amount', 'Orders', 'Parceled By', 'Product Name', 'Order Qty', 'Pack Size', 'Total Units'];
   
   tableHtml += `<tr>`;
   headers.forEach(h => {
@@ -263,6 +263,7 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
         }
         if (type === 'B2C') {
           tableHtml += `<td rowspan="${rowCount}" class="channel-badge" style="background-color: ${channelColor}">${s.channel}</td>`;
+          tableHtml += `<td rowspan="${rowCount}">${s.orderAmount ? '₹' + Number(s.orderAmount).toFixed(2) : '-'}</td>`;
           tableHtml += `<td rowspan="${rowCount}">${s.orderCount || '1'}</td>`;
         } else {
           tableHtml += `<td rowspan="${rowCount}">${s.clientName}</td>`;
@@ -294,7 +295,7 @@ export const exportFormattedShipments = (shipments, type = 'B2C', fileName = 'Lo
   });
 
   // Footer: Grand Total
-  const footerColSpan = type === 'B2B' ? 10 : 7;
+  const footerColSpan = type === 'B2B' ? 10 : 8;
   tableHtml += `
     <tr>
       <td colspan="${footerColSpan}" class="grand-total text-right">GRAND TOTAL</td>

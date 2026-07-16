@@ -22,7 +22,8 @@ const B2CShipments = () => {
       isFBA: saved?.isFBA || false,
       packedDate: saved?.packedDate || defaultDate,
       status: saved?.status || 'Packed',
-      dispatchDate: saved?.dispatchDate || defaultDate
+      dispatchDate: saved?.dispatchDate || defaultDate,
+      orderAmount: saved?.orderAmount || ''
     };
   });
 
@@ -161,8 +162,11 @@ const B2CShipments = () => {
         };
       });
 
+      const channelLower = formData.channel ? formData.channel.toLowerCase() : '';
+      const isApplicable = ['myntra', 'brown living', 'amala earth', 'banjara', 'first cry', 'zwende'].some(ch => channelLower.includes(ch));
       const shipmentData = {
         ...formData,
+        orderAmount: isApplicable ? formData.orderAmount : '',
         dispatchDate: formData.isFBA && formData.status === 'Dispatched' ? (formData.dispatchDate || new Date().toISOString().split('T')[0]) : null,
         products: finalizedProducts,
         timestamp: Date.now()
@@ -197,7 +201,8 @@ const B2CShipments = () => {
       isFBA: s.isFBA || false,
       packedDate: s.packedDate || s.date || new Date().toISOString().split('T')[0],
       status: s.status || 'Packed',
-      dispatchDate: s.dispatchDate || ''
+      dispatchDate: s.dispatchDate || '',
+      orderAmount: s.orderAmount || ''
     });
     setProducts(s.products.map((p, idx) => ({ ...p, id: Date.now() + idx })));
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -207,7 +212,7 @@ const B2CShipments = () => {
     setIsEditing(false);
     setEditingId(null);
     const today = new Date().toISOString().split('T')[0];
-    setFormData({ whoParceled: [], channel: '', orderCount: '', date: today, isFBA: false, packedDate: today, status: 'Packed', dispatchDate: today });
+    setFormData({ whoParceled: [], channel: '', orderCount: '', date: today, isFBA: false, packedDate: today, status: 'Packed', dispatchDate: today, orderAmount: '' });
     setProducts([{ id: Date.now(), name: '', quantity: '' }]);
   };
 
@@ -277,6 +282,16 @@ const B2CShipments = () => {
               onChange={(e) => setFormData({...formData, date: e.target.value})}
               required
             />
+            {formData.channel && ['myntra', 'brown living', 'amala earth', 'banjara', 'first cry', 'zwende'].some(ch => formData.channel.toLowerCase().includes(ch)) && (
+              <Input 
+                label="Order Amount (INR)" 
+                type="number" 
+                step="0.01"
+                placeholder="Enter order amount"
+                value={formData.orderAmount}
+                onChange={(e) => setFormData({...formData, orderAmount: e.target.value})}
+              />
+            )}
             <div className="flex items-center gap-2 pt-8">
               <label className="text-sm font-bold text-slate-700 cursor-pointer flex items-center gap-2">
                 <input 
@@ -539,10 +554,10 @@ const B2CShipments = () => {
           </div>
         </div>
 
-        <Table headers={['Date', 'Channel / Order Count', 'Parceled By', 'Shipment Details', 'Action']}>
+        <Table headers={['Date', 'Channel / Order Count', 'Order Amount', 'Parceled By', 'Shipment Details', 'Action']}>
           {filteredShipments.length === 0 ? (
             <tr>
-              <td colSpan="5" className="py-16 text-center text-slate-500">
+              <td colSpan="6" className="py-16 text-center text-slate-500">
                 <div className="flex flex-col items-center justify-center">
                   <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-3">
                     <Package size={32} className="text-slate-300" />
@@ -588,6 +603,15 @@ const B2CShipments = () => {
                   <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest pl-1">
                     Orders: <span className="text-slate-900">{s.orderCount || '1'}</span>
                   </div>
+                </td>
+                <td className="py-4 px-6 text-sm text-slate-800 font-bold whitespace-nowrap">
+                  {s.orderAmount ? (
+                    <span className="text-slate-900">
+                      ₹{Number(s.orderAmount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 font-normal">N/A</span>
+                  )}
                 </td>
                 <td className="py-4 px-6 text-sm text-slate-600 whitespace-nowrap">
                   <div className="font-medium text-slate-700">{Array.isArray(s.whoParceled) ? s.whoParceled.join(', ') : s.whoParceled}</div>

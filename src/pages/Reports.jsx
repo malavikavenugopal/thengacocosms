@@ -276,6 +276,7 @@ const Reports = () => {
     { id: 'shipments', label: 'Shipment Report' },
     { id: 'b2bPivot', label: 'B2B Sales Summary' },
     { id: 'b2cPivot', label: 'B2C Sales Summary' },
+    { id: 'b2cRevenue', label: 'B2C Revenue Report' },
     { id: 'products', label: 'SKU Report' },
     { id: 'returns', label: 'Returns Report' },
     { id: 'damage', label: 'Damage Report' },
@@ -352,6 +353,36 @@ const Reports = () => {
 
     return { b2cPivotData: filteredResults, activeChannels: channelsWithSales };
   }, [stock, b2cShipments, channels, filter]);
+
+  // B2C Revenue: Channel-wise monthly report grouped by channel
+  const b2cRevenueReport = useMemo(() => {
+    const applicableChannels = ['myntra', 'brown living', 'amala earth', 'banjara', 'first cry', 'zwende'];
+    
+    // Filter applicable B2C shipments
+    const activeB2C = b2cShipments.filter(s => {
+      const dateMatch = (!filter.startDate || s.date >= filter.startDate) && 
+                        (!filter.endDate || s.date <= filter.endDate);
+      const channelLower = s.channel ? s.channel.toLowerCase() : '';
+      const channelMatch = applicableChannels.some(ch => channelLower.includes(ch));
+      return dateMatch && channelMatch;
+    }).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    // Group by channel
+    const channelGroups = {};
+    activeB2C.forEach(s => {
+      const ch = s.channel || 'Unknown';
+      if (!channelGroups[ch]) channelGroups[ch] = { channel: ch, orders: [], orderCount: 0, totalAmount: 0 };
+      channelGroups[ch].orders.push(s);
+      channelGroups[ch].orderCount += 1;
+      channelGroups[ch].totalAmount += (Number(s.orderAmount) || 0);
+    });
+
+    const groups = Object.values(channelGroups).sort((a, b) => a.channel.localeCompare(b.channel));
+    const grandTotal = groups.reduce((sum, g) => sum + g.totalAmount, 0);
+    const totalOrders = groups.reduce((sum, g) => sum + g.orderCount, 0);
+
+    return { groups, grandTotal, totalOrders };
+  }, [b2cShipments, filter.startDate, filter.endDate]);
 
   // B2B Sales Summary Logic: Group by Product
   const b2bPivotData = useMemo(() => {
@@ -718,6 +749,39 @@ const Reports = () => {
         }));
         title = 'RETURNS LOG';
         fileName = `returns_report_${new Date().toISOString().split('T')[0]}.xlsx`;
+      } else if (activeTab === 'b2cRevenue') {
+        dataToExport = [];
+        b2cRevenueReport.groups.forEach(group => {
+          // Channel header row
+          dataToExport.push({ 'Sales Channel': group.channel, Date: '', Items: '', 'Order Amount': '' });
+          // Individual order rows
+          group.orders.forEach(s => {
+            dataToExport.push({
+              'Sales Channel': '',
+              Date: s.date,
+              Items: (s.products || []).map(p => `${p.name} (${p.quantity})`).join(', '),
+              'Order Amount': Number(s.orderAmount) || 0
+            });
+          });
+          // Channel subtotal row
+          dataToExport.push({
+            'Sales Channel': `${group.channel} Total (${group.orderCount} orders)`,
+            Date: '',
+            Items: '',
+            'Order Amount': group.totalAmount
+          });
+          // Blank separator
+          dataToExport.push({ 'Sales Channel': '', Date: '', Items: '', 'Order Amount': '' });
+        });
+        // Grand total row
+        dataToExport.push({
+          'Sales Channel': `GRAND TOTAL (${b2cRevenueReport.totalOrders} orders)`,
+          Date: '',
+          Items: '',
+          'Order Amount': b2cRevenueReport.grandTotal
+        });
+        title = 'B2C CHANNEL-WISE REVENUE REPORT';
+        fileName = `b2c_channel_wise_revenue_report_${new Date().toISOString().split('T')[0]}.xlsx`;
       }
 
       exportFormattedGeneric(dataToExport, title, fileName);
@@ -866,6 +930,79 @@ const Reports = () => {
                   )}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {activeTab === 'b2cRevenue' && (
+            <div className="space-y-6">
+              {b2cRevenueReport.groups.length === 0 ? (
+                <div className="py-12 text-center text-slate-400">No revenue records found for this period.</div>
+              ) : (
+                <>
+                  {b2cRevenueReport.groups.map((group, gIdx) => (
+                    <div key={gIdx} className="border border-slate-200 rounded-xl overflow-hidden">
+                      {/* Channel Header */}
+                      <div className="bg-gradient-to-r from-indigo-50 to-slate-50 px-5 py-3 flex items-center justify-between border-b border-slate-200">
+                        <h3 className="text-sm font-bold text-indigo-800 uppercase tracking-wider">{group.channel}</h3>
+                        <span className="text-xs font-semibold text-slate-500 bg-white/70 px-2.5 py-1 rounded-full border border-slate-200">
+                          {group.orderCount} {group.orderCount === 1 ? 'Order' : 'Orders'}
+                        </span>
+                      </div>
+                      {/* Orders Table */}
+                      <table className="w-full border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50/80 border-b border-slate-100">
+                            <th className="py-2.5 px-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider w-[100px]">#</th>
+                            <th className="py-2.5 px-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider w-[120px]">Date</th>
+                            <th className="py-2.5 px-4 text-left text-[10px] font-bold text-slate-400 uppercase tracking-wider">Items</th>
+                            <th className="py-2.5 px-4 text-right text-[10px] font-bold text-slate-400 uppercase tracking-wider w-[150px]">Order Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {group.orders.map((s, oIdx) => (
+                            <tr key={oIdx} className="hover:bg-slate-50/60 transition-colors">
+                              <td className="py-3 px-4 text-xs text-slate-400 font-medium">{oIdx + 1}</td>
+                              <td className="py-3 px-4 text-sm text-slate-800 font-medium whitespace-nowrap">{s.date}</td>
+                              <td className="py-3 px-4 text-sm">
+                                <div className="flex flex-wrap gap-1">
+                                  {(s.products || []).map((p, pIdx) => (
+                                    <span key={pIdx} className="text-[11px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-medium">
+                                      {p.name} ({p.quantity})
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="py-3 px-4 text-sm font-bold text-slate-900 text-right">
+                                {(Number(s.orderAmount) || 0) > 0 ? `₹${(Number(s.orderAmount)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="bg-indigo-50/40 border-t border-slate-200">
+                            <td colSpan="3" className="py-3 px-4 text-sm font-bold text-slate-700 text-right">
+                              {group.channel} Total ({group.orderCount} orders):
+                            </td>
+                            <td className="py-3 px-4 text-sm font-black text-indigo-700 text-right">
+                              ₹{group.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  ))}
+                  {/* Grand Total Card */}
+                  <div className="bg-gradient-to-r from-indigo-600 to-indigo-500 rounded-xl px-6 py-4 flex items-center justify-between text-white shadow-lg shadow-indigo-100">
+                    <div>
+                      <p className="text-xs font-semibold text-indigo-200 uppercase tracking-wider">Grand Total</p>
+                      <p className="text-sm text-indigo-100 mt-0.5">{b2cRevenueReport.totalOrders} orders across {b2cRevenueReport.groups.length} channels</p>
+                    </div>
+                    <p className="text-2xl font-black">
+                      ₹{b2cRevenueReport.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
