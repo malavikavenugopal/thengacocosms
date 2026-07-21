@@ -584,7 +584,7 @@ const Products = () => {
                 </div>
             </div>
           </div>
-          <Table headers={['Category', 'SKU Code', 'Product / SKU Name', 'Status', 'Available Stock', 'Actions']}>
+          <Table headers={['Category', 'SKU Code', 'Product / SKU Name', 'Status', 'Actions']}>
             {paginatedStock.map((product) => (
               <tr key={product.id} className="hover:bg-slate-50/80 transition-colors">
                 <td className="py-4 px-6 text-sm text-slate-600">
@@ -633,12 +633,6 @@ const Products = () => {
                    ) : (
                      <span className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-black tracking-tighter uppercase">Solo</span>
                    )}
-                </td>
-                <td className="py-4 px-6 text-sm text-center font-black">
-                  <span className={getAvailableStock(product.name) <= 0 ? 'text-rose-600' : 'text-emerald-600'}>
-                    {getAvailableStock(product.name)}
-                  </span>
-                  <div className="text-[8px] text-slate-400 font-medium">Opening: {product.opening || 0}</div>
                 </td>
                 <td className="py-4 px-6 text-sm whitespace-nowrap text-right">
                     <div className="flex items-center justify-end gap-2">
