@@ -40,6 +40,15 @@ const MonthlyStockCheck = () => {
     return `${year}-W${String(week).padStart(2, '0')}`;
   };
 
+  const getMonthStr = (date) => {
+    if (!date) return '';
+    const d = new Date(date);
+    if (isNaN(d.getTime())) return '';
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  };
+
   const getWeekRange = (date) => {
     const d = new Date(date);
     const day = d.getDay();
@@ -51,30 +60,48 @@ const MonthlyStockCheck = () => {
     return `${start.toLocaleDateString('en-US', options)} - ${end.toLocaleDateString('en-US', options)}`;
   };
 
+  const [auditMode, setAuditMode] = useState('weekly'); // 'weekly' or 'monthly'
   const [selectedWeek, setSelectedWeek] = useState(() => getWeekStr(new Date()));
+  const [selectedMonth, setSelectedMonth] = useState(() => getMonthStr(new Date()));
   const [isCarryingForward, setIsCarryingForward] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
-  const activePeriod = selectedWeek;
+  const activePeriod = auditMode === 'monthly' ? selectedMonth : selectedWeek;
+
+  const getPeriodOfDate = (dateStr, targetPeriod = activePeriod) => {
+    if (!dateStr) return '';
+    const isMonthly = targetPeriod ? !targetPeriod.includes('-W') : auditMode === 'monthly';
+    return isMonthly ? getMonthStr(dateStr) : getWeekStr(dateStr);
+  };
 
   const isTarget = (dateStr, targetPeriod = activePeriod) => {
     if (!dateStr || !targetPeriod) return false;
-    return getWeekStr(dateStr) === targetPeriod;
+    return getPeriodOfDate(dateStr, targetPeriod) === targetPeriod;
+  };
+
+  const getPrevPeriodStr = (targetPeriod = activePeriod) => {
+    if (!targetPeriod) return '';
+    if (targetPeriod.includes('-W')) {
+      const [year, wNum] = targetPeriod.split('-W').map(Number);
+      const d = new Date(year, 0, 1 + (wNum - 1) * 7);
+      d.setDate(d.getDate() - 7);
+      return getWeekStr(d);
+    } else {
+      const [year, mNum] = targetPeriod.split('-').map(Number);
+      const d = new Date(year, mNum - 2, 1);
+      return getMonthStr(d);
+    }
   };
 
   const handleCarryPhysicalForward = async () => {
     setIsSyncing(true);
     const toastId = toast.loading(`Carrying forward Physical Stock to ${activePeriod}...`);
     try {
-      // Simple prev week calc: go back 7 days from middle of current week
-      const [year, wNum] = selectedWeek.split('-W').map(Number);
-      const d = new Date(year, 0, 1 + (wNum - 1) * 7);
-      d.setDate(d.getDate() - 7);
-      const prevPeriodStr = getWeekStr(d);
+      const prevPeriodStr = getPrevPeriodStr(activePeriod);
       
       const prevData = monthlyStockData.filter(d => d.month === prevPeriodStr);
       if (prevData.length === 0) {
-        toast.error(`No data found for previous week (${prevPeriodStr})`, { id: toastId });
+        toast.error(`No data found for previous period (${prevPeriodStr})`, { id: toastId });
         return;
       }
 
@@ -113,10 +140,7 @@ const MonthlyStockCheck = () => {
       sums[item.id] = { out: 0, b2cOut: 0, b2bOut: 0, packed: 0, stockDeduction: 0, returned: 0, damage: 0, purchased: 0, rejected: 0, replacement: 0, produced: 0, used: 0, qcAccepted: 0, purchasedNoQC: 0 }; 
     });
     
-    const [pYear, pWNum] = periodStr.split('-W').map(Number);
-    const pD = new Date(pYear, 0, 1 + (pWNum - 1) * 7);
-    pD.setDate(pD.getDate() - 7);
-    const prevPeriodStr = getWeekStr(pD);
+    const prevPeriodStr = getPrevPeriodStr(periodStr);
 
     b2bShipments.forEach(s => { 
       if (!s.products || s.deducted === false || s.deducted === 'false') return;
@@ -128,9 +152,9 @@ const MonthlyStockCheck = () => {
 
         const packedThisWeek = !noPacking && isTarget(packedDate, periodStr);
         const dispatchedThisWeek = isTarget(dispatchDate, periodStr);
-        const packedPrevWeek = !noPacking && packedDate && !isTarget(packedDate, periodStr) && getWeekStr(packedDate) < periodStr;
+        const packedPrevWeek = !noPacking && packedDate && !isTarget(packedDate, periodStr) && getPeriodOfDate(packedDate, periodStr) < periodStr;
 
-        const dispatchedPrevWeek = dispatchDate && !isTarget(dispatchDate, periodStr) && getWeekStr(dispatchDate) < periodStr;
+        const dispatchedPrevWeek = dispatchDate && !isTarget(dispatchDate, periodStr) && getPeriodOfDate(dispatchDate, periodStr) < periodStr;
         const qty = (Number(p.quantity) || 0);
         const master = stock.find(item => compareNames(item.name, pName));
 
@@ -138,16 +162,16 @@ const MonthlyStockCheck = () => {
           if (!sums[id]) return;
           const t = sums[id];
           
-          // 1. UI Columns: Show what physically happened this week
+          // 1. UI Columns: Show what physically happened this period
           if (dispatchedThisWeek) {
             if (packedPrevWeek) {
-              t.dispatched = (t.dispatched || 0) + amount; // Last week packed, this week dispatched
+              t.dispatched = (t.dispatched || 0) + amount; // Last period packed, this period dispatched
             } else {
-              t.b2bOut += amount; // Packed and dispatched this week
+              t.b2bOut += amount; // Packed and dispatched this period
             }
           }
-          // Only show as packed if it has been packed in the current week or previous week, and hasn't been dispatched yet
-          const packedBeforeOrThisWeek = !noPacking && packedDate && (getWeekStr(packedDate) === periodStr || getWeekStr(packedDate) === prevPeriodStr);
+          // Only show as packed if it has been packed in the current period or previous period, and hasn't been dispatched yet
+          const packedBeforeOrThisWeek = !noPacking && packedDate && (getPeriodOfDate(packedDate, periodStr) === periodStr || getPeriodOfDate(packedDate, periodStr) === prevPeriodStr);
           if (packedBeforeOrThisWeek && s.status !== 'Dispatched' && !dispatchedThisWeek && !dispatchedPrevWeek) {
             t.packed += amount;
           }
@@ -178,9 +202,9 @@ const MonthlyStockCheck = () => {
       if (isFBA) {
         const packedDate = s.packedDate || s.date;
         const packedThisWeek = packedDate && isTarget(packedDate, periodStr);
-        const packedPrevWeek = packedDate && !isTarget(packedDate, periodStr) && getWeekStr(packedDate) < periodStr;
+        const packedPrevWeek = packedDate && !isTarget(packedDate, periodStr) && getPeriodOfDate(packedDate, periodStr) < periodStr;
         const dispatchedThisWeek = s.status === 'Dispatched' && isTarget(s.dispatchDate, periodStr);
-        const dispatchedPrevWeek = s.status === 'Dispatched' && s.dispatchDate && !isTarget(s.dispatchDate, periodStr) && getWeekStr(s.dispatchDate) < periodStr;
+        const dispatchedPrevWeek = s.status === 'Dispatched' && s.dispatchDate && !isTarget(s.dispatchDate, periodStr) && getPeriodOfDate(s.dispatchDate, periodStr) < periodStr;
 
         s.products.forEach(p => { 
           const pName = p.name || p.productName;
@@ -197,7 +221,7 @@ const MonthlyStockCheck = () => {
               }
             }
             
-            const packedBeforeOrThisWeek = packedDate && (getWeekStr(packedDate) === periodStr || getWeekStr(packedDate) === prevPeriodStr);
+            const packedBeforeOrThisWeek = packedDate && (getPeriodOfDate(packedDate, periodStr) === periodStr || getPeriodOfDate(packedDate, periodStr) === prevPeriodStr);
             if (packedBeforeOrThisWeek && s.status !== 'Dispatched' && !dispatchedThisWeek && !dispatchedPrevWeek) {
               sums[id].packed = (sums[id].packed || 0) + amount;
               if (packedThisWeek) {
@@ -370,10 +394,7 @@ const MonthlyStockCheck = () => {
     };
 
     const targetPeriod = period || activePeriod;
-    const [pYear, pWNum] = targetPeriod.split('-W').map(Number);
-    const pD = new Date(pYear, 0, 1 + (pWNum - 1) * 7);
-    pD.setDate(pD.getDate() - 7);
-    const prevPeriodStr = getWeekStr(pD);
+    const prevPeriodStr = getPrevPeriodStr(targetPeriod);
 
     // B2B Shipments
     b2bShipments.forEach(s => {
@@ -386,7 +407,7 @@ const MonthlyStockCheck = () => {
         const pDate = p.packedDate || s.packedDate || s.date;
         const dispatchedThisWeek = isTarget(dDate, period);
         const packedThisWeek = !noPacking && isTarget(pDate, period);
-        const packedPrevWeek = !noPacking && pDate && !isTarget(pDate, period) && getWeekStr(pDate) < (period || activePeriod);
+        const packedPrevWeek = !noPacking && pDate && !isTarget(pDate, period) && getPeriodOfDate(pDate, targetPeriod) < targetPeriod;
         let matchQty = 0;
         const pName = p.name || p.productName;
         
@@ -412,8 +433,8 @@ const MonthlyStockCheck = () => {
             detail: viaText
           };
           
-          const packedBeforeOrThisWeek = !noPacking && pDate && (getWeekStr(pDate) === targetPeriod || getWeekStr(pDate) === prevPeriodStr);
-          const dispatchedPrevWeek = dDate && !isTarget(dDate, period) && getWeekStr(dDate) < (period || activePeriod);
+          const packedBeforeOrThisWeek = !noPacking && pDate && (getPeriodOfDate(pDate, targetPeriod) === targetPeriod || getPeriodOfDate(pDate, targetPeriod) === prevPeriodStr);
+          const dispatchedPrevWeek = dDate && !isTarget(dDate, period) && getPeriodOfDate(dDate, targetPeriod) < targetPeriod;
 
           if (dispatchedThisWeek) {
             if (noPacking || packedThisWeek) results.b2bOut.push(item);
@@ -435,11 +456,11 @@ const MonthlyStockCheck = () => {
       if (isFBA) {
         const packedDate = s.packedDate || s.date;
         const dispatchedThisWeek = s.status === 'Dispatched' && isTarget(s.dispatchDate, period);
-        const dispatchedPrevWeek = s.status === 'Dispatched' && s.dispatchDate && !isTarget(s.dispatchDate, period) && getWeekStr(s.dispatchDate) < (period || activePeriod);
+        const dispatchedPrevWeek = s.status === 'Dispatched' && s.dispatchDate && !isTarget(s.dispatchDate, period) && getPeriodOfDate(s.dispatchDate, targetPeriod) < targetPeriod;
         
         isOutThisPeriod = dispatchedThisWeek;
         isPackedThisPeriod = packedDate && isTarget(packedDate, period);
-        isPackedBeforeOrThisPeriod = packedDate && (getWeekStr(packedDate) === targetPeriod || getWeekStr(packedDate) === prevPeriodStr) && s.status !== 'Dispatched' && !dispatchedThisWeek && !dispatchedPrevWeek;
+        isPackedBeforeOrThisPeriod = packedDate && (getPeriodOfDate(packedDate, targetPeriod) === targetPeriod || getPeriodOfDate(packedDate, targetPeriod) === prevPeriodStr) && s.status !== 'Dispatched' && !dispatchedThisWeek && !dispatchedPrevWeek;
       } else {
         isOutThisPeriod = isTarget(s.date, period);
       }
@@ -616,13 +637,10 @@ const MonthlyStockCheck = () => {
   const handleCarryForward = async () => {
     setIsCarryingForward(true);
     try {
-      const [year, wNum] = selectedWeek.split('-W').map(Number);
-      const d = new Date(year, 0, 1 + (wNum - 1) * 7);
-      d.setDate(d.getDate() - 7);
-      const prevPeriodStr = getWeekStr(d);
+      const prevPeriodStr = getPrevPeriodStr(activePeriod);
 
       const prevData = monthlyStockData.filter(d => d.month === prevPeriodStr);
-      if (prevData.length === 0) { toast.error(`No data found for previous week (${prevPeriodStr})`); return; }
+      if (prevData.length === 0) { toast.error(`No data found for previous period (${prevPeriodStr})`); return; }
       
       const prevMovements = getMovements(prevPeriodStr);
       for (const item of prevData) {
@@ -774,42 +792,96 @@ const MonthlyStockCheck = () => {
         </div>
       </div>
       {/* Header Controls */}
-      <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-200">
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="p-2 md:p-3 bg-indigo-50 text-indigo-600 rounded-xl"><Calendar size={20} className="md:w-6 md:h-6"/></div>
-          <div className="flex-1">
-            <h2 className="text-lg md:text-xl font-bold text-slate-800">Weekly Stock Audit</h2>
-            <p className="text-[10px] md:text-xs text-slate-500 font-medium">Reconcile physical inventory</p>
+      <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-200">
+        <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto">
+          <div className="flex items-center gap-3">
+            <div className="p-2 md:p-3 bg-indigo-50 text-indigo-600 rounded-xl"><Calendar size={20} className="md:w-6 md:h-6"/></div>
+            <div>
+              <h2 className="text-base md:text-lg font-bold text-slate-800 leading-tight">
+                {auditMode === 'monthly' ? 'Monthly Stock Audit' : 'Weekly Stock Audit'}
+              </h2>
+              <p className="text-[10px] md:text-xs text-slate-500 font-medium">Reconcile physical inventory</p>
+            </div>
+          </div>
+
+          {/* Mode Switcher: Weekly / Monthly */}
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
+            <button
+              onClick={() => setAuditMode('weekly')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                auditMode === 'weekly' 
+                  ? 'bg-white text-indigo-600 shadow-sm' 
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Weekly
+            </button>
+            <button
+              onClick={() => setAuditMode('monthly')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                auditMode === 'monthly' 
+                  ? 'bg-white text-indigo-600 shadow-sm' 
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Monthly
+            </button>
           </div>
         </div>
         
-        <div className="flex flex-wrap items-center gap-2 md:gap-4 w-full md:w-auto">
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2 md:px-3 h-10 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 w-full xl:w-auto">
+          {/* Period Picker */}
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 h-10 shrink-0">
             <Calendar size={14} className="text-slate-400" />
-            <input type="week" className="text-[10px] md:text-xs font-bold text-slate-700 outline-none w-32 bg-transparent" value={activePeriod} onChange={(e) => setSelectedWeek(e.target.value)} />
+            {auditMode === 'weekly' ? (
+              <input 
+                type="week" 
+                className="text-xs font-bold text-slate-700 outline-none w-32 bg-transparent" 
+                value={selectedWeek} 
+                onChange={(e) => setSelectedWeek(e.target.value)} 
+              />
+            ) : (
+              <input 
+                type="month" 
+                className="text-xs font-bold text-slate-700 outline-none w-32 bg-transparent" 
+                value={selectedMonth} 
+                onChange={(e) => setSelectedMonth(e.target.value)} 
+              />
+            )}
           </div>
 
-          <div className="flex items-center gap-2 flex-1 sm:min-w-[200px]">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-              <input type="text" placeholder="Search SKU..." className="pl-9 pr-4 h-10 bg-white border border-slate-200 rounded-lg text-[10px] md:text-xs outline-none w-full focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-            </div>
-            <button
-              onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-              className="px-3 h-10 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-2 shrink-0"
-              title={sortOrder === 'asc' ? 'Sort Z-A' : 'Sort A-Z'}
-            >
-              <ArrowRightLeft size={14} className={sortOrder === 'desc' ? 'rotate-180 transition-transform' : 'transition-transform'} />
-              <span className="text-[10px] font-bold uppercase">{sortOrder === 'asc' ? 'A-Z' : 'Z-A'}</span>
-            </button>
+          {/* Search SKU & Sort */}
+          <div className="relative min-w-[140px] max-w-[200px] flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+            <input 
+              type="text" 
+              placeholder="Search SKU..." 
+              className="pl-9 pr-3 h-10 bg-white border border-slate-200 rounded-xl text-xs outline-none w-full focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all" 
+              value={searchTerm} 
+              onChange={(e) => setSearchTerm(e.target.value)} 
+            />
           </div>
-          
-          <Button onClick={handleCarryPhysicalForward} variant="primary" loading={isSyncing} className="bg-indigo-600 hover:bg-indigo-700 shadow-md whitespace-nowrap text-[10px] md:text-xs h-10 px-3 flex-shrink-0">
-            <ArrowRightLeft size={16} className="mr-1" /> Carry Physical
+          <button
+            onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+            className="px-3 h-10 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-1.5 shrink-0"
+            title={sortOrder === 'asc' ? 'Sort Z-A' : 'Sort A-Z'}
+          >
+            <ArrowRightLeft size={14} className={sortOrder === 'desc' ? 'rotate-180 transition-transform' : 'transition-transform'} />
+            <span className="text-[10px] font-bold uppercase">{sortOrder === 'asc' ? 'A-Z' : 'Z-A'}</span>
+          </button>
+
+          {/* Action Buttons */}
+          <Button onClick={handleCarryPhysicalForward} variant="primary" loading={isSyncing} className="bg-indigo-600 hover:bg-indigo-700 shadow-md whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0">
+            <ArrowRightLeft size={14} className="mr-1.5" /> Carry Physical
           </Button>
 
-          <Button onClick={handleCarryForward} variant="secondary" loading={isCarryingForward} className="whitespace-nowrap text-[10px] md:text-xs h-10 px-2 md:px-3 flex-shrink-0"><ArrowRightLeft size={16} className="mr-1" /> Carry Expected</Button>
-          <Button onClick={handleExport} variant="success" loading={isExporting} className="whitespace-nowrap text-[10px] md:text-xs h-10 px-2 md:px-3 flex-shrink-0"><DownloadCloud size={16} className="mr-1" /> Export</Button>
+          <Button onClick={handleCarryForward} variant="secondary" loading={isCarryingForward} className="whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0">
+            <ArrowRightLeft size={14} className="mr-1.5" /> Carry Expected
+          </Button>
+
+          <Button onClick={handleExport} variant="success" loading={isExporting} className="whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0">
+            <DownloadCloud size={14} className="mr-1.5" /> Export
+          </Button>
         </div>
       </div>
 
@@ -832,7 +904,7 @@ const MonthlyStockCheck = () => {
                 <th className="py-4 px-2 text-center text-rose-600 bg-slate-50">Used</th>
                 <th className="py-4 px-2 text-center bg-slate-100/80 sticky right-[250px] z-20 border-l border-slate-200">Expected</th>
                 <th className="py-4 px-2 text-center bg-indigo-50/80 sticky right-[160px] z-20 border-l border-slate-200">Physical</th>
-                <th className="py-4 px-2 text-center text-indigo-600 bg-slate-50">Weekly Log</th>
+                <th className="py-4 px-2 text-center text-indigo-600 bg-slate-50">{auditMode === 'monthly' ? 'Monthly Log' : 'Weekly Log'}</th>
                 <th className="py-4 px-4 text-center bg-slate-50">Diff</th>
                 <th className="py-4 px-4 text-center bg-slate-50 sticky right-0 z-20 border-l border-slate-200">View</th>
               </tr>
