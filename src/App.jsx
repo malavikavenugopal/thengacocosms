@@ -20,6 +20,7 @@ import ReorderPoint from './pages/ReorderPoint';
 import CandleManufacturing from './pages/CandleManufacturing';
 import ExpoDashboard from './pages/ExpoDashboard';
 import StoreManagement from './pages/StoreManagement';
+import TwoWeekStockCheck from './pages/TwoWeekStockCheck';
 import Login from './pages/Login';
 import { GlobalProvider, useGlobalState } from './context/GlobalContext';
 
@@ -77,6 +78,7 @@ function App() {
             <Route path="b2c" element={<B2CShipments />} />
             <Route path="damage" element={<DamageTracking />} />
             <Route path="stock" element={<AdminRoute><MonthlyStockCheck /></AdminRoute>} />
+            <Route path="two-week-stock" element={<AdminRoute><TwoWeekStockCheck /></AdminRoute>} />
             <Route path="rop" element={<ReorderPoint />} />
             <Route path="manufacturing" element={<CandleManufacturing />} />
             <Route path="rework" element={<ReworkLog />} />

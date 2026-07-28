@@ -618,14 +618,47 @@ const MonthlyStockCheck = () => {
   const calculateExpected = (opening, otherIn, purchased, produced, returned, stockDeduction, replacement, damage, rejected, used, qcAcceptedOrPurchase = 0) => 
     Number(opening || 0) + Number(otherIn || 0) + Number(produced || 0) + Number(returned || 0) + Number(qcAcceptedOrPurchase || 0) - Number(stockDeduction || 0) - Number(replacement || 0) - Number(damage || 0) - Number(used || 0);
 
+  // Automatically derive Opening Stock from previous week's Expected Stock if not manually entered
+  const getEffectiveOpeningStock = (periodStr, itemId, itemRef) => {
+    const doc = monthlyStockData.find(d => d.month === periodStr && d.productId === itemId);
+    if (doc?.opening !== undefined && doc?.opening !== '') {
+      return Number(doc.opening);
+    }
+
+    const prevPeriodStr = getPrevPeriodStr(periodStr);
+    const prevDoc = monthlyStockData.find(d => d.month === prevPeriodStr && d.productId === itemId);
+
+    if (prevDoc?.expected !== undefined && prevDoc?.expected !== '') {
+      return Number(prevDoc.expected);
+    }
+
+    const prevM = getMovements(prevPeriodStr)[itemId] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
+    const prevOpening = prevDoc?.opening !== undefined && prevDoc.opening !== '' ? Number(prevDoc.opening) : (Number(itemRef?.openingStock) || 0);
+
+    return calculateExpected(
+      prevOpening,
+      prevDoc?.in || 0,
+      prevM.purchased,
+      prevM.produced,
+      prevM.returned,
+      prevM.stockDeduction,
+      prevM.replacement,
+      prevM.damage,
+      prevM.rejected,
+      prevM.used,
+      prevM.qcAcceptedOrPurchase
+    );
+  };
+
   useEffect(() => {
     if (!monthlyMovements || stock.length === 0) return;
     const sync = async () => {
       stock.forEach(item => {
         if (item.isComposite) return;
         const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
+        const opening = getEffectiveOpeningStock(activePeriod, item.id, item);
         const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-        const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
+        const expected = calculateExpected(opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
         if (mData.expected !== expected) {
           saveMonthlyStock(activePeriod, item.id, { expected });
         }
@@ -724,73 +757,12 @@ const MonthlyStockCheck = () => {
         };
       });
       exportFormattedStockCheck(dataToExport, activePeriod, `Stock_Check_${activePeriod}.xlsx`, analyticsData);
+      exportFormattedStockCheck(dataToExport, activePeriod, `Stock_Check_${activePeriod}.xlsx`);
     } finally { setIsExporting(false); }
   };
 
   return (
     <div className="space-y-4 md:space-y-6 max-w-[1600px] mx-auto pb-10">
-      {/* Analytics Dashboard */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6">
-        {/* Accurate Stock */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col h-64">
-          <div className="flex items-center justify-between mb-4">
-             <div className="flex items-center gap-2 text-emerald-600">
-               <CheckCircle2 size={20} />
-               <h3 className="font-bold">Accurate Stock</h3>
-             </div>
-             <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded-full">{analyticsData.perfectMatch.length} Items</span>
-          </div>
-          <p className="text-[10px] text-slate-500 mb-3 uppercase tracking-wider font-bold">No Difference (Phys. = Exp.)</p>
-          <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin space-y-2">
-            {analyticsData.perfectMatch.length > 0 ? analyticsData.perfectMatch.map(item => (
-              <div key={item.id} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg text-xs">
-                <span className="font-medium text-slate-700 truncate mr-2">{item.name}</span>
-                <span className="text-[10px] font-bold text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded">{item.sku || '-'}</span>
-              </div>
-            )) : <div className="text-center text-slate-400 text-xs py-4">No perfect matches yet</div>}
-          </div>
-        </div>
-
-        {/* High Discrepancy */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col h-64">
-          <div className="flex items-center justify-between mb-4">
-             <div className="flex items-center gap-2 text-rose-600">
-               <AlertTriangle size={20} />
-               <h3 className="font-bold">High Discrepancy</h3>
-             </div>
-             <span className="bg-rose-100 text-rose-700 text-[10px] font-bold px-2 py-1 rounded-full">{analyticsData.highDifference.length} Items</span>
-          </div>
-          <p className="text-[10px] text-slate-500 mb-3 uppercase tracking-wider font-bold">Largest stock differences</p>
-          <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin space-y-2">
-            {analyticsData.highDifference.length > 0 ? analyticsData.highDifference.map(({item, diff}) => (
-              <div key={item.id} className="flex justify-between items-center bg-rose-50/50 p-2 rounded-lg text-xs border border-rose-100">
-                <span className="font-medium text-slate-700 truncate mr-2">{item.name}</span>
-                <span className={`font-black ${diff < 0 ? 'text-rose-600' : 'text-amber-600'} shrink-0`}>{diff > 0 ? `+${diff}` : diff}</span>
-              </div>
-            )) : <div className="text-center text-slate-400 text-xs py-4">No discrepancies found</div>}
-          </div>
-        </div>
-
-        {/* Pending Audit */}
-        <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col h-64">
-          <div className="flex items-center justify-between mb-4">
-             <div className="flex items-center gap-2 text-amber-500">
-               <Clock size={20} />
-               <h3 className="font-bold">Pending Audit</h3>
-             </div>
-             <span className="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-1 rounded-full">{analyticsData.notAudited.length} Items</span>
-          </div>
-          <p className="text-[10px] text-slate-500 mb-3 uppercase tracking-wider font-bold">Missing physical count</p>
-          <div className="flex-1 overflow-y-auto pr-2 scrollbar-thin space-y-2">
-            {analyticsData.notAudited.length > 0 ? analyticsData.notAudited.map(item => (
-              <div key={item.id} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg text-xs">
-                <span className="font-medium text-slate-700 truncate mr-2">{item.name}</span>
-                <span className="text-[10px] font-bold text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded">{item.sku || '-'}</span>
-              </div>
-            )) : <div className="text-center text-slate-400 text-xs py-4">All items audited</div>}
-          </div>
-        </div>
-      </div>
       {/* Header Controls */}
       <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-200">
         <div className="flex flex-wrap items-center gap-4 w-full xl:w-auto">
@@ -798,9 +770,9 @@ const MonthlyStockCheck = () => {
             <div className="p-2 md:p-3 bg-indigo-50 text-indigo-600 rounded-xl"><Calendar size={20} className="md:w-6 md:h-6"/></div>
             <div>
               <h2 className="text-base md:text-lg font-bold text-slate-800 leading-tight">
-                {auditMode === 'monthly' ? 'Monthly Stock Audit' : 'Weekly Stock Audit'}
+                {auditMode === 'monthly' ? 'Monthly Stock Report' : 'Weekly Stock Report'}
               </h2>
-              <p className="text-[10px] md:text-xs text-slate-500 font-medium">Reconcile physical inventory</p>
+              <p className="text-[10px] md:text-xs text-slate-500 font-medium">Expected stock & movements overview</p>
             </div>
           </div>
 
@@ -871,10 +843,6 @@ const MonthlyStockCheck = () => {
           </button>
 
           {/* Action Buttons */}
-          <Button onClick={handleCarryPhysicalForward} variant="primary" loading={isSyncing} className="bg-indigo-600 hover:bg-indigo-700 shadow-md whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0">
-            <ArrowRightLeft size={14} className="mr-1.5" /> Carry Physical
-          </Button>
-
           <Button onClick={handleCarryForward} variant="secondary" loading={isCarryingForward} className="whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0">
             <ArrowRightLeft size={14} className="mr-1.5" /> Carry Expected
           </Button>
@@ -902,10 +870,7 @@ const MonthlyStockCheck = () => {
                 <th className="py-4 px-2 text-center text-red-600 bg-slate-50">Damage</th>
                 <th className="py-4 px-2 text-center text-rose-500 bg-slate-50">Rejected</th>
                 <th className="py-4 px-2 text-center text-rose-600 bg-slate-50">Used</th>
-                <th className="py-4 px-2 text-center bg-slate-100/80 sticky right-[250px] z-20 border-l border-slate-200">Expected</th>
-                <th className="py-4 px-2 text-center bg-indigo-50/80 sticky right-[160px] z-20 border-l border-slate-200">Physical</th>
-                <th className="py-4 px-2 text-center text-indigo-600 bg-slate-50">{auditMode === 'monthly' ? 'Monthly Log' : 'Weekly Log'}</th>
-                <th className="py-4 px-4 text-center bg-slate-50">Diff</th>
+                <th className="py-4 px-3 text-center bg-indigo-50/80 font-bold text-indigo-900 sticky right-[60px] z-20 border-l border-slate-200">Expected Stock</th>
                 <th className="py-4 px-4 text-center bg-slate-50 sticky right-0 z-20 border-l border-slate-200">View</th>
               </tr>
             </thead>
@@ -913,9 +878,8 @@ const MonthlyStockCheck = () => {
               {filteredStock.map((item) => {
                 const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
                 const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-                const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
-                const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : null;
-                const diff = physical !== null ? physical - expected : null;
+                const opening = getEffectiveOpeningStock(activePeriod, item.id, item);
+                const expected = calculateExpected(opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
                 
                 return (
                   <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
@@ -923,12 +887,17 @@ const MonthlyStockCheck = () => {
                       <div className="flex flex-col"><span className="text-[9px] text-indigo-500 font-mono font-bold uppercase tracking-tighter">{item.sku || '-'}</span>{item.name}</div>
                     </td>
                     <td className="py-3 px-1 text-center">
-                      <input type="number" className="w-14 mx-auto block px-1 py-1 text-center text-xs border border-slate-200 rounded outline-none" value={mData.opening || ''} onChange={(e) => {
-                        const val = e.target.value === '' ? '' : Number(e.target.value);
-                      const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-                      const expected = calculateExpected(val, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
-                        saveMonthlyStock(activePeriod, item.id, { opening: val, expected });
-                      }} />
+                      <input 
+                        type="number" 
+                        className="w-14 mx-auto block px-1 py-1 text-center text-xs border border-slate-200 rounded outline-none font-semibold text-slate-800" 
+                        value={mData.opening !== undefined && mData.opening !== '' ? mData.opening : opening} 
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? '' : Number(e.target.value);
+                          const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
+                          const exp = calculateExpected(val === '' ? opening : val, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
+                          saveMonthlyStock(activePeriod, item.id, { opening: val, expected: exp });
+                        }} 
+                      />
                     </td>
                     <td className="py-4 px-2 text-center text-indigo-600 text-xs font-bold">{(Number(mData.in) || 0) + m.produced + (m.qcAcceptedOrPurchase || 0)}</td>
                     <td className="py-4 px-2 text-xs text-center text-emerald-600 font-bold">{m.returned || 0}</td>
@@ -939,26 +908,7 @@ const MonthlyStockCheck = () => {
                     <td className="py-4 px-2 text-xs text-center text-red-600 font-bold">{m.damage || 0}</td>
                     <td className="py-4 px-2 text-xs text-center text-rose-500 font-bold">{m.rejected || 0}</td>
                     <td className="py-4 px-2 text-xs text-center text-rose-600 font-black">{m.used || 0}</td>
-                    <td className="py-4 px-2 text-sm text-center font-bold bg-slate-50/50 border-x border-slate-100 sticky right-[250px] z-10 group-hover:bg-slate-100/50">{expected}</td>
-                    <td className="py-3 px-2 bg-indigo-50/20 sticky right-[160px] z-10 group-hover:bg-indigo-50/30">
-                      <div className="flex items-center gap-1">
-                        <input type="number" className="w-16 mx-auto block px-2 py-1 text-center text-sm border border-slate-300 rounded outline-none font-bold bg-white focus:border-indigo-500" value={mData.physical || ''} onChange={(e) => {
-                          const val = e.target.value === '' ? '' : Number(e.target.value);
-                          const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-                          const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
-                          saveMonthlyStock(activePeriod, item.id, { physical: val, expected });
-                        }} placeholder="--" />
-                        {(mData.physical !== undefined && mData.physical !== '') && <button onClick={() => saveMonthlyStock(activePeriod, item.id, { physical: '' })} className="p-0.5 text-slate-400 hover:text-red-500"><X size={12} /></button>}
-                      </div>
-                    </td>
-                    <td className="py-3 px-2 text-center">
-                       <span className={`px-2 py-1 rounded text-[10px] font-bold ${mData.physical ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
-                         {mData.physical ? 'Audited' : 'Pending'}
-                       </span>
-                    </td>
-                    <td className="py-4 px-4 text-sm text-center">
-                      {diff !== null && <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${diff < 0 ? 'bg-red-100 text-red-800' : diff > 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'}`}>{diff > 0 ? `+${diff}` : diff}</span>}
-                    </td>
+                    <td className="py-4 px-3 text-sm text-center font-bold text-indigo-900 bg-indigo-50/30 border-x border-slate-200 sticky right-[60px] z-10 group-hover:bg-indigo-50/50">{expected}</td>
                     <td className="py-4 px-4 text-center sticky right-0 z-10 bg-white group-hover:bg-slate-50 border-l border-slate-100">
                       <button onClick={() => setSelectedProductDetails(item)} className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-full transition-all"><Eye size={18} /></button>
                     </td>
@@ -970,14 +920,13 @@ const MonthlyStockCheck = () => {
         </div>
       </div>
 
-      {/* Mobile & Tablet Card List View */}
-      <div className="lg:hidden grid grid-cols-1 md:grid-cols-2 gap-4 pb-24 lg:pb-6">
+      {/* Mobile Card View */}
+      <div className="block lg:hidden space-y-3">
         {filteredStock.map((item) => {
           const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
           const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-          const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
-          const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : null;
-          const diff = physical !== null ? physical - expected : null;
+          const opening = getEffectiveOpeningStock(activePeriod, item.id, item);
+          const expected = calculateExpected(opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
 
           return (
             <div key={item.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
@@ -989,40 +938,19 @@ const MonthlyStockCheck = () => {
                   <button onClick={() => setSelectedProductDetails(item)} className="p-1.5 text-indigo-600 bg-indigo-100 rounded-lg shrink-0"><Eye size={16} /></button>
                </div>
 
-               {/* Grid Inputs for Mobile */}
-               <div className="grid grid-cols-2 divide-x divide-slate-100 border-b border-slate-100">
-                  <div className="p-3">
-                    <span className="text-[9px] text-slate-400 uppercase font-bold block mb-1">Opening Stock</span>
-                    <input type="number" className="w-full px-2 py-1.5 text-sm font-bold bg-slate-50 border border-slate-200 rounded outline-none focus:border-indigo-500" value={mData.opening || ''} onChange={(e) => {
-                      const val = e.target.value === '' ? '' : Number(e.target.value);
-                      const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-                      const expected = calculateExpected(val, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
-                      saveMonthlyStock(activePeriod, item.id, { opening: val, expected });
-                    }} />
-                  </div>
-                  <div className="p-3 bg-indigo-50/10">
-                    <span className="text-[9px] text-indigo-400 uppercase font-bold block mb-1">Physical Count</span>
-                    <div className="relative">
-                      <input type="number" className="w-full px-3 py-2 text-base font-black bg-indigo-50/30 border-2 border-indigo-200 rounded-lg outline-none text-indigo-700 focus:border-indigo-500" value={mData.physical || ''} onChange={(e) => {
-                        const val = e.target.value === '' ? '' : Number(e.target.value);
-                      const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-                      const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
-                        saveMonthlyStock(activePeriod, item.id, { physical: val, expected });
-                      }} placeholder="Enter Count" />
-                      {(mData.physical !== undefined && mData.physical !== '') && <button onClick={() => saveMonthlyStock(activePeriod, item.id, { physical: '' })} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-300"><X size={14}/></button>}
-                    </div>
-                  </div>
+               <div className="p-3 border-b border-slate-100">
+                  <span className="text-[9px] text-slate-400 uppercase font-bold block mb-1">Opening Stock</span>
+                  <input type="number" className="w-full px-2 py-1.5 text-sm font-bold bg-slate-50 border border-slate-200 rounded outline-none focus:border-indigo-500" value={mData.opening !== undefined && mData.opening !== '' ? mData.opening : opening} onChange={(e) => {
+                    const val = e.target.value === '' ? '' : Number(e.target.value);
+                    const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
+                    const exp = calculateExpected(val === '' ? opening : val, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
+                    saveMonthlyStock(activePeriod, item.id, { opening: val, expected: exp });
+                  }} />
                </div>
 
-               {/* Footer / Status */}
-               <div className="p-4 bg-slate-50/50 flex items-center justify-between">
-                  <div className="flex gap-4">
-                     <div className="flex flex-col"><span className="text-[9px] text-slate-400 uppercase font-bold block">Expected</span><span className="text-sm font-black text-slate-900">{expected}</span></div>
-                     {diff !== null && <div className="flex flex-col"><span className="text-[9px] text-slate-400 uppercase font-bold block">Diff</span><span className={`text-sm font-black ${diff < 0 ? 'text-red-600' : diff > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{diff > 0 ? `+${diff}` : diff}</span></div>}
-                  </div>
-                  <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${mData.physical ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                    {mData.physical ? 'Audit Done' : 'Pending Audit'}
-                  </div>
+               <div className="p-4 bg-indigo-50/30 flex items-center justify-between">
+                  <span className="text-xs text-slate-500 uppercase font-bold block">Expected Stock</span>
+                  <span className="text-base font-black text-indigo-900">{expected}</span>
                </div>
             </div>
           );
