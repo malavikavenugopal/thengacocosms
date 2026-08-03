@@ -141,15 +141,17 @@ export const GlobalProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
 
-  const getAvailableStock = (productName) => {
-    if (!productName || !stock) return 0;
+  const getAvailableStock = (productName, visited = new Set()) => {
+    if (!productName || !stock || visited.has(productName.toLowerCase())) return 0;
+    visited.add(productName.toLowerCase());
+
     const item = stock.find(s => s.name === productName);
     if (!item) return 0;
 
     if (item.isComposite) {
       if (!item.components || item.components.length === 0) return 0;
       const componentStocks = item.components.map(comp => {
-        const compStock = getAvailableStock(comp.name);
+        const compStock = getAvailableStock(comp.name, new Set(visited));
         return Math.floor(compStock / (Number(comp.quantity) || 1));
       });
       return Math.min(...componentStocks);
@@ -522,14 +524,18 @@ export const GlobalProvider = ({ children }) => {
 
 
   // API Methods
-  const updateFirestoreStock = async (productName, quantity, operation = 'add', type = 'out') => {
-    const sku = stock.find(item => item.name.toLowerCase() === productName.toLowerCase());
+  const updateFirestoreStock = async (productName, quantity, operation = 'add', type = 'out', visited = new Set()) => {
+    if (!productName || visited.has(productName.toLowerCase())) return;
+    visited.add(productName.toLowerCase());
+
+    const sku = stock.find(item => item.name && item.name.toLowerCase() === productName.toLowerCase());
     if (!sku) return;
     const qty = Number(quantity) || 0;
     if (sku.isComposite && sku.components && sku.components.length > 0) {
       for (const component of sku.components) {
+        if (!component.name) continue;
         const componentQty = (Number(component.quantity) || 1) * qty;
-        await updateFirestoreStock(component.name, componentQty, operation, type);
+        await updateFirestoreStock(component.name, componentQty, operation, type, new Set(visited));
       }
       return;
     }
@@ -540,9 +546,10 @@ export const GlobalProvider = ({ children }) => {
   };
 
   const addB2BShipment = async (shipment) => {
-    await addDoc(collection(db, 'b2bShipments'), shipment);
-    if (shipment.deducted !== false && shipment.deducted !== 'false') {
-      for (const p of shipment.products) {
+    const sanitized = JSON.parse(JSON.stringify(shipment));
+    await addDoc(collection(db, 'b2bShipments'), sanitized);
+    if (sanitized.deducted !== false && sanitized.deducted !== 'false') {
+      for (const p of (sanitized.products || [])) {
         if (p.isPacked !== false) {
           const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
           await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
@@ -553,10 +560,10 @@ export const GlobalProvider = ({ children }) => {
 
   const deleteB2BShipment = async (id) => {
     if (!id) return;
-    const shipment = b2bShipments.find(s => s.id === id);
+    const shipment = b2bShipments.find(s => String(s.id) === String(id));
     await deleteDoc(doc(db, 'b2bShipments', String(id)));
     if (shipment && shipment.deducted !== false && shipment.deducted !== 'false') {
-      for (const p of shipment.products) {
+      for (const p of (shipment.products || [])) {
         if (p.isPacked !== false) {
           const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
           await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
@@ -566,19 +573,21 @@ export const GlobalProvider = ({ children }) => {
   };
 
   const updateB2BShipment = async (id, updatedShipment) => {
-    const oldShipment = b2bShipments.find(s => s.id === id);
-    if (!oldShipment) return;
-    if (oldShipment.deducted !== false && oldShipment.deducted !== 'false') {
-      for (const p of oldShipment.products) {
+    if (!id) return;
+    const oldShipment = b2bShipments.find(s => String(s.id) === String(id));
+    if (oldShipment && oldShipment.deducted !== false && oldShipment.deducted !== 'false') {
+      for (const p of (oldShipment.products || [])) {
         if (p.isPacked !== false) {
           const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
           await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
         }
       }
     }
-    await updateDoc(doc(db, 'b2bShipments', String(id)), updatedShipment);
-    if (updatedShipment.deducted !== false && updatedShipment.deducted !== 'false') {
-      for (const p of updatedShipment.products) {
+    const sanitized = JSON.parse(JSON.stringify(updatedShipment));
+    delete sanitized.id;
+    await updateDoc(doc(db, 'b2bShipments', String(id)), sanitized);
+    if (sanitized.deducted !== false && sanitized.deducted !== 'false') {
+      for (const p of (sanitized.products || [])) {
         if (p.isPacked !== false) {
           const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
           await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
@@ -588,8 +597,9 @@ export const GlobalProvider = ({ children }) => {
   };
 
   const addB2CShipment = async (shipment) => {
-    await addDoc(collection(db, 'b2cShipments'), shipment);
-    for (const p of shipment.products) {
+    const sanitized = JSON.parse(JSON.stringify(shipment));
+    await addDoc(collection(db, 'b2cShipments'), sanitized);
+    for (const p of (sanitized.products || [])) {
       const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
       await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
     }
@@ -597,10 +607,10 @@ export const GlobalProvider = ({ children }) => {
 
   const deleteB2CShipment = async (id) => {
     if (!id) return;
-    const shipment = b2cShipments.find(s => s.id === id);
+    const shipment = b2cShipments.find(s => String(s.id) === String(id));
     await deleteDoc(doc(db, 'b2cShipments', String(id)));
     if (shipment) {
-      for (const p of shipment.products) {
+      for (const p of (shipment.products || [])) {
         const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
         await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
       }
@@ -608,14 +618,18 @@ export const GlobalProvider = ({ children }) => {
   };
 
   const updateB2CShipment = async (id, updatedShipment) => {
-    const oldShipment = b2cShipments.find(s => s.id === id);
-    if (!oldShipment) return;
-    for (const p of oldShipment.products) {
-      const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
-      await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+    if (!id) return;
+    const oldShipment = b2cShipments.find(s => String(s.id) === String(id));
+    if (oldShipment) {
+      for (const p of (oldShipment.products || [])) {
+        const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
+        await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+      }
     }
-    await updateDoc(doc(db, 'b2cShipments', String(id)), updatedShipment);
-    for (const p of updatedShipment.products) {
+    const sanitized = JSON.parse(JSON.stringify(updatedShipment));
+    delete sanitized.id;
+    await updateDoc(doc(db, 'b2cShipments', String(id)), sanitized);
+    for (const p of (sanitized.products || [])) {
       const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
       await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
     }

@@ -219,17 +219,17 @@ const B2BShipments = () => {
     setEditingId(s.id);
     setFormData({
       whoParceled: Array.isArray(s.whoParceled) ? s.whoParceled : s.whoParceled ? [s.whoParceled] : [],
-      clientName: s.clientName,
+      clientName: s.clientName || '',
       isStore: s.isStore || false,
       isSample: s.isSample || false,
       isExpo: s.isExpo || false,
-      courierName: s.courierName,
-      boxes: s.boxes,
-      date: s.date,
+      courierName: s.courierName || '',
+      boxes: s.boxes || '',
+      date: s.date || new Date().toISOString().split('T')[0],
       status: s.status || 'Dispatched',
       dispatchDate: s.dispatchDate || ''
     });
-    setProducts(s.products.map((p, idx) => ({ ...p, id: Date.now() + idx })));
+    setProducts((s.products || []).map((p, idx) => ({ ...p, id: Date.now() + idx })));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -520,11 +520,41 @@ const B2BShipments = () => {
                       </div>
                     </div>
                       {selectedSKU && (
-                        <div className="mt-3 space-y-3 border-t border-slate-200 pt-3">
-                            <div className="flex items-center gap-3">
-                               <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-600 rounded font-bold uppercase tracking-wider border border-slate-200">SKU: {selectedSKU.sku}</span>
-                               <span className="text-[10px] px-2 py-0.5 bg-slate-100 text-slate-500 rounded font-medium italic">{selectedSKU.category}</span>
-                            </div>
+                        <div className="mt-2 space-y-2 border-t border-slate-200/60 pt-2">
+                           <div className="flex items-center gap-2 flex-wrap text-xs">
+                              {selectedSKU.sku && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded font-bold uppercase tracking-wider border border-slate-200">SKU: {selectedSKU.sku}</span>
+                              )}
+                              {selectedSKU.category && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-medium italic">{selectedSKU.category}</span>
+                              )}
+                              {selectedSKU.isComposite && (
+                                <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-bold uppercase tracking-wider border border-purple-200 flex items-center gap-1">
+                                  <Layers size={10} /> Combo Product
+                                </span>
+                              )}
+                           </div>
+
+                           {selectedSKU.isComposite && selectedSKU.components && selectedSKU.components.length > 0 && (
+                             <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                               <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider flex items-center gap-1">
+                                 <Layers size={10} className="text-purple-600" /> Includes:
+                               </span>
+                               {selectedSKU.components.map((comp, cIdx) => {
+                                 const compSKU = stock.find(s => s.name === comp.name);
+                                 const compQtyPerCombo = Number(comp.quantity) || 1;
+                                 const totalCompUnits = (Number(product.quantity) || 0) * compQtyPerCombo;
+                                 return (
+                                   <span key={cIdx} className="inline-flex items-center gap-1 px-2 py-0.5 bg-purple-50 text-purple-900 border border-purple-200/80 rounded-md text-[11px] font-medium">
+                                     {compSKU?.sku && <span className="font-mono text-[9px] font-bold text-purple-600 bg-purple-100/80 px-1 rounded">{compSKU.sku}</span>}
+                                     <span>{comp.name}</span>
+                                     <span className="font-bold text-purple-700">×{compQtyPerCombo}</span>
+                                     {product.quantity ? <span className="text-[9px] text-purple-500 font-semibold">({totalCompUnits} total)</span> : null}
+                                   </span>
+                                 );
+                               })}
+                             </div>
+                           )}
                         </div>
                       )}
                   </div>
