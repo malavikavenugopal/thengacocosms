@@ -3,7 +3,16 @@ import { Card, Button } from '../components/ui';
 import { Search, DownloadCloud, Eye, Calendar, ArrowRightLeft, X, ShoppingCart, MapPin, ClipboardList, History, Zap, Package, TrendingUp, TrendingDown, Layers, Save, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import { exportFormattedStockCheck } from '../utils/exportUtils';
-import toast from 'react-hot-toast';
+const isOptionMatch = (n1, n2) => {
+  if (!n1 || !n2 || n2 === 'None') return false;
+  const clean1 = n1.trim().toLowerCase().replace(/\s+/g, ' ');
+  const clean2 = n2.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (clean1 === clean2) return true;
+  if (clean1.includes('macr') && clean1.includes('rope') && clean2.includes('macr') && clean2.includes('rope')) return true;
+  if (clean1.includes('cork') && clean1.includes('base') && clean2.includes('cork') && clean2.includes('base')) return true;
+  if (clean1.includes('cork') && clean1.includes('lid') && clean2.includes('cork') && clean2.includes('lid')) return true;
+  return false;
+};
 
 const MonthlyStockCheck = () => {
   const { 
@@ -191,6 +200,10 @@ const MonthlyStockCheck = () => {
           });
         }
         if (master) { applyB2B(master.id, qty); }
+        if (p.stockOption && p.stockOption !== 'None') {
+          const optMaster = stock.find(m => compareNames(m.name, p.stockOption) || isOptionMatch(m.name, p.stockOption));
+          if (optMaster) { applyB2B(optMaster.id, qty); }
+        }
       }); 
     });
 
@@ -237,6 +250,10 @@ const MonthlyStockCheck = () => {
             });
           }
           if (master) { applyB2C(master.id, qty); }
+          if (p.stockOption && p.stockOption !== 'None') {
+            const optMaster = stock.find(m => compareNames(m.name, p.stockOption));
+            if (optMaster) { applyB2C(optMaster.id, qty); }
+          }
         });
       } else {
         // Normal B2C: count as Out on shipment date
@@ -261,6 +278,10 @@ const MonthlyStockCheck = () => {
               });
             }
             if (master) { applyB2C(master.id, qty); }
+            if (p.stockOption && p.stockOption !== 'None') {
+              const optMaster = stock.find(m => compareNames(m.name, p.stockOption));
+              if (optMaster) { applyB2C(optMaster.id, qty); }
+            }
           }); 
         }
       }
@@ -413,6 +434,8 @@ const MonthlyStockCheck = () => {
         
         if (compareNames(product.name, pName)) {
           matchQty = Number(p.quantity) || 0;
+        } else if (p.stockOption && p.stockOption !== 'None' && (compareNames(product.name, p.stockOption) || isOptionMatch(product.name, p.stockOption))) {
+          matchQty = Number(p.quantity) || 0;
         } else {
           const parentProduct = stock.find(st => compareNames(st.name, pName) && st.isComposite);
           if (parentProduct) {
@@ -474,6 +497,7 @@ const MonthlyStockCheck = () => {
         
         let impact = 0;
         if (compareNames(p.name, product.name)) impact = qty;
+        else if (p.stockOption && p.stockOption !== 'None' && (compareNames(product.name, p.stockOption) || isOptionMatch(product.name, p.stockOption))) impact = qty;
         else if (master?.isComposite) {
           const comp = master.components?.find(c => compareNames(c.name, product.name));
           if (comp) {

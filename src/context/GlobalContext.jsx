@@ -14,7 +14,16 @@ import {
   query,
   orderBy
 } from 'firebase/firestore';
-import toast from 'react-hot-toast';
+const isOptionMatch = (productName, stockOption) => {
+  if (!productName || !stockOption || stockOption === 'None') return false;
+  const p = productName.trim().toLowerCase().replace(/\s+/g, ' ');
+  const o = stockOption.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (p === o) return true;
+  if (o.includes('macr') && o.includes('rope') && p.includes('macr') && p.includes('rope')) return true;
+  if (o.includes('cork') && o.includes('base') && p.includes('cork') && p.includes('base')) return true;
+  if (o.includes('cork') && o.includes('lid') && p.includes('cork') && p.includes('lid')) return true;
+  return false;
+};
 
 const GlobalContext = createContext();
 
@@ -185,6 +194,9 @@ export const GlobalProvider = ({ children }) => {
                   }
                 }
               }
+              if (p.stockOption && p.stockOption !== 'None' && isOptionMatch(productName, p.stockOption)) {
+                usage += (Number(p.quantity) * Number(p.packSize || 1));
+              }
               return shTotal + usage;
             }, 0);
           }, 0) +
@@ -202,6 +214,9 @@ export const GlobalProvider = ({ children }) => {
                     usage = (Number(p.quantity) * Number(comp.quantity || 1));
                   }
                 }
+              }
+              if (p.stockOption && p.stockOption !== 'None' && isOptionMatch(productName, p.stockOption)) {
+                usage += (Number(p.quantity) * Number(p.packSize || 1));
               }
               return shTotal + usage;
             }, 0);
@@ -528,7 +543,10 @@ export const GlobalProvider = ({ children }) => {
     if (!productName || visited.has(productName.toLowerCase())) return;
     visited.add(productName.toLowerCase());
 
-    const sku = stock.find(item => item.name && item.name.toLowerCase() === productName.toLowerCase());
+    const sku = stock.find(item => item.name && (
+      item.name.toLowerCase() === productName.toLowerCase() ||
+      isOptionMatch(item.name, productName)
+    ));
     if (!sku) return;
     const qty = Number(quantity) || 0;
     if (sku.isComposite && sku.components && sku.components.length > 0) {
@@ -553,6 +571,9 @@ export const GlobalProvider = ({ children }) => {
         if (p.isPacked !== false) {
           const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
           await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
+          if (p.stockOption && p.stockOption !== 'None') {
+            await updateFirestoreStock(p.stockOption, totalUnits, 'add', 'out');
+          }
         }
       }
     }
@@ -567,6 +588,9 @@ export const GlobalProvider = ({ children }) => {
         if (p.isPacked !== false) {
           const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
           await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+          if (p.stockOption && p.stockOption !== 'None') {
+            await updateFirestoreStock(p.stockOption, totalUnits, 'sub', 'out');
+          }
         }
       }
     }
@@ -580,6 +604,9 @@ export const GlobalProvider = ({ children }) => {
         if (p.isPacked !== false) {
           const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
           await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+          if (p.stockOption && p.stockOption !== 'None') {
+            await updateFirestoreStock(p.stockOption, totalUnits, 'sub', 'out');
+          }
         }
       }
     }
@@ -591,6 +618,9 @@ export const GlobalProvider = ({ children }) => {
         if (p.isPacked !== false) {
           const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
           await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
+          if (p.stockOption && p.stockOption !== 'None') {
+            await updateFirestoreStock(p.stockOption, totalUnits, 'add', 'out');
+          }
         }
       }
     }
@@ -602,6 +632,9 @@ export const GlobalProvider = ({ children }) => {
     for (const p of (sanitized.products || [])) {
       const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
       await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
+      if (p.stockOption && p.stockOption !== 'None') {
+        await updateFirestoreStock(p.stockOption, totalUnits, 'add', 'out');
+      }
     }
   };
 
@@ -613,6 +646,9 @@ export const GlobalProvider = ({ children }) => {
       for (const p of (shipment.products || [])) {
         const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
         await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+        if (p.stockOption && p.stockOption !== 'None') {
+          await updateFirestoreStock(p.stockOption, totalUnits, 'sub', 'out');
+        }
       }
     }
   };
@@ -624,6 +660,9 @@ export const GlobalProvider = ({ children }) => {
       for (const p of (oldShipment.products || [])) {
         const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
         await updateFirestoreStock(p.name, totalUnits, 'sub', 'out');
+        if (p.stockOption && p.stockOption !== 'None') {
+          await updateFirestoreStock(p.stockOption, totalUnits, 'sub', 'out');
+        }
       }
     }
     const sanitized = JSON.parse(JSON.stringify(updatedShipment));
@@ -632,6 +671,9 @@ export const GlobalProvider = ({ children }) => {
     for (const p of (sanitized.products || [])) {
       const totalUnits = (Number(p.quantity) || 0) * (Number(p.packSize) || 1);
       await updateFirestoreStock(p.name, totalUnits, 'add', 'out');
+      if (p.stockOption && p.stockOption !== 'None') {
+        await updateFirestoreStock(p.stockOption, totalUnits, 'add', 'out');
+      }
     }
   };
 

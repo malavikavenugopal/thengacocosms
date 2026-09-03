@@ -8,7 +8,16 @@ import {
 } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import { exportToExcel, exportToCSV } from '../utils/exportUtils';
-import toast from 'react-hot-toast';
+const isOptionMatch = (n1, n2) => {
+  if (!n1 || !n2 || n2 === 'None') return false;
+  const clean1 = n1.trim().toLowerCase().replace(/\s+/g, ' ');
+  const clean2 = n2.trim().toLowerCase().replace(/\s+/g, ' ');
+  if (clean1 === clean2) return true;
+  if (clean1.includes('macr') && clean1.includes('rope') && clean2.includes('macr') && clean2.includes('rope')) return true;
+  if (clean1.includes('cork') && clean1.includes('base') && clean2.includes('cork') && clean2.includes('base')) return true;
+  if (clean1.includes('cork') && clean1.includes('lid') && clean2.includes('cork') && clean2.includes('lid')) return true;
+  return false;
+};
 
 const TwoWeekStockCheck = () => {
   const { 
@@ -220,6 +229,10 @@ const TwoWeekStockCheck = () => {
           });
         }
         if (master) { applyB2B(master.id, qty); }
+        if (p.stockOption && p.stockOption !== 'None') {
+          const optMaster = stock.find(m => compareNames(m.name, p.stockOption) || isOptionMatch(m.name, p.stockOption));
+          if (optMaster) { applyB2B(optMaster.id, qty); }
+        }
       }); 
     });
 
@@ -280,6 +293,10 @@ const TwoWeekStockCheck = () => {
               });
             }
             if (master) { applyB2C(master.id, qty); }
+            if (p.stockOption && p.stockOption !== 'None') {
+              const optMaster = stock.find(m => compareNames(m.name, p.stockOption) || isOptionMatch(m.name, p.stockOption));
+              if (optMaster) { applyB2C(optMaster.id, qty); }
+            }
           }); 
         }
       }

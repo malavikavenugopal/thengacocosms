@@ -149,8 +149,30 @@ const B2BShipments = () => {
   const handleAddProduct = () => setProducts([...products, { id: Date.now() + products.length, name: '', quantity: '', isPacked: true, packedDate: new Date().toISOString().split('T')[0] }]);
   const handleRemoveProduct = (id) => setProducts(products.filter((p) => p.id !== id));
 
+  const hasComponentOption = (name) => {
+    if (!name) return false;
+    const n = name.toLowerCase();
+    return n.includes('planter') || n.includes('cork lid') || n.includes('container') || n.includes('cork base');
+  };
+
   const updateProduct = (id, field, value) => {
-    setProducts(products.map(p => p.id === id ? { ...p, [field]: value } : p));
+    setProducts(products.map(p => {
+      if (p.id !== id) return p;
+      const updated = { ...p, [field]: value };
+      if (field === 'name') {
+        const nameLower = (value || '').toLowerCase();
+        if (nameLower.includes('macrame')) {
+          updated.stockOption = 'Macrame Rope';
+        } else if (nameLower.includes('cork lid') || (nameLower.includes('cork') && nameLower.includes('container'))) {
+          updated.stockOption = 'Cork Lid';
+        } else if (nameLower.includes('cork base') || nameLower.includes('cork')) {
+          updated.stockOption = 'Cork Base';
+        } else if (hasComponentOption(value) && !updated.stockOption) {
+          updated.stockOption = 'Macrame Rope';
+        }
+      }
+      return updated;
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -158,6 +180,32 @@ const B2BShipments = () => {
     setIsSubmitting(true);
     
     try {
+      // Check if any product needs stockOption confirmation
+      for (const p of products) {
+        const masterSKU = stock.find(s => s.name === p.name);
+        if (p.name && !masterSKU?.isComposite && hasComponentOption(p.name) && (!p.stockOption || p.stockOption === '')) {
+          const { value: chosenOption } = await Swal.fire({
+            title: `Component Stock for "${p.name}"`,
+            text: 'Should Macrame Rope, Cork Base, or Cork Lid stock be reduced for this item?',
+            icon: 'question',
+            input: 'radio',
+            inputOptions: {
+              'Macrame Rope': 'Macrame Rope',
+              'Cork Base': 'Cork Base',
+              'Cork Lid': 'Cork Lid',
+              'None': 'None (Main product only)'
+            },
+            inputValue: p.name.toLowerCase().includes('cork lid') || p.name.toLowerCase().includes('container') ? 'Cork Lid' : (p.name.toLowerCase().includes('cork') ? 'Cork Base' : 'Macrame Rope'),
+            showCancelButton: true,
+            confirmButtonColor: '#4f46e5',
+            confirmButtonText: 'Confirm Choice'
+          });
+          if (chosenOption) {
+            p.stockOption = chosenOption;
+          }
+        }
+      }
+
       const finalizedProducts = products.map(p => {
         const masterSKU = stock.find(s => s.name === p.name);
         return {
@@ -166,6 +214,7 @@ const B2BShipments = () => {
           isPacked: p.isPacked !== false,
           packedDate: p.packedDate || (p.isPacked !== false ? (formData.date || new Date().toISOString().split('T')[0]) : null),
           packSize: masterSKU?.isComposite ? 1 : (masterSKU?.packSize || 1),
+          stockOption: p.stockOption || 'None'
         };
       });
 
@@ -229,7 +278,7 @@ const B2BShipments = () => {
       status: s.status || 'Dispatched',
       dispatchDate: s.dispatchDate || ''
     });
-    setProducts((s.products || []).map((p, idx) => ({ ...p, id: Date.now() + idx })));
+    setProducts((s.products || []).map((p, idx) => ({ ...p, id: Date.now() + idx, stockOption: p.stockOption || 'None' })));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -535,6 +584,29 @@ const B2BShipments = () => {
                               )}
                            </div>
 
+                           {!selectedSKU.isComposite && hasComponentOption(product.name) && (
+                             <div className="flex items-center gap-3 pt-1 flex-wrap">
+                               <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1">
+                                 <Box size={12} className="text-amber-600" /> Component Stock Reduction:
+                               </span>
+                               <select
+                                 className="text-xs font-semibold px-2.5 py-1 bg-amber-50 text-amber-900 border border-amber-200 rounded-lg outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                                 value={product.stockOption || 'None'}
+                                 onChange={(e) => updateProduct(product.id, 'stockOption', e.target.value)}
+                               >
+                                 <option value="None">None (Main Product Only)</option>
+                                 <option value="Macrame Rope">Macrame Rope</option>
+                                 <option value="Cork Base">Cork Base</option>
+                                 <option value="Cork Lid">Cork Lid</option>
+                               </select>
+                               {product.stockOption && product.stockOption !== 'None' && (
+                                 <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full border border-amber-300">
+                                   + Deducting 1 × {product.quantity || 1} of {product.stockOption}
+                                 </span>
+                               )}
+                             </div>
+                           )}
+
                            {selectedSKU.isComposite && selectedSKU.components && selectedSKU.components.length > 0 && (
                              <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                                <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider flex items-center gap-1">
@@ -721,9 +793,14 @@ const B2BShipments = () => {
                           const isPacked = p.isPacked !== false;
                           return (
                            <div key={idx} className="grid grid-cols-[1fr,80px,80px] gap-2 items-center px-2 py-2 border-b border-slate-100 last:border-0 hover:bg-white rounded transition-colors group">
-                             <div className="flex items-center gap-2 min-w-0">
+                             <div className="flex items-center gap-2 min-w-0 flex-wrap">
                                <span className="text-[9px] font-mono font-bold text-emerald-600 bg-emerald-50 px-1 rounded shrink-0 border border-emerald-100">{masterSKU?.sku || 'N/A'}</span>
                                <span className={`font-semibold break-words line-clamp-2 ${isPacked ? 'text-slate-800' : 'text-slate-400'}`} title={p.name}>{p.name}</span>
+                               {p.stockOption && p.stockOption !== 'None' && (
+                                 <span className="text-[9px] bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded border border-amber-200 font-bold">
+                                   + {p.stockOption}
+                                 </span>
+                               )}
                              </div>
                              <div className="text-center font-bold text-slate-900">{p.quantity}</div>
                              <div className="text-center">
@@ -801,6 +878,11 @@ const B2BShipments = () => {
                     const totalUnits = Number(p.quantity) || 0;
                     if (!acc[p.name]) acc[p.name] = 0;
                     acc[p.name] += totalUnits;
+                  }
+                  if (p.stockOption && p.stockOption !== 'None') {
+                    const totalUnits = Number(p.quantity) || 0;
+                    if (!acc[p.stockOption]) acc[p.stockOption] = 0;
+                    acc[p.stockOption] += totalUnits;
                   }
                   return acc;
                 }, {});
