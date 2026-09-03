@@ -665,7 +665,7 @@ const MonthlyStockCheck = () => {
       });
     };
     sync();
-  }, [monthlyMovements, activePeriod]);
+  }, [monthlyMovements, activePeriod, monthlyStockData, stock]);
 
   const handleCarryForward = async () => {
     setIsCarryingForward(true);
@@ -843,12 +843,16 @@ const MonthlyStockCheck = () => {
           </button>
 
           {/* Action Buttons */}
-          <Button onClick={handleCarryForward} variant="secondary" loading={isCarryingForward} className="whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0">
-            <ArrowRightLeft size={14} className="mr-1.5" /> Carry Expected
+          <Button onClick={handleCarryForward} variant="secondary" loading={isCarryingForward} className="whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0" title="Carry forward expected stock to next period">
+            <ArrowRightLeft size={14} className="mr-1.5" /> <span>Carry Expected</span>
+          </Button>
+
+          <Button onClick={handleCarryPhysicalForward} variant="secondary" loading={isSyncing} className="whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0" title="Carry forward physical stock count to next period">
+            <ArrowRightLeft size={14} className="mr-1.5 text-purple-600" /> <span>Carry Physical</span>
           </Button>
 
           <Button onClick={handleExport} variant="success" loading={isExporting} className="whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0">
-            <DownloadCloud size={14} className="mr-1.5" /> Export
+            <DownloadCloud size={14} className="mr-1.5" /> <span>Export</span>
           </Button>
         </div>
       </div>
@@ -856,7 +860,7 @@ const MonthlyStockCheck = () => {
       {/* Desktop Table View */}
       <div className="hidden lg:block overflow-hidden rounded-2xl border border-slate-200 shadow-sm bg-white">
         <div className="overflow-x-auto overflow-y-auto max-h-[75vh] scrollbar-thin scrollbar-thumb-slate-200">
-          <table className="w-full text-left border-collapse min-w-[1200px]">
+          <table className="w-full text-left border-collapse min-w-[1400px]">
             <thead className="sticky top-0 z-20">
               <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500 font-bold">
                 <th className="py-4 px-4 min-w-[180px] bg-slate-50 sticky left-0 z-30 border-r border-slate-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">SKU Name</th>
@@ -870,7 +874,9 @@ const MonthlyStockCheck = () => {
                 <th className="py-4 px-2 text-center text-red-600 bg-slate-50">Damage</th>
                 <th className="py-4 px-2 text-center text-rose-500 bg-slate-50">Rejected</th>
                 <th className="py-4 px-2 text-center text-rose-600 bg-slate-50">Used</th>
-                <th className="py-4 px-3 text-center bg-indigo-50/80 font-bold text-indigo-900 sticky right-[60px] z-20 border-l border-slate-200">Expected Stock</th>
+                <th className="py-4 px-3 text-center bg-indigo-50/80 font-bold text-indigo-900 border-l border-slate-200">Expected Stock</th>
+                <th className="py-4 px-3 text-center bg-purple-50/80 font-bold text-purple-900 border-l border-slate-200">Physical Stock</th>
+                <th className="py-4 px-3 text-center bg-slate-100 font-bold text-slate-700 border-l border-slate-200">Diff</th>
                 <th className="py-4 px-4 text-center bg-slate-50 sticky right-0 z-20 border-l border-slate-200">View</th>
               </tr>
             </thead>
@@ -881,10 +887,15 @@ const MonthlyStockCheck = () => {
                 const opening = getEffectiveOpeningStock(activePeriod, item.id, item);
                 const expected = calculateExpected(opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
                 
+                const hasPhysical = mData.physical !== undefined && mData.physical !== '';
+                const physicalVal = hasPhysical ? mData.physical : '';
+                const physicalNum = hasPhysical ? Number(mData.physical) : null;
+                const diff = physicalNum !== null ? physicalNum - expected : null;
+
                 return (
                   <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="py-4 px-4 text-sm border-r border-slate-100 font-semibold text-slate-900 bg-white sticky left-0 z-10 group-hover:bg-slate-50 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                      <div className="flex flex-col"><span className="text-[9px] text-indigo-500 font-mono font-bold uppercase tracking-tighter">{item.sku || '-'}</span>{item.name}</div>
+                      <div className="flex flex-col"><span className="text-[9px] text-indigo-500 font-mono font-bold uppercase tracking-tighter">{item.sku || '-'}</span><span>{item.name}</span></div>
                     </td>
                     <td className="py-3 px-1 text-center">
                       <input 
@@ -899,16 +910,39 @@ const MonthlyStockCheck = () => {
                         }} 
                       />
                     </td>
-                    <td className="py-4 px-2 text-center text-indigo-600 text-xs font-bold">{(Number(mData.in) || 0) + m.produced + (m.qcAcceptedOrPurchase || 0)}</td>
-                    <td className="py-4 px-2 text-xs text-center text-emerald-600 font-bold">{m.returned || 0}</td>
-                    <td className="py-4 px-2 text-xs text-center text-amber-600 font-bold">{m.out || 0}</td>
-                    <td className="py-4 px-2 text-xs text-center text-orange-500 font-bold">{m.packed || 0}</td>
-                    <td className="py-4 px-2 text-xs text-center text-blue-500 font-bold cursor-pointer hover:bg-blue-50" onClick={() => setSelectedProductDetails(item)}>{m.dispatched || 0} <Eye className="inline ml-1 opacity-50" size={10} /></td>
-                    <td className="py-4 px-2 text-xs text-center text-orange-500 font-bold">{m.replacement || 0}</td>
-                    <td className="py-4 px-2 text-xs text-center text-red-600 font-bold">{m.damage || 0}</td>
-                    <td className="py-4 px-2 text-xs text-center text-rose-500 font-bold">{m.rejected || 0}</td>
-                    <td className="py-4 px-2 text-xs text-center text-rose-600 font-black">{m.used || 0}</td>
-                    <td className="py-4 px-3 text-sm text-center font-bold text-indigo-900 bg-indigo-50/30 border-x border-slate-200 sticky right-[60px] z-10 group-hover:bg-indigo-50/50">{expected}</td>
+                    <td className="py-4 px-2 text-center text-indigo-600 text-xs font-bold"><span>{(Number(mData.in) || 0) + m.produced + (m.qcAcceptedOrPurchase || 0)}</span></td>
+                    <td className="py-4 px-2 text-xs text-center text-emerald-600 font-bold"><span>{m.returned || 0}</span></td>
+                    <td className="py-4 px-2 text-xs text-center text-amber-600 font-bold"><span>{m.out || 0}</span></td>
+                    <td className="py-4 px-2 text-xs text-center text-orange-500 font-bold"><span>{m.packed || 0}</span></td>
+                    <td className="py-4 px-2 text-xs text-center text-blue-500 font-bold cursor-pointer hover:bg-blue-50" onClick={() => setSelectedProductDetails(item)}><span>{m.dispatched || 0}</span> <Eye className="inline ml-1 opacity-50" size={10} /></td>
+                    <td className="py-4 px-2 text-xs text-center text-orange-500 font-bold"><span>{m.replacement || 0}</span></td>
+                    <td className="py-4 px-2 text-xs text-center text-red-600 font-bold"><span>{m.damage || 0}</span></td>
+                    <td className="py-4 px-2 text-xs text-center text-rose-500 font-bold"><span>{m.rejected || 0}</span></td>
+                    <td className="py-4 px-2 text-xs text-center text-rose-600 font-black"><span>{m.used || 0}</span></td>
+                    <td className="py-4 px-3 text-sm text-center font-bold text-indigo-900 bg-indigo-50/30 border-l border-slate-200 group-hover:bg-indigo-50/50"><span>{expected}</span></td>
+                    <td className="py-3 px-2 text-center bg-purple-50/20 border-l border-slate-200 group-hover:bg-purple-50/40">
+                      <input 
+                        type="number" 
+                        placeholder="Qty"
+                        className="w-16 mx-auto block px-1.5 py-1 text-center text-xs border border-purple-300 rounded outline-none font-bold text-purple-900 bg-white focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500" 
+                        value={physicalVal} 
+                        onChange={(e) => {
+                          const val = e.target.value === '' ? '' : Number(e.target.value);
+                          saveMonthlyStock(activePeriod, item.id, { physical: val, expected });
+                        }} 
+                      />
+                    </td>
+                    <td className="py-4 px-3 text-center border-l border-slate-200">
+                      {diff === null ? (
+                        <span className="text-slate-400 text-xs font-medium">-</span>
+                      ) : diff === 0 ? (
+                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">0</span>
+                      ) : diff > 0 ? (
+                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">+{diff}</span>
+                      ) : (
+                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700">{diff}</span>
+                      )}
+                    </td>
                     <td className="py-4 px-4 text-center sticky right-0 z-10 bg-white group-hover:bg-slate-50 border-l border-slate-100">
                       <button onClick={() => setSelectedProductDetails(item)} className="p-2 text-indigo-600 hover:bg-indigo-100 rounded-full transition-all"><Eye size={18} /></button>
                     </td>
@@ -928,6 +962,11 @@ const MonthlyStockCheck = () => {
           const opening = getEffectiveOpeningStock(activePeriod, item.id, item);
           const expected = calculateExpected(opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
 
+          const hasPhysical = mData.physical !== undefined && mData.physical !== '';
+          const physicalVal = hasPhysical ? mData.physical : '';
+          const physicalNum = hasPhysical ? Number(mData.physical) : null;
+          const diff = physicalNum !== null ? physicalNum - expected : null;
+
           return (
             <div key={item.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
                <div className="p-4 bg-slate-50/80 border-b border-slate-100 flex items-start justify-between">
@@ -938,19 +977,42 @@ const MonthlyStockCheck = () => {
                   <button onClick={() => setSelectedProductDetails(item)} className="p-1.5 text-indigo-600 bg-indigo-100 rounded-lg shrink-0"><Eye size={16} /></button>
                </div>
 
-               <div className="p-3 border-b border-slate-100">
-                  <span className="text-[9px] text-slate-400 uppercase font-bold block mb-1">Opening Stock</span>
-                  <input type="number" className="w-full px-2 py-1.5 text-sm font-bold bg-slate-50 border border-slate-200 rounded outline-none focus:border-indigo-500" value={mData.opening !== undefined && mData.opening !== '' ? mData.opening : opening} onChange={(e) => {
-                    const val = e.target.value === '' ? '' : Number(e.target.value);
-                    const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-                    const exp = calculateExpected(val === '' ? opening : val, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
-                    saveMonthlyStock(activePeriod, item.id, { opening: val, expected: exp });
-                  }} />
+               <div className="grid grid-cols-2 gap-3 p-3 border-b border-slate-100">
+                  <div>
+                    <span className="text-[9px] text-slate-400 uppercase font-bold block mb-1">Opening Stock</span>
+                    <input type="number" className="w-full px-2 py-1.5 text-sm font-bold bg-slate-50 border border-slate-200 rounded outline-none focus:border-indigo-500" value={mData.opening !== undefined && mData.opening !== '' ? mData.opening : opening} onChange={(e) => {
+                      const val = e.target.value === '' ? '' : Number(e.target.value);
+                      const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
+                      const exp = calculateExpected(val === '' ? opening : val, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
+                      saveMonthlyStock(activePeriod, item.id, { opening: val, expected: exp });
+                    }} />
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-purple-600 uppercase font-bold block mb-1">Physical Stock</span>
+                    <input type="number" placeholder="Physical Qty" className="w-full px-2 py-1.5 text-sm font-bold bg-purple-50 border border-purple-200 rounded outline-none focus:border-purple-500 font-mono text-purple-900" value={physicalVal} onChange={(e) => {
+                      const val = e.target.value === '' ? '' : Number(e.target.value);
+                      saveMonthlyStock(activePeriod, item.id, { physical: val, expected });
+                    }} />
+                  </div>
                </div>
 
                <div className="p-4 bg-indigo-50/30 flex items-center justify-between">
-                  <span className="text-xs text-slate-500 uppercase font-bold block">Expected Stock</span>
-                  <span className="text-base font-black text-indigo-900">{expected}</span>
+                  <div>
+                    <span className="text-xs text-slate-500 uppercase font-bold block">Expected Stock</span>
+                    <span className="text-base font-black text-indigo-900">{expected}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-500 uppercase font-bold block">Discrepancy</span>
+                    {diff === null ? (
+                      <span className="text-xs font-semibold text-slate-400">Pending</span>
+                    ) : (
+                      <span className={`text-sm font-black ${
+                        diff === 0 ? 'text-emerald-600' : diff > 0 ? 'text-emerald-600' : 'text-rose-600'
+                      }`}>
+                        {diff > 0 ? `+${diff}` : diff}
+                      </span>
+                    )}
+                  </div>
                </div>
             </div>
           );

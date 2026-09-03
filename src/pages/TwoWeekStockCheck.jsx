@@ -86,94 +86,73 @@ const TwoWeekStockCheck = () => {
     return ISOweekStart;
   };
 
-  // Generate 2-Week period blocks dynamically starting from Week 31 (27/07/2026)
-  // Automatically adds new 2-week blocks as 2 weeks elapse.
-  const getTwoWeekPeriodOptions = () => {
+  // Generate single-week period options starting from April 2026 (Week 14) up to current week.
+  // Filters to ONLY show weeks where physical stock has been entered (plus CURRENT week for new entries).
+  const getWeeklyPeriodOptions = () => {
     const options = [];
-    const currentWeekStr = getWeekStr(new Date()); // e.g. 2026-W31 (starts Monday 27/07/2026)
+    const currentWeekStr = getWeekStr(new Date()); // e.g. 2026-W35
     const [currYear, currWNum] = currentWeekStr.split('-W').map(Number);
 
-    // Anchor to odd week start for bi-weekly block (e.g. 31 for W31/W32)
-    let baseWeekNum = currWNum;
-    if (baseWeekNum % 2 === 0) baseWeekNum -= 1;
+    const startWeekNum = 14; // April 2026 (starts Monday April 6, 2026)
+    const startYear = 2026;
 
-    // System start week: Week 31, 2026
-    const systemStartWeek = 31;
-    const systemStartYear = 2026;
+    for (let w = currWNum; w >= startWeekNum; w--) {
+      const wStr = `${currYear}-W${String(w).padStart(2, '0')}`;
+      const mDate = getIsoWeekMonday(currYear, w);
+      const sDate = new Date(mDate);
+      sDate.setDate(mDate.getDate() + 6);
 
-    // Calculate elapsed 2-week blocks since Week 31
-    let weeksDiff = (currYear - systemStartYear) * 52 + (currWNum - systemStartWeek);
-    if (weeksDiff < 0) weeksDiff = 0;
-    
-    const totalBlocks = Math.max(1, Math.floor(weeksDiff / 2) + 1);
+      const mFormat = mDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
+      const sFormat = sDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-    for (let i = 0; i < totalBlocks; i++) {
-      const w1Num = baseWeekNum - i * 2;
-      const w2Num = w1Num + 1;
+      const isCurrent = wStr === currentWeekStr;
 
-      let y1 = currYear;
-      let y2 = currYear;
-      let num1 = w1Num;
-      let num2 = w2Num;
+      // Check if physical stock was entered in firebase for this specific week
+      const hasPhysicalInWeek = monthlyStockData?.some(d => 
+        d.month === wStr && 
+        d.physical !== undefined && 
+        d.physical !== '' && 
+        d.physical !== null
+      );
 
-      if (num1 <= 0) {
-        y1 = currYear - 1;
-        num1 = 52 + num1;
+      // Only include weeks that have physical stock entered OR the current week
+      if (hasPhysicalInWeek || isCurrent) {
+        const label = `Week ${w} (${mFormat} - ${sFormat}) ${isCurrent ? '★ CURRENT' : ''}${hasPhysicalInWeek ? ' ✓ Physical Entered' : ''}`;
+
+        options.push({
+          wNum: w,
+          wStr,
+          mFormat,
+          sFormat,
+          label,
+          key: wStr,
+          isCurrent,
+          hasPhysicalInWeek
+        });
       }
-      if (num2 <= 0) {
-        y2 = currYear - 1;
-        num2 = 52 + num2;
-      }
-
-      const w1Str = `${y1}-W${String(num1).padStart(2, '0')}`;
-      const w2Str = `${y2}-W${String(num2).padStart(2, '0')}`;
-
-      const m1Date = getIsoWeekMonday(y1, num1); // Monday of W1 (e.g. 27/07/2026 for W31)
-      const s1Date = new Date(m1Date);
-      s1Date.setDate(m1Date.getDate() + 6);
-
-      const m2Date = getIsoWeekMonday(y2, num2); // Monday of W2 (e.g. 03/08/2026 for W32)
-      const s2Date = new Date(m2Date);
-      s2Date.setDate(m2Date.getDate() + 6);
-
-      const m1Format = m1Date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
-      const s1Format = s1Date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
-      const m2Format = m2Date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
-      const s2Format = s2Date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
-      const isCurrentBlock = i === 0;
-
-      const label = `Week ${num1} & ${num2} (W${num1}: ${m1Format} - ${s1Format} | W${num2}: ${m2Format} - ${s2Format}) ${isCurrentBlock ? '★ CURRENT' : ''}`;
-
-      options.push({
-        num1,
-        num2,
-        w1Str,
-        w2Str,
-        m1Format,
-        s1Format,
-        m2Format,
-        s2Format,
-        label,
-        key: `${w1Str}_${w2Str}`,
-        isCurrentBlock
-      });
     }
     return options;
   };
 
-  const periodOptions = useMemo(() => getTwoWeekPeriodOptions(), []);
+  const periodOptions = useMemo(() => getWeeklyPeriodOptions(), [monthlyStockData]);
   const [selectedBlockKey, setSelectedBlockKey] = useState(periodOptions[0]?.key || '');
-  const [filterMode, setFilterMode] = useState('all'); // 'all' | 'high' | 'low' | 'none' | 'pending' | 'a_z'
+  const [filterMode, setFilterMode] = useState('entered'); // default to 'entered'
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [physicalInputs, setPhysicalInputs] = useState({});
   const [selectedProductDetails, setSelectedProductDetails] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Selected bi-weekly block
-  const activeBlock = useMemo(() => {
-    return periodOptions.find(p => p.key === selectedBlockKey) || periodOptions[0];
+  // Sync selected block key if periodOptions updates
+  React.useEffect(() => {
+    if (periodOptions.length > 0 && (!selectedBlockKey || !periodOptions.some(p => p.key === selectedBlockKey))) {
+      setSelectedBlockKey(periodOptions[0].key);
+    }
+  }, [periodOptions, selectedBlockKey]);
+
+  // Selected weekly period
+  const activePeriod = useMemo(() => {
+    return periodOptions.find(p => p.key === selectedBlockKey) || periodOptions[0] || { wStr: getWeekStr(new Date()), label: 'Current Week' };
   }, [periodOptions, selectedBlockKey]);
 
   // Exact Movement Calculation matching MonthlyStockCheck.jsx
@@ -467,69 +446,33 @@ const TwoWeekStockCheck = () => {
     );
   };
 
-  // Compute Week 31 and Week 32 chained stock calculations
+  // Compute single week stock calculations for the selected period (activePeriod)
   const biWeeklyData = useMemo(() => {
-    const { w1Str, w2Str } = activeBlock;
-
-    const m1 = getMovementsForWeek(w1Str);
-    const m2 = getMovementsForWeek(w2Str);
+    const wStr = activePeriod?.wStr || getWeekStr(new Date());
+    const mData = getMovementsForWeek(wStr);
+    const prevWStr = getPrevPeriodStr(wStr);
 
     return stock.filter(item => !item.isComposite).map(item => {
-      // -------------------------------------------------------------
-      // WEEK 1 CALCULATIONS (e.g. Week 31 starting 27/07)
-      // Opening Stock for Week 31 MUST be Week 30's Expected Stock from the Weekly Report!
-      // -------------------------------------------------------------
-      const w0Str = getPrevPeriodStr(w1Str);
-      const openingW1 = getWeeklyReportExpected(w0Str, item.id, item);
+      const doc = monthlyStockData.find(d => d.month === wStr && d.productId === item.id);
+      const opening = getWeeklyReportExpected(prevWStr, item.id, item);
+      const m = mData[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
 
-      const docW1 = monthlyStockData.find(d => d.month === w1Str && d.productId === item.id);
-      const mData1 = m1[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-      
-      const expectedW1 = calculateExpected(
-        openingW1, 
-        docW1?.in || 0, 
-        mData1.purchased, 
-        mData1.produced, 
-        mData1.returned, 
-        mData1.stockDeduction, 
-        mData1.replacement, 
-        mData1.damage, 
-        mData1.rejected, 
-        mData1.used, 
-        mData1.qcAcceptedOrPurchase
+      const expectedStock = calculateExpected(
+        opening,
+        doc?.in || 0,
+        m.purchased,
+        m.produced,
+        m.returned,
+        m.stockDeduction,
+        m.replacement,
+        m.damage,
+        m.rejected,
+        m.used,
+        m.qcAcceptedOrPurchase
       );
 
-      const physicalW1 = (docW1?.physical !== undefined && docW1.physical !== '') ? Number(docW1.physical) : expectedW1;
-
-      // -------------------------------------------------------------
-      // WEEK 2 CALCULATIONS (e.g. Week 32)
-      // Opening Stock for Week 32 MUST automatically be Week 31's Expected Stock!
-      // -------------------------------------------------------------
-      const docW2 = monthlyStockData.find(d => d.month === w2Str && d.productId === item.id);
-      const openingW2 = expectedW1;
-
-      const mData2 = m2[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-
-      const expectedW2 = calculateExpected(
-        openingW2, 
-        docW2?.in || 0, 
-        mData2.purchased, 
-        mData2.produced, 
-        mData2.returned, 
-        mData2.stockDeduction, 
-        mData2.replacement, 
-        mData2.damage, 
-        mData2.rejected, 
-        mData2.used, 
-        mData2.qcAcceptedOrPurchase
-      );
-
-      // -------------------------------------------------------------
-      // PHYSICAL STOCK ENTRY MODEL
-      // Check if physical stock has been explicitly entered locally or saved in Firebase
-      // -------------------------------------------------------------
       const hasInput = physicalInputs[item.id] !== undefined && physicalInputs[item.id] !== '';
-      const hasSaved = docW2?.physical !== undefined && docW2.physical !== '';
+      const hasSaved = doc?.physical !== undefined && doc?.physical !== '';
       const hasPhysicalEntered = hasInput || hasSaved;
 
       let physicalStock = '';
@@ -538,12 +481,12 @@ const TwoWeekStockCheck = () => {
       let status = 'pending';
 
       if (hasPhysicalEntered) {
-        const valStr = hasInput ? physicalInputs[item.id] : docW2.physical;
+        const valStr = hasInput ? physicalInputs[item.id] : doc.physical;
         physicalStock = Number(valStr);
-        difference = physicalStock - expectedW2;
+        difference = physicalStock - expectedStock;
         absDifference = Math.abs(difference);
 
-        if (absDifference >= 10 || (expectedW2 > 0 && absDifference / expectedW2 >= 0.05)) {
+        if (absDifference >= 10 || (expectedStock > 0 && absDifference / expectedStock >= 0.05)) {
           status = 'high_discrepancy';
         } else if (absDifference > 0) {
           status = 'low_discrepancy';
@@ -552,17 +495,13 @@ const TwoWeekStockCheck = () => {
         }
       }
 
-      // Aggregate 2-Week movements
-      const totalInward = (mData1.produced + mData1.returned + mData1.qcAcceptedOrPurchase) + (mData2.produced + mData2.returned + mData2.qcAcceptedOrPurchase);
-      const totalOutward = (mData1.stockDeduction + mData1.replacement + mData1.damage + mData1.used) + (mData2.stockDeduction + mData2.replacement + mData2.damage + mData2.used);
+      const totalInward = m.produced + m.returned + m.qcAcceptedOrPurchase;
+      const totalOutward = m.stockDeduction + m.replacement + m.damage + m.used;
 
       return {
         ...item,
-        openingStock: openingW1, // Week 31 Opening (from Week 30 Expected)
-        expectedW1,
-        physicalW1,
-        openingW2, // Week 32 Opening (from Week 31 Expected)
-        expectedStock: expectedW2, // 2-Week final expected stock at end of Week 32
+        openingStock: opening,
+        expectedStock,
         physicalStock,
         hasPhysicalEntered,
         difference,
@@ -570,22 +509,22 @@ const TwoWeekStockCheck = () => {
         status,
         totalInward,
         totalOutward,
-        w1Movements: mData1,
-        w2Movements: mData2
+        movements: m
       };
     });
-  }, [stock, activeBlock, monthlyStockData, physicalInputs, b2bShipments, b2cShipments, damageRecords, returnRecords, qcRecords, purchaseRecords, replacementRecords, productionRecords, reworkRecords]);
+  }, [stock, activePeriod, monthlyStockData, physicalInputs, b2bShipments, b2cShipments, damageRecords, returnRecords, qcRecords, purchaseRecords, replacementRecords, productionRecords, reworkRecords]);
 
   // Overall Statistics
   const stats = useMemo(() => {
     const totalItems = biWeeklyData.length;
+    const enteredCount = biWeeklyData.filter(d => d.hasPhysicalEntered).length;
     const highCount = biWeeklyData.filter(d => d.status === 'high_discrepancy').length;
     const lowCount = biWeeklyData.filter(d => d.status === 'low_discrepancy').length;
     const matchCount = biWeeklyData.filter(d => d.status === 'match').length;
     const pendingCount = biWeeklyData.filter(d => d.status === 'pending').length;
     const totalVariance = biWeeklyData.reduce((acc, curr) => acc + (curr.hasPhysicalEntered ? curr.difference : 0), 0);
 
-    return { totalItems, highCount, lowCount, matchCount, pendingCount, totalVariance };
+    return { totalItems, enteredCount, highCount, lowCount, matchCount, pendingCount, totalVariance };
   }, [biWeeklyData]);
 
   // Filtered and Sorted list
@@ -605,6 +544,11 @@ const TwoWeekStockCheck = () => {
     }
 
     switch (filterMode) {
+      case 'entered':
+        result = result
+          .filter(item => item.hasPhysicalEntered)
+          .sort((a, b) => b.absDifference - a.absDifference);
+        break;
       case 'high':
         result = result
           .filter(item => item.hasPhysicalEntered && item.absDifference > 0)
@@ -624,12 +568,17 @@ const TwoWeekStockCheck = () => {
       case 'a_z':
         result.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         break;
-      default: // 'all'
+      case 'all':
         result.sort((a, b) => {
           if (a.hasPhysicalEntered && !b.hasPhysicalEntered) return -1;
           if (!a.hasPhysicalEntered && b.hasPhysicalEntered) return 1;
           return b.absDifference - a.absDifference;
         });
+        break;
+      default: // 'entered'
+        result = result
+          .filter(item => item.hasPhysicalEntered)
+          .sort((a, b) => b.absDifference - a.absDifference);
         break;
     }
 
@@ -650,27 +599,20 @@ const TwoWeekStockCheck = () => {
     }));
   };
 
-  // Save 2-Week Stock Check records to Firebase
+  // Save Stock Check records to Firebase
   const handleSaveAllPhysical = async () => {
     setIsSyncing(true);
     const toastId = toast.loading('Saving physical stock counts...');
     try {
-      const { w1Str, w2Str } = activeBlock;
+      const wStr = activePeriod.wStr;
       let count = 0;
 
       for (const item of biWeeklyData) {
         const val = physicalInputs[item.id] !== undefined ? physicalInputs[item.id] : item.physicalStock;
         
-        // Save Week 31 Expected & Opening
-        await saveMonthlyStock(w1Str, item.id, {
-          opening: item.openingStock,
-          expected: item.expectedW1
-        });
-
-        // Save Week 32 Physical if provided
         if (val !== '' && val !== undefined && val !== null) {
-          await saveMonthlyStock(w2Str, item.id, {
-            opening: item.openingW2,
+          await saveMonthlyStock(wStr, item.id, {
+            opening: item.openingStock,
             expected: item.expectedStock,
             physical: Number(val)
           });
@@ -691,20 +633,15 @@ const TwoWeekStockCheck = () => {
     const exportData = filteredData.map(item => ({
       'SKU / Product Name': item.name,
       'Category': item.category || 'N/A',
-      'Pack Size': item.packSize || 1,
-      [`Opening Stock (W${activeBlock.num1} Start)`]: item.openingStock,
-      [`Opening Stock (W${activeBlock.num2} Start)`]: item.openingW2,
-      '2-Wk Total Inward (+)': item.totalInward,
-      '2-Wk Total Outward (-)': item.totalOutward,
-      '2-Wk Expected Stock': item.expectedStock,
+      'Expected Stock': item.expectedStock,
       'Physical Stock': item.hasPhysicalEntered ? item.physicalStock : 'Pending Count',
       'Discrepancy (Diff)': item.hasPhysicalEntered ? item.difference : 'N/A',
       'Status': !item.hasPhysicalEntered ? 'Pending Entry' : (item.difference === 0 ? 'Match' : (item.difference > 0 ? 'Excess Stock' : 'Shortage'))
     }));
 
-    const fileName = `2_Week_Stock_Discrepancy_${activeBlock.key}.${format === 'excel' ? 'xlsx' : 'csv'}`;
+    const fileName = `Stock_Discrepancy_${activePeriod.key}.${format === 'excel' ? 'xlsx' : 'csv'}`;
     if (format === 'excel') {
-      exportToExcel(exportData, fileName, '2-Week Stock Discrepancy');
+      exportToExcel(exportData, fileName, 'Stock Discrepancy');
     } else {
       exportToCSV(exportData, fileName);
     }
@@ -720,7 +657,7 @@ const TwoWeekStockCheck = () => {
             <Scale size={20} />
           </div>
           <h1 className="text-base sm:text-lg font-bold tracking-tight text-white">
-            2-Week Stock Check & Discrepancy Analysis
+            Weekly Stock Discrepancy Analysis
           </h1>
         </div>
 
@@ -730,11 +667,11 @@ const TwoWeekStockCheck = () => {
             <select
               value={selectedBlockKey}
               onChange={(e) => setSelectedBlockKey(e.target.value)}
-              className="bg-transparent text-white text-xs font-semibold focus:outline-none cursor-pointer pr-2 max-w-[280px] sm:max-w-none truncate"
+              className="bg-transparent text-white text-xs font-semibold focus:outline-none cursor-pointer pr-2 max-w-[320px] sm:max-w-none truncate"
             >
-              {periodOptions.map(p => (
-                <option key={p.key} value={p.key} className="bg-slate-900 text-white">
-                  {p.label}
+              {periodOptions.map(opt => (
+                <option key={opt.key} value={opt.key} className="bg-slate-900 text-white py-1">
+                  {opt.label}
                 </option>
               ))}
             </select>
@@ -766,6 +703,12 @@ const TwoWeekStockCheck = () => {
           
           {/* Sorting & Filter Tabs */}
           <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl overflow-x-auto max-w-full scrollbar-none">
+            <button
+              onClick={() => setFilterMode('entered')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${filterMode === 'entered' ? 'bg-indigo-600 text-white shadow-sm' : 'text-indigo-700 hover:bg-indigo-50'}`}
+            >
+              <CheckCircle2 size={14} /> Physical Entered ({stats.enteredCount})
+            </button>
             <button
               onClick={() => setFilterMode('all')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${filterMode === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
@@ -845,20 +788,16 @@ const TwoWeekStockCheck = () => {
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200/80 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
                 <th className="py-3.5 px-4">Product / SKU</th>
-                <th className="py-3.5 px-3">Opening (W{activeBlock.num1})</th>
-                <th className="py-3.5 px-3 font-semibold text-indigo-700 bg-indigo-50/50">Opening (W{activeBlock.num2})</th>
-                <th className="py-3.5 px-3 text-emerald-600">2-Wk In (+)</th>
-                <th className="py-3.5 px-3 text-rose-600">2-Wk Out (-)</th>
-                <th className="py-3.5 px-3">Expected Stock (W{activeBlock.num2})</th>
-                <th className="py-3.5 px-4 w-36">Physical Stock</th>
-                <th className="py-3.5 px-4">Difference (Discrepancy)</th>
-                <th className="py-3.5 px-3 text-right">Actions</th>
+                <th className="py-3.5 px-4 text-center">Expected Stock</th>
+                <th className="py-3.5 px-4 text-center w-40">Physical Stock</th>
+                <th className="py-3.5 px-4 text-center">Difference (Discrepancy)</th>
+                <th className="py-3.5 px-4 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
               {filteredData.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={5} className="py-12 text-center text-slate-400">
                     <ClipboardList className="mx-auto mb-2 text-slate-300" size={32} />
                     No matching inventory items found for this filter.
                   </td>
@@ -880,37 +819,21 @@ const TwoWeekStockCheck = () => {
                         </div>
                       </td>
 
-                      <td className="py-3 px-3 font-semibold text-slate-600">
-                        {item.openingStock}
-                      </td>
-
-                      <td className="py-3 px-3 font-bold text-indigo-700 bg-indigo-50/30">
-                        {item.openingW2}
-                      </td>
-
-                      <td className="py-3 px-3 font-semibold text-emerald-600">
-                        +{item.totalInward}
-                      </td>
-
-                      <td className="py-3 px-3 font-semibold text-rose-600">
-                        -{item.totalOutward}
-                      </td>
-
-                      <td className="py-3 px-3 font-bold text-slate-800">
+                      <td className="py-3 px-4 text-center font-bold text-indigo-900 text-base">
                         {item.expectedStock}
                       </td>
 
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 text-center">
                         <input
                           type="number"
                           placeholder="Enter count..."
                           value={physicalInputs[item.id] !== undefined ? physicalInputs[item.id] : (item.hasPhysicalEntered ? item.physicalStock : '')}
                           onChange={(e) => handlePhysicalInputChange(item.id, e.target.value)}
-                          className="w-32 px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all placeholder:font-normal placeholder:text-slate-400"
+                          className="w-32 px-3 py-1.5 mx-auto block bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all placeholder:font-normal placeholder:text-slate-400"
                         />
                       </td>
 
-                      <td className="py-3 px-4">
+                      <td className="py-3 px-4 text-center">
                         {!isEntered ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-500 border border-slate-200">
                             <Clock size={12} /> Pending Entry
@@ -928,11 +851,11 @@ const TwoWeekStockCheck = () => {
                         )}
                       </td>
 
-                      <td className="py-3 px-3 text-right">
+                      <td className="py-3 px-4 text-right">
                         <button
                           onClick={() => setSelectedProductDetails(item)}
                           className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                          title="View 2-Week Movements"
+                          title="View Details"
                         >
                           <Eye size={18} />
                         </button>
@@ -953,7 +876,7 @@ const TwoWeekStockCheck = () => {
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
                 <h3 className="font-bold text-slate-900 text-lg">{selectedProductDetails.name}</h3>
-                <p className="text-xs text-slate-500">Itemized Chained Movements ({activeBlock.label})</p>
+                <p className="text-xs text-slate-500">Itemized Movement Details ({activePeriod.label})</p>
               </div>
               <button onClick={() => setSelectedProductDetails(null)} className="text-slate-400 hover:text-slate-600">
                 <X size={20} />
@@ -961,65 +884,42 @@ const TwoWeekStockCheck = () => {
             </div>
 
             <div className="space-y-3 text-xs sm:text-sm">
-              {/* Week 1 Details */}
-              <div className="bg-slate-50 p-3 rounded-xl space-y-1">
-                <div className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-1">
-                  Week {activeBlock.num1} ({activeBlock.m1Format} - {activeBlock.s1Format})
+              <div className="bg-slate-50 p-3.5 rounded-xl space-y-1.5 border border-slate-200">
+                <div className="font-bold text-slate-700 text-xs uppercase tracking-wider mb-2">
+                  {activePeriod.label}
                 </div>
                 <div className="flex justify-between text-slate-600">
-                  <span>Opening Stock (From Week {activeBlock.num1 - 1} Expected)</span>
+                  <span>Opening Stock</span>
                   <span className="font-semibold text-slate-800">{selectedProductDetails.openingStock}</span>
                 </div>
                 <div className="flex justify-between text-emerald-600">
-                  <span>Inward (+)</span>
-                  <span className="font-semibold">+{selectedProductDetails.w1Movements.produced + selectedProductDetails.w1Movements.returned + selectedProductDetails.w1Movements.qcAcceptedOrPurchase}</span>
+                  <span>Total Inward (+)</span>
+                  <span className="font-semibold">+{(selectedProductDetails.movements?.produced || 0) + (selectedProductDetails.movements?.returned || 0) + (selectedProductDetails.movements?.qcAcceptedOrPurchase || 0)}</span>
                 </div>
                 <div className="flex justify-between text-rose-600">
-                  <span>Outward (-)</span>
-                  <span className="font-semibold">-{selectedProductDetails.w1Movements.stockDeduction + selectedProductDetails.w1Movements.replacement + selectedProductDetails.w1Movements.damage + selectedProductDetails.w1Movements.used}</span>
+                  <span>Total Outward (-)</span>
+                  <span className="font-semibold">-{(selectedProductDetails.movements?.stockDeduction || 0) + (selectedProductDetails.movements?.replacement || 0) + (selectedProductDetails.movements?.damage || 0) + (selectedProductDetails.movements?.used || 0)}</span>
                 </div>
-                <div className="flex justify-between font-bold text-slate-900 pt-1 border-t border-slate-200">
-                  <span>Week {activeBlock.num1} Expected Stock</span>
-                  <span>{selectedProductDetails.expectedW1}</span>
+                <div className="flex justify-between font-bold text-slate-900 pt-2 border-t border-slate-200">
+                  <span>Expected Stock</span>
+                  <span className="text-indigo-900 font-extrabold">{selectedProductDetails.expectedStock}</span>
                 </div>
               </div>
 
-              {/* Week 2 Details */}
-              <div className="bg-indigo-50/70 border border-indigo-200 p-3 rounded-xl space-y-1">
-                <div className="font-bold text-indigo-900 text-xs uppercase tracking-wider mb-1 flex items-center justify-between">
-                  <span>Week {activeBlock.num2} ({activeBlock.m2Format} - {activeBlock.s2Format})</span>
-                  <span className="text-[10px] bg-indigo-200 text-indigo-800 px-2 py-0.5 rounded-full font-bold">Week {activeBlock.num2}</span>
-                </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Opening Stock (Week {activeBlock.num1} Expected)</span>
-                  <span className="font-bold text-indigo-900">{selectedProductDetails.openingW2}</span>
-                </div>
-                <div className="flex justify-between text-emerald-600">
-                  <span>Inward (+)</span>
-                  <span className="font-semibold">+{selectedProductDetails.w2Movements.produced + selectedProductDetails.w2Movements.returned + selectedProductDetails.w2Movements.qcAcceptedOrPurchase}</span>
-                </div>
-                <div className="flex justify-between text-rose-600">
-                  <span>Outward (-)</span>
-                  <span className="font-semibold">-{selectedProductDetails.w2Movements.stockDeduction + selectedProductDetails.w2Movements.replacement + selectedProductDetails.w2Movements.damage + selectedProductDetails.w2Movements.used}</span>
-                </div>
-                <div className="flex justify-between font-bold text-indigo-950 pt-1 border-t border-indigo-200">
-                  <span>Final Expected Stock (W{activeBlock.num2})</span>
-                  <span>{selectedProductDetails.expectedStock}</span>
-                </div>
-              </div>
-
-              <div className="flex justify-between py-2 bg-slate-900 text-white px-3 rounded-xl font-bold">
+              <div className="flex justify-between py-2.5 bg-slate-900 text-white px-3.5 rounded-xl font-bold">
                 <span>Recorded Physical Stock</span>
                 <span>{selectedProductDetails.hasPhysicalEntered ? selectedProductDetails.physicalStock : 'Pending Count'}</span>
               </div>
 
               {selectedProductDetails.hasPhysicalEntered ? (
-                <div className="flex justify-between py-2 bg-rose-100 text-rose-800 px-3 rounded-xl font-bold">
-                  <span>Total 2-Week Discrepancy</span>
-                  <span>{selectedProductDetails.difference}</span>
+                <div className={`flex justify-between py-2.5 px-3.5 rounded-xl font-bold ${
+                  selectedProductDetails.difference === 0 ? 'bg-emerald-100 text-emerald-800' : (selectedProductDetails.difference < 0 ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800')
+                }`}>
+                  <span>Discrepancy (Difference)</span>
+                  <span>{selectedProductDetails.difference > 0 ? `+${selectedProductDetails.difference}` : selectedProductDetails.difference}</span>
                 </div>
               ) : (
-                <div className="flex justify-between py-2 bg-slate-100 text-slate-600 px-3 rounded-xl font-medium">
+                <div className="flex justify-between py-2.5 bg-slate-100 text-slate-600 px-3.5 rounded-xl font-medium">
                   <span>Status</span>
                   <span>Pending Entry</span>
                 </div>
