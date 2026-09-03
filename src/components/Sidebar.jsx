@@ -23,10 +23,10 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
     { name: 'Damage Tracking', path: '/damage', icon: <AlertTriangle size={20} /> },
     { name: 'Reorder Points', path: '/rop', icon: <Package size={20} /> },
     { name: 'Stock Check', path: '/stock', icon: <ClipboardList size={20} /> },
-    { name: '2-Week Discrepancy', path: '/two-week-stock', icon: <Scale size={20} /> },
+    { name: 'Weekly Discrepancy', path: '/two-week-stock', icon: <Scale size={20} /> },
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
   ].filter(link => {
-    if ((link.name === 'Stock Check' || link.name === '2-Week Discrepancy') && currentUser?.role === 'staff') return false;
+    if ((link.name === 'Stock Check' || link.name === 'Weekly Discrepancy') && currentUser?.role === 'staff') return false;
     return true;
   });
 
