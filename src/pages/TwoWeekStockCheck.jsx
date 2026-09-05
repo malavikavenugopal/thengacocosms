@@ -8,6 +8,9 @@ import {
 } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import { exportToExcel, exportToCSV } from '../utils/exportUtils';
+import ExpectedStockCorrectionModal from '../components/ExpectedStockCorrectionModal';
+import toast from 'react-hot-toast';
+import Swal from 'sweetalert2';
 const isOptionMatch = (n1, n2) => {
   if (!n1 || !n2 || n2 === 'None') return false;
   const clean1 = n1.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -32,7 +35,9 @@ const TwoWeekStockCheck = () => {
     monthlyStockData,
     saveMonthlyStock,
     productionRecords,
-    reworkRecords
+    reworkRecords,
+    expectedStockRequests = [],
+    approveExpectedStockRequest
   } = useGlobalState();
 
   // Date helper functions
@@ -151,13 +156,66 @@ const TwoWeekStockCheck = () => {
   const [physicalInputs, setPhysicalInputs] = useState({});
   const [selectedProductDetails, setSelectedProductDetails] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
 
-  // Sync selected block key if periodOptions updates
+  // Sync selected block key if periodOptions updates & clear local draft inputs on week change
   React.useEffect(() => {
+    setPhysicalInputs({});
     if (periodOptions.length > 0 && (!selectedBlockKey || !periodOptions.some(p => p.key === selectedBlockKey))) {
       setSelectedBlockKey(periodOptions[0].key);
     }
   }, [periodOptions, selectedBlockKey]);
+
+  // Handle direct approval link from email (?approveRequestId=...)
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const reqId = params.get('approveRequestId');
+    if (!reqId || !expectedStockRequests || expectedStockRequests.length === 0) return;
+
+    const targetReq = expectedStockRequests.find(r => r.id === reqId);
+    if (!targetReq) return;
+
+    if (targetReq.status === 'approved') {
+      toast.success('This stock correction request has already been approved and applied!');
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+
+    if (targetReq.status === 'pending') {
+      Swal.fire({
+        title: 'Approve Stock Correction Request?',
+        html: `
+          <div style="text-align: left; font-size: 13px; color: #334155;">
+            <p style="margin-bottom: 8px;"><b>Period:</b> ${targetReq.period}</p>
+            <p style="margin-bottom: 8px;"><b>Requested By:</b> ${targetReq.requestedBy || 'Staff'}</p>
+            <p style="margin-bottom: 12px;"><b>Reason:</b> ${targetReq.reason || 'Correction'}</p>
+            <p style="font-weight: bold; color: #4f46e5; margin-bottom: 6px;">Products to be corrected (${targetReq.items?.length || 0}):</p>
+            <ul style="max-height: 150px; overflow-y: auto; background: #f8fafc; padding: 10px 15px; border-radius: 8px; font-size: 12px; margin: 0;">
+              ${(targetReq.items || []).map(i => `<li><b>${i.productName}</b>: ${i.currentExpected} &rarr; <b style="color: #059669;">${i.proposedExpected}</b></li>`).join('')}
+            </ul>
+          </div>
+        `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#059669',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'Yes, Approve & Apply Stock',
+        cancelButtonText: 'Review Later'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          approveExpectedStockRequest(reqId).then(() => {
+            toast.success('Expected stock corrections approved & applied to stock!');
+            window.history.replaceState({}, '', window.location.pathname);
+          }).catch(err => {
+            toast.error('Approval failed: ' + err.message);
+          });
+        } else {
+          setIsCorrectionModalOpen(true);
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      });
+    }
+  }, [expectedStockRequests, approveExpectedStockRequest]);
 
   // Selected weekly period
   const activePeriod = useMemo(() => {
@@ -423,8 +481,14 @@ const TwoWeekStockCheck = () => {
 
   // Compute exact Expected Stock for any week as calculated in the Weekly Report page
   const getWeeklyReportExpected = (periodStr, itemId, itemRef) => {
+    const approvedReq = expectedStockRequests.find(r => r.status === 'approved' && r.period === periodStr && r.items?.some(i => i.productId === itemId));
+    const approvedItem = approvedReq?.items?.find(i => i.productId === itemId);
+    if (approvedItem && approvedItem.proposedExpected !== undefined && approvedItem.proposedExpected !== '') {
+      return Number(approvedItem.proposedExpected);
+    }
+
     const doc = monthlyStockData.find(d => d.month === periodStr && d.productId === itemId);
-    if (doc?.expected !== undefined && doc?.expected !== '') {
+    if (doc?.isCorrected && doc?.expected !== undefined && doc?.expected !== '') {
       return Number(doc.expected);
     }
 
@@ -433,11 +497,11 @@ const TwoWeekStockCheck = () => {
     const prevDoc = monthlyStockData.find(d => d.month === prevPeriodStr && d.productId === itemId);
 
     let opening = 0;
-    if (doc?.opening !== undefined) {
+    if (doc?.opening !== undefined && doc?.opening !== '') {
       opening = Number(doc.opening);
     } else if (prevDoc?.physical !== undefined && prevDoc.physical !== '') {
       opening = Number(prevDoc.physical);
-    } else if (prevDoc?.expected !== undefined && prevDoc.expected !== '') {
+    } else if (prevDoc?.isCorrected && prevDoc?.expected !== undefined && prevDoc.expected !== '') {
       opening = Number(prevDoc.expected);
     } else {
       opening = Number(itemRef.openingStock) || 0;
@@ -474,19 +538,29 @@ const TwoWeekStockCheck = () => {
       const opening = getWeeklyReportExpected(prevWStr, item.id, item);
       const m = mData[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
 
-      const expectedStock = calculateExpected(
-        opening,
-        doc?.in || 0,
-        m.purchased,
-        m.produced,
-        m.returned,
-        m.stockDeduction,
-        m.replacement,
-        m.damage,
-        m.rejected,
-        m.used,
-        m.qcAcceptedOrPurchase
-      );
+      const approvedReq = expectedStockRequests.find(r => r.status === 'approved' && r.period === wStr && r.items?.some(i => i.productId === item.id));
+      const approvedItem = approvedReq?.items?.find(i => i.productId === item.id);
+
+      let expectedStock;
+      if (approvedItem && approvedItem.proposedExpected !== undefined && approvedItem.proposedExpected !== '') {
+        expectedStock = Number(approvedItem.proposedExpected);
+      } else if (doc?.isCorrected && doc?.expected !== undefined && doc?.expected !== '') {
+        expectedStock = Number(doc.expected);
+      } else {
+        expectedStock = calculateExpected(
+          opening,
+          doc?.in || 0,
+          m.purchased,
+          m.produced,
+          m.returned,
+          m.stockDeduction,
+          m.replacement,
+          m.damage,
+          m.rejected,
+          m.used,
+          m.qcAcceptedOrPurchase
+        );
+      }
 
       const hasInput = physicalInputs[item.id] !== undefined && physicalInputs[item.id] !== '';
       const hasSaved = doc?.physical !== undefined && doc?.physical !== '';
@@ -529,7 +603,7 @@ const TwoWeekStockCheck = () => {
         movements: m
       };
     });
-  }, [stock, activePeriod, monthlyStockData, physicalInputs, b2bShipments, b2cShipments, damageRecords, returnRecords, qcRecords, purchaseRecords, replacementRecords, productionRecords, reworkRecords]);
+  }, [stock, activePeriod, monthlyStockData, expectedStockRequests, physicalInputs, b2bShipments, b2cShipments, damageRecords, returnRecords, qcRecords, purchaseRecords, replacementRecords, productionRecords, reworkRecords]);
 
   // Overall Statistics
   const stats = useMemo(() => {
@@ -608,24 +682,32 @@ const TwoWeekStockCheck = () => {
     return ['all', ...Array.from(set)];
   }, [stock]);
 
-  // Handle Physical Stock input change
-  const handlePhysicalInputChange = (productId, val) => {
+  // Handle Physical Stock input change - automatically saves to Firebase in real-time
+  const handlePhysicalInputChange = (productId, val, expectedStock, openingStock) => {
     setPhysicalInputs(prev => ({
       ...prev,
       [productId]: val
     }));
+
+    const wStr = activePeriod?.wStr || selectedBlockKey;
+    const numVal = val === '' || val === null || val === undefined ? '' : Number(val);
+    
+    saveMonthlyStock(wStr, productId, {
+      opening: openingStock !== undefined ? openingStock : 0,
+      expected: expectedStock !== undefined ? expectedStock : 0,
+      physical: numVal
+    });
   };
 
-  // Save Stock Check records to Firebase
+  // Manual trigger if user wants to sync all current inputs
   const handleSaveAllPhysical = async () => {
     setIsSyncing(true);
-    const toastId = toast.loading('Saving physical stock counts...');
     try {
-      const wStr = activePeriod.wStr;
+      const wStr = activePeriod?.wStr || selectedBlockKey;
       let count = 0;
 
       for (const item of biWeeklyData) {
-        const val = physicalInputs[item.id] !== undefined ? physicalInputs[item.id] : item.physicalStock;
+        const val = physicalInputs[item.id] !== undefined ? physicalInputs[item.id] : (item.hasPhysicalEntered ? item.physicalStock : '');
         
         if (val !== '' && val !== undefined && val !== null) {
           await saveMonthlyStock(wStr, item.id, {
@@ -637,9 +719,9 @@ const TwoWeekStockCheck = () => {
         }
       }
 
-      toast.success(`Saved physical stock counts for ${count} items!`, { id: toastId });
+      toast.success(`All ${count} stock counts are saved!`);
     } catch (err) {
-      toast.error('Failed to save stock records: ' + err.message, { id: toastId });
+      toast.error('Failed to save stock records: ' + err.message);
     } finally {
       setIsSyncing(false);
     }
@@ -695,12 +777,16 @@ const TwoWeekStockCheck = () => {
           </div>
 
           <Button
-            onClick={handleSaveAllPhysical}
-            disabled={isSyncing}
+            onClick={() => setIsCorrectionModalOpen(true)}
             className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs h-9 px-3.5 rounded-xl shadow-sm flex items-center gap-1.5 shrink-0"
           >
-            <Save size={14} />
-            <span>Save Stock</span>
+            <AlertTriangle size={14} className="text-amber-300" />
+            <span>Correct Expected Stock</span>
+            {expectedStockRequests.filter(r => r.status === 'pending').length > 0 && (
+              <span className="bg-amber-400 text-slate-900 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ml-0.5">
+                {expectedStockRequests.filter(r => r.status === 'pending').length}
+              </span>
+            )}
           </Button>
 
           <Button
@@ -845,7 +931,7 @@ const TwoWeekStockCheck = () => {
                           type="number"
                           placeholder="Enter count..."
                           value={physicalInputs[item.id] !== undefined ? physicalInputs[item.id] : (item.hasPhysicalEntered ? item.physicalStock : '')}
-                          onChange={(e) => handlePhysicalInputChange(item.id, e.target.value)}
+                          onChange={(e) => handlePhysicalInputChange(item.id, e.target.value, item.expectedStock, item.openingStock)}
                           className="w-32 px-3 py-1.5 mx-auto block bg-slate-50 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 text-center focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all placeholder:font-normal placeholder:text-slate-400"
                         />
                       </td>
@@ -951,6 +1037,14 @@ const TwoWeekStockCheck = () => {
           </div>
         </div>
       )}
+
+      {/* Expected Stock Correction & Approval Modal */}
+      <ExpectedStockCorrectionModal
+        isOpen={isCorrectionModalOpen}
+        onClose={() => setIsCorrectionModalOpen(false)}
+        activePeriod={activePeriod?.wStr || selectedBlockKey}
+        itemsList={biWeeklyData}
+      />
     </div>
   );
 };

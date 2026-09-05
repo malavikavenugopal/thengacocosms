@@ -1,13 +1,95 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { Menu, Search, User, LogOut } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
+import Swal from 'sweetalert2';
+import toast from 'react-hot-toast';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 const Layout = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { logout, currentUser } = useGlobalState();
+  const { logout, currentUser, expectedStockRequests = [], approveExpectedStockRequest } = useGlobalState();
   const location = useLocation();
+
+  // Listen for approveRequestId query parameter globally across all routes
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const reqId = params.get('approveRequestId');
+    if (!reqId) return;
+
+    let isHandled = false;
+
+    const handleApprovalFlow = async () => {
+      try {
+        let targetReq = expectedStockRequests.find(r => r.id === reqId);
+        if (!targetReq) {
+          const snap = await getDoc(doc(db, 'expectedStockRequests', reqId));
+          if (snap.exists()) {
+            targetReq = { id: snap.id, ...snap.data() };
+          }
+        }
+
+        if (!targetReq) {
+          toast.error('Stock correction request not found.');
+          window.history.replaceState({}, '', window.location.pathname);
+          return;
+        }
+
+        if (targetReq.status === 'approved') {
+          toast.success('This stock correction request has already been approved and applied!');
+          window.history.replaceState({}, '', window.location.pathname);
+          return;
+        }
+
+        if (targetReq.status === 'pending' && !isHandled) {
+          isHandled = true;
+          const itemsList = targetReq.items || [];
+          const itemsHtml = itemsList.map(i => 
+            `<li style="margin-bottom: 6px;"><b>${i.productName}</b>: Current <span style="color:#dc2626;font-weight:bold">${i.currentExpected}</span> &rarr; Proposed <b style="color: #059669;">${i.proposedExpected}</b> (${i.proposedExpected - i.currentExpected > 0 ? `+${i.proposedExpected - i.currentExpected}` : i.proposedExpected - i.currentExpected})</li>`
+          ).join('');
+
+          Swal.fire({
+            title: 'Approve Stock Correction Request?',
+            html: `
+              <div style="text-align: left; font-size: 13px; color: #334155;">
+                <p style="margin-bottom: 8px;"><b>Period:</b> ${targetReq.period}</p>
+                <p style="margin-bottom: 8px;"><b>Requested By:</b> ${targetReq.requestedBy || 'Staff'}</p>
+                <p style="margin-bottom: 12px;"><b>Reason:</b> ${targetReq.reason || 'Stock Correction'}</p>
+                <p style="font-weight: bold; color: #4f46e5; margin-bottom: 6px;">Products to be corrected (${itemsList.length}):</p>
+                <ul style="max-height: 180px; overflow-y: auto; background: #f8fafc; padding: 10px 15px; border-radius: 8px; font-size: 12px; margin: 0; border: 1px solid #e2e8f0;">
+                  ${itemsHtml}
+                </ul>
+              </div>
+            `,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#059669',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Yes, Approve & Apply Stock',
+            cancelButtonText: 'Review Later'
+          }).then((result) => {
+            if (result.isConfirmed) {
+              toast.promise(
+                approveExpectedStockRequest(reqId),
+                {
+                  loading: 'Applying stock correction...',
+                  success: 'Expected stock corrections approved & applied to stock!',
+                  error: (err) => 'Approval failed: ' + err.message
+                }
+              );
+            }
+            window.history.replaceState({}, '', window.location.pathname);
+          });
+        }
+      } catch (err) {
+        console.error("Error handling approval URL:", err);
+      }
+    };
+
+    handleApprovalFlow();
+  }, [location.search, expectedStockRequests, approveExpectedStockRequest]);
 
   const getPageTitle = () => {
     switch (location.pathname) {

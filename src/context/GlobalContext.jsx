@@ -140,10 +140,11 @@ export const GlobalProvider = ({ children }) => {
   const [stores, setStores] = useState([]);
   const [storeSales, setStoreSales] = useState([]);
   const [storeReminders, setStoreReminders] = useState([]);
+  const [expectedStockRequests, setExpectedStockRequests] = useState([]);
   const [standardRecipients, setStandardRecipients] = useState([
     { email: 'sudha.thenga@gmail.com', label: 'Sudha' },
     { email: 'sumitha@thengacoco.com', label: 'Sumitha' },
-    { email: 'maria@thengacoco.com', label: 'Maria' },
+    { email: 'malavikavenu914@gmail.com', label: 'Malavika' },
     { email: 'dhanya.thenga@gmail.com', label: 'Dhanya' }
   ]);
   const [currentUser, setCurrentUser] = useState(null);
@@ -523,6 +524,9 @@ export const GlobalProvider = ({ children }) => {
         setStandardRecipients(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
       }
     });
+    const unsubExpectedRequests = onSnapshot(collection(db, 'expectedStockRequests'), (snapshot) => {
+      setExpectedStockRequests(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
 
     // Fallback: If data takes too long (e.g. empty database), stop loading after 3 seconds
     const timeout = setTimeout(() => setLoading(false), 3000);
@@ -532,7 +536,7 @@ export const GlobalProvider = ({ children }) => {
       unsubStock(); unsubB2B(); unsubB2C(); unsubDamage();
       unsubReturns(); unsubQC(); unsubStaff(); unsubChannels(); unsubCouriers();
       unsubMonthly(); unsubPurchases(); unsubVendors(); unsubReplacements(); unsubProduction(); unsubRework(); unsubAmazonReturns();
-      unsubStores(); unsubStoreSales(); unsubStoreReminders(); unsubStandardRecipients();
+      unsubStores(); unsubStoreSales(); unsubStoreReminders(); unsubStandardRecipients(); unsubExpectedRequests();
     };
   }, [currentUser]);
 
@@ -1114,6 +1118,54 @@ export const GlobalProvider = ({ children }) => {
   const updateAmazonReturnRecord = async (id, record) => { await updateDoc(doc(db, 'amazonReturnRecords', id), record); };
   const deleteAmazonReturnRecord = async (id) => { await deleteDoc(doc(db, 'amazonReturnRecords', id)); };
 
+  // Expected Stock Correction Requests
+  const addExpectedStockRequest = async (requestData) => {
+    const finalized = {
+      ...requestData,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    const docRef = await addDoc(collection(db, 'expectedStockRequests'), finalized);
+    return docRef.id;
+  };
+
+  const approveExpectedStockRequest = async (requestId) => {
+    let req = expectedStockRequests.find(r => r.id === requestId);
+    if (!req) {
+      const snap = await getDoc(doc(db, 'expectedStockRequests', requestId));
+      if (snap.exists()) {
+        req = { id: snap.id, ...snap.data() };
+      }
+    }
+    if (!req) throw new Error("Correction request not found.");
+
+    for (const item of (req.items || [])) {
+      const docId = `${req.period}_${item.productId}`;
+      await setDoc(doc(db, 'monthlyStockData', docId), {
+        expected: Number(item.proposedExpected),
+        month: req.period,
+        productId: item.productId,
+        isCorrected: true
+      }, { merge: true });
+    }
+    await updateDoc(doc(db, 'expectedStockRequests', requestId), {
+      status: 'approved',
+      approvedAt: new Date().toISOString()
+    });
+  };
+
+  const rejectExpectedStockRequest = async (requestId, reason = '') => {
+    await updateDoc(doc(db, 'expectedStockRequests', requestId), {
+      status: 'rejected',
+      rejectedReason: reason,
+      rejectedAt: new Date().toISOString()
+    });
+  };
+
+  const deleteExpectedStockRequest = async (requestId) => {
+    await deleteDoc(doc(db, 'expectedStockRequests', requestId));
+  };
+
   return (
     <GlobalContext.Provider value={{
       stock, addSKU, updateSKU, deleteSKU,
@@ -1135,6 +1187,7 @@ export const GlobalProvider = ({ children }) => {
       storeSales, addStoreSale, updateStoreSale, deleteStoreSale,
       storeReminders, addStoreReminder,
       standardRecipients, addStandardRecipient, updateStandardRecipient, deleteStandardRecipient,
+      expectedStockRequests, addExpectedStockRequest, approveExpectedStockRequest, rejectExpectedStockRequest, deleteExpectedStockRequest,
       monthlyStockData, saveMonthlyStock: async (month, productId, updates) => {
         const id = `${month}_${productId}`;
         await setDoc(doc(db, 'monthlyStockData', id), { ...updates, month, productId }, { merge: true });

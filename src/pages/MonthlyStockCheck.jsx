@@ -1,8 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Card, Button } from '../components/ui';
-import { Search, DownloadCloud, Eye, Calendar, ArrowRightLeft, X, ShoppingCart, MapPin, ClipboardList, History, Zap, Package, TrendingUp, TrendingDown, Layers, Save, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import { Search, DownloadCloud, Eye, Calendar, ArrowRightLeft, X, ShoppingCart, MapPin, ClipboardList, History, Zap, Package, TrendingUp, TrendingDown, Layers, Save, CheckCircle2, AlertTriangle, Clock, RefreshCw } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import { exportFormattedStockCheck } from '../utils/exportUtils';
+import ExpectedStockCorrectionModal from '../components/ExpectedStockCorrectionModal';
+import toast from 'react-hot-toast';
+import Swal from 'sweetalert2';
+
 const isOptionMatch = (n1, n2) => {
   if (!n1 || !n2 || n2 === 'None') return false;
   const clean1 = n1.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -27,12 +31,15 @@ const MonthlyStockCheck = () => {
     monthlyStockData,
     saveMonthlyStock,
     productionRecords,
-    reworkRecords
+    reworkRecords,
+    expectedStockRequests = [],
+    approveExpectedStockRequest
   } = useGlobalState();
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProductDetails, setSelectedProductDetails] = useState(null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc' or 'desc'
 
   const getWeekStr = (date) => {
@@ -652,6 +659,12 @@ const MonthlyStockCheck = () => {
     const prevPeriodStr = getPrevPeriodStr(periodStr);
     const prevDoc = monthlyStockData.find(d => d.month === prevPeriodStr && d.productId === itemId);
 
+    const prevApprovedReq = expectedStockRequests.find(r => r.status === 'approved' && r.period === prevPeriodStr && r.items?.some(i => i.productId === itemId));
+    const prevApprovedItem = prevApprovedReq?.items?.find(i => i.productId === itemId);
+    if (prevApprovedItem && prevApprovedItem.proposedExpected !== undefined && prevApprovedItem.proposedExpected !== '') {
+      return Number(prevApprovedItem.proposedExpected);
+    }
+
     if (prevDoc?.expected !== undefined && prevDoc?.expected !== '') {
       return Number(prevDoc.expected);
     }
@@ -674,22 +687,136 @@ const MonthlyStockCheck = () => {
     );
   };
 
+  const handleResetExpectedStock = async () => {
+    const confirm = await Swal.fire({
+      title: 'Reset & Recalculate Expected Stock?',
+      text: `This will recalculate expected stock for ALL products in ${activePeriod} based strictly on Opening Stock and all recorded movements (Stock In, Purchases/QC, Produced, Returns, Dispatches, Damage, Rework).`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#f59e0b',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Yes, Recalculate & Reset',
+      cancelButtonText: 'Cancel'
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    const toastId = toast.loading('Recalculating expected stock for all products...');
+    try {
+      for (const item of stock) {
+        if (item.isComposite) continue;
+        const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
+        const opening = getEffectiveOpeningStock(activePeriod, item.id, item);
+        const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
+        const calculatedExpected = calculateExpected(
+          opening,
+          mData.in || 0,
+          m.purchased,
+          m.produced,
+          m.returned,
+          m.stockDeduction,
+          m.replacement,
+          m.damage,
+          m.rejected,
+          m.used,
+          m.qcAcceptedOrPurchase
+        );
+        await saveMonthlyStock(activePeriod, item.id, { expected: calculatedExpected, isCorrected: false });
+      }
+      toast.success(`Expected stock reset & recalculated based on all calculations!`, { id: toastId });
+    } catch (err) {
+      console.error("Reset expected stock error:", err);
+      toast.error('Failed to reset expected stock: ' + err.message, { id: toastId });
+    }
+  };
+
+  const getItemExpectedStock = (item, periodStr = activePeriod) => {
+    const approvedReq = expectedStockRequests.find(r => r.status === 'approved' && r.period === periodStr && r.items?.some(i => i.productId === item.id));
+    const approvedItem = approvedReq?.items?.find(i => i.productId === item.id);
+    if (approvedItem && approvedItem.proposedExpected !== undefined && approvedItem.proposedExpected !== '') {
+      return Number(approvedItem.proposedExpected);
+    }
+
+    const mData = monthlyStockData.find(d => d.month === periodStr && d.productId === item.id) || {};
+    if (mData.isCorrected && mData.expected !== undefined && mData.expected !== '') {
+      return Number(mData.expected);
+    }
+
+    const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
+    const opening = getEffectiveOpeningStock(periodStr, item.id, item);
+    return calculateExpected(opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
+  };
+
   useEffect(() => {
     if (!monthlyMovements || stock.length === 0) return;
     const sync = async () => {
       stock.forEach(item => {
         if (item.isComposite) return;
         const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
+        const hasApprovedReq = expectedStockRequests.some(r => r.status === 'approved' && r.period === activePeriod && r.items?.some(i => i.productId === item.id));
+        if (hasApprovedReq || mData.isCorrected) return;
+
         const opening = getEffectiveOpeningStock(activePeriod, item.id, item);
         const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
         const expected = calculateExpected(opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
         if (mData.expected !== expected) {
-          saveMonthlyStock(activePeriod, item.id, { expected });
+          saveMonthlyStock(activePeriod, item.id, { expected, isCorrected: false });
         }
       });
     };
     sync();
-  }, [monthlyMovements, activePeriod, monthlyStockData, stock]);
+  }, [monthlyMovements, activePeriod, monthlyStockData, stock, expectedStockRequests]);
+
+  // Handle direct approval link from email (?approveRequestId=...)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const reqId = params.get('approveRequestId');
+    if (!reqId || !expectedStockRequests || expectedStockRequests.length === 0) return;
+
+    const targetReq = expectedStockRequests.find(r => r.id === reqId);
+    if (!targetReq) return;
+
+    if (targetReq.status === 'approved') {
+      toast.success('This stock correction request has already been approved and applied!');
+      window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+
+    if (targetReq.status === 'pending') {
+      Swal.fire({
+        title: 'Approve Stock Correction Request?',
+        html: `
+          <div style="text-align: left; font-size: 13px; color: #334155;">
+            <p style="margin-bottom: 8px;"><b>Period:</b> ${targetReq.period}</p>
+            <p style="margin-bottom: 8px;"><b>Requested By:</b> ${targetReq.requestedBy || 'Staff'}</p>
+            <p style="margin-bottom: 12px;"><b>Reason:</b> ${targetReq.reason || 'Correction'}</p>
+            <p style="font-weight: bold; color: #4f46e5; margin-bottom: 6px;">Products to be corrected (${targetReq.items?.length || 0}):</p>
+            <ul style="max-height: 150px; overflow-y: auto; background: #f8fafc; padding: 10px 15px; border-radius: 8px; font-size: 12px; margin: 0;">
+              ${(targetReq.items || []).map(i => `<li><b>${i.productName}</b>: ${i.currentExpected} &rarr; <b style="color: #059669;">${i.proposedExpected}</b></li>`).join('')}
+            </ul>
+          </div>
+        `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#059669',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'Yes, Approve & Apply Stock',
+        cancelButtonText: 'Review Later'
+      }).then((result) => {
+        if (result.isConfirmed) {
+          approveExpectedStockRequest(reqId).then(() => {
+            toast.success('Expected stock corrections approved & applied to stock!');
+            window.history.replaceState({}, '', window.location.pathname);
+          }).catch(err => {
+            toast.error('Approval failed: ' + err.message);
+          });
+        } else {
+          setIsCorrectionModalOpen(true);
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      });
+    }
+  }, [expectedStockRequests, approveExpectedStockRequest]);
 
   const handleCarryForward = async () => {
     setIsCarryingForward(true);
@@ -728,8 +855,7 @@ const MonthlyStockCheck = () => {
     
     filteredStock.forEach(item => {
       const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
-      const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-      const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
+      const expected = getItemExpectedStock(item);
       
       const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : null;
       
@@ -748,7 +874,24 @@ const MonthlyStockCheck = () => {
     highDifference.sort((a, b) => b.absDiff - a.absDiff);
 
     return { perfectMatch, highDifference: highDifference.slice(0, 10), notAudited };
-  }, [filteredStock, monthlyStockData, activePeriod, monthlyMovements]);
+  }, [filteredStock, monthlyStockData, activePeriod, monthlyMovements, expectedStockRequests]);
+
+  const allStockItemsWithExpected = useMemo(() => {
+    return stock.filter(item => !item.isComposite).map(item => ({
+      ...item,
+      expectedStock: getItemExpectedStock(item)
+    }));
+  }, [stock, monthlyStockData, activePeriod, monthlyMovements, expectedStockRequests]);
+
+  const stockItemsWithExpected = useMemo(() => {
+    return filteredStock.map(item => {
+      const expectedStock = getItemExpectedStock(item);
+      return {
+        ...item,
+        expectedStock
+      };
+    });
+  }, [filteredStock, monthlyStockData, activePeriod, monthlyMovements, expectedStockRequests]);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -756,7 +899,7 @@ const MonthlyStockCheck = () => {
       const dataToExport = stock.filter(item => !item.isComposite).map(item => {
         const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
         const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, dispatched: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-        const expected = calculateExpected(mData.opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
+        const expected = getItemExpectedStock(item);
         
         const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : null;
         const diff = physical !== null ? physical - expected : -expected;
@@ -867,6 +1010,19 @@ const MonthlyStockCheck = () => {
           </button>
 
           {/* Action Buttons */}
+          <Button onClick={() => setIsCorrectionModalOpen(true)} className="whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white font-bold flex items-center gap-1.5 shadow-sm">
+            <AlertTriangle size={14} className="text-amber-300" /> <span>Correct Expected Stock</span>
+            {expectedStockRequests.filter(r => r.status === 'pending').length > 0 && (
+              <span className="bg-amber-400 text-slate-900 px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ml-0.5">
+                {expectedStockRequests.filter(r => r.status === 'pending').length}
+              </span>
+            )}
+          </Button>
+
+          <Button onClick={handleResetExpectedStock} variant="secondary" className="whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold flex items-center gap-1.5 shadow-sm" title="Recalculate and reset expected stock for all products based on all movements">
+            <RefreshCw size={14} className="text-amber-600" /> <span>Reset Expected Stock</span>
+          </Button>
+
           <Button onClick={handleCarryForward} variant="secondary" loading={isCarryingForward} className="whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0" title="Carry forward expected stock to next period">
             <ArrowRightLeft size={14} className="mr-1.5" /> <span>Carry Expected</span>
           </Button>
@@ -909,7 +1065,7 @@ const MonthlyStockCheck = () => {
                 const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
                 const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
                 const opening = getEffectiveOpeningStock(activePeriod, item.id, item);
-                const expected = calculateExpected(opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
+                const expected = getItemExpectedStock(item);
                 
                 const hasPhysical = mData.physical !== undefined && mData.physical !== '';
                 const physicalVal = hasPhysical ? mData.physical : '';
@@ -984,7 +1140,7 @@ const MonthlyStockCheck = () => {
           const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
           const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
           const opening = getEffectiveOpeningStock(activePeriod, item.id, item);
-          const expected = calculateExpected(opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
+          const expected = getItemExpectedStock(item);
 
           const hasPhysical = mData.physical !== undefined && mData.physical !== '';
           const physicalVal = hasPhysical ? mData.physical : '';
@@ -1206,6 +1362,14 @@ const MonthlyStockCheck = () => {
           </div>
         </div>
       )}
+
+      {/* Expected Stock Correction Modal */}
+      <ExpectedStockCorrectionModal
+        isOpen={isCorrectionModalOpen}
+        onClose={() => setIsCorrectionModalOpen(false)}
+        activePeriod={activePeriod}
+        itemsList={allStockItemsWithExpected}
+      />
     </div>
   );
 };
