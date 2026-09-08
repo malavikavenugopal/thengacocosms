@@ -111,30 +111,20 @@ const MonthlyStockCheck = () => {
 
   const handleCarryPhysicalForward = async () => {
     setIsSyncing(true);
-    const toastId = toast.loading(`Carrying forward Physical Stock to ${activePeriod}...`);
+    const toastId = toast.loading(`Carrying forward Expected Stock to ${activePeriod}...`);
     try {
       const prevPeriodStr = getPrevPeriodStr(activePeriod);
-      
-      const prevData = monthlyStockData.filter(d => d.month === prevPeriodStr);
-      if (prevData.length === 0) {
-        toast.error(`No data found for previous period (${prevPeriodStr})`, { id: toastId });
-        return;
-      }
-
       const prevMovements = getMovements(prevPeriodStr);
 
       for (const item of stock) {
         if (item.isComposite) continue;
-        const pData = prevData.find(d => d.productId === item.id);
-        if (pData) {
-          const m = prevMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0 };
-          const expected = calculateExpected(pData.opening, pData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used);
-          
-          const valueToCarry = (pData.physical !== undefined && pData.physical !== '') ? Number(pData.physical) : expected;
-          
-          await saveMonthlyStock(activePeriod, item.id, { opening: valueToCarry });
-          await saveMonthlyStock(prevPeriodStr, item.id, { expected });
-        }
+        const prevOpening = getEffectiveOpeningStock(prevPeriodStr, item.id, item);
+        const pData = monthlyStockData.find(d => d.month === prevPeriodStr && d.productId === item.id) || {};
+        const m = prevMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, purchased: 0, produced: 0, rejected: 0, replacement: 0, used: 0, qcAcceptedOrPurchase: 0 };
+        const expected = calculateExpected(prevOpening, pData.in || 0, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
+        
+        await saveMonthlyStock(activePeriod, item.id, { opening: expected });
+        await saveMonthlyStock(prevPeriodStr, item.id, { expected });
       }
       toast.success(`Success! Carried forward balances from ${prevPeriodStr}`, { id: toastId });
     } catch (error) {
@@ -144,13 +134,36 @@ const MonthlyStockCheck = () => {
     }
   };
 
+  // Fast O(1) stock lookup map
+  const stockMap = useMemo(() => {
+    const mapByName = {};
+    const mapById = {};
+    const clean = (s) => (s || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+    stock.forEach(item => {
+      if (item.id) mapById[item.id] = item;
+      if (item.name) mapByName[clean(item.name)] = item;
+    });
+
+    const findMaster = (name) => {
+      if (!name) return null;
+      const c = clean(name);
+      if (mapByName[c]) return mapByName[c];
+      return stock.find(item => isOptionMatch(item.name, name)) || null;
+    };
+
+    const findOptionMaster = (name) => {
+      if (!name || name === 'None') return null;
+      const m = findMaster(name);
+      if (m) return m;
+      return stock.find(item => isOptionMatch(item.name, name)) || null;
+    };
+
+    return { mapById, mapByName, findMaster, findOptionMaster };
+  }, [stock]);
+
   const getMovements = (periodStr) => {
     const sums = {};
-    const compareNames = (n1, n2) => {
-      if (!n1 || !n2) return false;
-      const clean = (s) => s.trim().toLowerCase().replace(/\s+/g, ' ');
-      return clean(n1) === clean(n2);
-    };
 
     stock.forEach(item => { 
       sums[item.id] = { out: 0, b2cOut: 0, b2bOut: 0, packed: 0, stockDeduction: 0, returned: 0, damage: 0, purchased: 0, rejected: 0, replacement: 0, produced: 0, used: 0, qcAccepted: 0, purchasedNoQC: 0 }; 
@@ -171,28 +184,34 @@ const MonthlyStockCheck = () => {
         const packedPrevWeek = !noPacking && packedDate && !isTarget(packedDate, periodStr) && getPeriodOfDate(packedDate, periodStr) < periodStr;
 
         const dispatchedPrevWeek = dispatchDate && !isTarget(dispatchDate, periodStr) && getPeriodOfDate(dispatchDate, periodStr) < periodStr;
+
+        if (!packedThisWeek && !dispatchedThisWeek && !packedPrevWeek) {
+          const packedPeriod = packedDate ? getPeriodOfDate(packedDate, periodStr) : null;
+          const dispatchPeriod = dispatchDate ? getPeriodOfDate(dispatchDate, periodStr) : null;
+          if (packedPeriod !== periodStr && packedPeriod !== prevPeriodStr && dispatchPeriod !== periodStr) {
+            return;
+          }
+        }
+
         const qty = (Number(p.quantity) || 0);
-        const master = stock.find(item => compareNames(item.name, pName));
+        const master = stockMap.findMaster(pName);
 
         const applyB2B = (id, amount) => {
           if (!sums[id]) return;
           const t = sums[id];
           
-          // 1. UI Columns: Show what physically happened this period
           if (dispatchedThisWeek) {
             if (packedPrevWeek) {
-              t.dispatched = (t.dispatched || 0) + amount; // Last period packed, this period dispatched
+              t.dispatched = (t.dispatched || 0) + amount;
             } else {
-              t.b2bOut += amount; // Packed and dispatched this period
+              t.b2bOut += amount;
             }
           }
-          // Only show as packed if it has been packed in the current period or previous period, and hasn't been dispatched yet
           const packedBeforeOrThisWeek = !noPacking && packedDate && (getPeriodOfDate(packedDate, periodStr) === periodStr || getPeriodOfDate(packedDate, periodStr) === prevPeriodStr);
           if (packedBeforeOrThisWeek && s.status !== 'Dispatched' && !dispatchedThisWeek && !dispatchedPrevWeek) {
             t.packed += amount;
           }
 
-          // 2. Math: Deduct exactly once
           if (dispatchedThisWeek && (noPacking || packedThisWeek)) {
             t.stockDeduction += amount;
           } else if (packedThisWeek && !dispatchedThisWeek && !dispatchedPrevWeek) {
@@ -202,21 +221,19 @@ const MonthlyStockCheck = () => {
 
         if (master?.isComposite && master.components) {
           master.components.forEach(comp => {
-            const compMaster = stock.find(m => m.id === comp.productId || compareNames(m.name, comp.name));
+            const compMaster = comp.productId ? stockMap.mapById[comp.productId] : stockMap.findMaster(comp.name);
             if (compMaster) { applyB2B(compMaster.id, qty * (Number(comp.quantity) || 1)); }
           });
         }
         if (master) { applyB2B(master.id, qty); }
         if (p.stockOption && p.stockOption !== 'None') {
-          const optMaster = stock.find(m => compareNames(m.name, p.stockOption) || isOptionMatch(m.name, p.stockOption));
+          const optMaster = stockMap.findOptionMaster(p.stockOption);
           if (optMaster) { applyB2B(optMaster.id, qty); }
         }
       }); 
     });
 
     b2cShipments.forEach(s => {
-      // FBA shipments: use dispatchDate for dispatched, packedDate for packed
-      // Non-FBA: use date as before
       const isFBA = s.isFBA;
       
       if (isFBA) {
@@ -226,9 +243,17 @@ const MonthlyStockCheck = () => {
         const dispatchedThisWeek = s.status === 'Dispatched' && isTarget(s.dispatchDate, periodStr);
         const dispatchedPrevWeek = s.status === 'Dispatched' && s.dispatchDate && !isTarget(s.dispatchDate, periodStr) && getPeriodOfDate(s.dispatchDate, periodStr) < periodStr;
 
+        if (!packedThisWeek && !dispatchedThisWeek && !packedPrevWeek) {
+          const packedPeriod = packedDate ? getPeriodOfDate(packedDate, periodStr) : null;
+          const dispatchPeriod = s.dispatchDate ? getPeriodOfDate(s.dispatchDate, periodStr) : null;
+          if (packedPeriod !== periodStr && packedPeriod !== prevPeriodStr && dispatchPeriod !== periodStr) {
+            return;
+          }
+        }
+
         s.products.forEach(p => { 
           const pName = p.name || p.productName;
-          const master = stock.find(item => compareNames(item.name, pName));
+          const master = stockMap.findMaster(pName);
           const qty = Number(p.quantity) || 0;
 
           const applyB2C = (id, amount) => {
@@ -252,23 +277,22 @@ const MonthlyStockCheck = () => {
           
           if (master?.isComposite && master.components) {
             master.components.forEach(comp => {
-              const compMaster = stock.find(m => m.id === comp.productId || compareNames(m.name, comp.name));
+              const compMaster = comp.productId ? stockMap.mapById[comp.productId] : stockMap.findMaster(comp.name);
               if (compMaster) { applyB2C(compMaster.id, (Number(p.quantity) || 0) * (Number(comp.quantity) || 1)); }
             });
           }
           if (master) { applyB2C(master.id, qty); }
           if (p.stockOption && p.stockOption !== 'None') {
-            const optMaster = stock.find(m => compareNames(m.name, p.stockOption));
+            const optMaster = stockMap.findOptionMaster(p.stockOption);
             if (optMaster) { applyB2C(optMaster.id, qty); }
           }
         });
       } else {
-        // Normal B2C: count as Out on shipment date
         const shouldCountAsOut = isTarget(s.date, periodStr);
         if (shouldCountAsOut) {
           s.products.forEach(p => { 
             const pName = p.name || p.productName;
-            const master = stock.find(item => compareNames(item.name, pName));
+            const master = stockMap.findMaster(pName);
             
             const qty = Number(p.quantity) || 0;
 
@@ -280,13 +304,13 @@ const MonthlyStockCheck = () => {
 
             if (master?.isComposite && master.components) {
               master.components.forEach(comp => {
-                const compMaster = stock.find(m => m.id === comp.productId || compareNames(m.name, comp.name));
+                const compMaster = comp.productId ? stockMap.mapById[comp.productId] : stockMap.findMaster(comp.name);
                 if (compMaster) { applyB2C(compMaster.id, (Number(p.quantity) || 0) * (Number(comp.quantity) || 1)); }
               });
             }
             if (master) { applyB2C(master.id, qty); }
             if (p.stockOption && p.stockOption !== 'None') {
-              const optMaster = stock.find(m => compareNames(m.name, p.stockOption));
+              const optMaster = stockMap.findOptionMaster(p.stockOption);
               if (optMaster) { applyB2C(optMaster.id, qty); }
             }
           }); 
@@ -295,13 +319,13 @@ const MonthlyStockCheck = () => {
     });
 
     damageRecords.filter(r => isTarget(r.date, periodStr)).forEach(r => { 
-      const master = stock.find(s => compareNames(s.name, r.productName));
+      const master = stockMap.findMaster(r.productName);
       if (master && sums[master.id]) { sums[master.id].damage += Number(r.quantity) || 0; }
     });
     const qcStatsByProductAndVendor = {};
 
     qcRecords.filter(r => isTarget(r.date, periodStr)).forEach(r => { 
-      const master = stock.find(s => compareNames(s.name, r.productName));
+      const master = stockMap.findMaster(r.productName);
       if (master && sums[master.id]) { 
         const checkedVal = Number(r.checked) || 0;
         const acceptedVal = checkedVal - (Number(r.damaged) || 0) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0) - (Number(r.hole) || 0);
@@ -319,12 +343,12 @@ const MonthlyStockCheck = () => {
       } 
     });
     returnRecords.filter(r => isTarget(r.date, periodStr) && r.isReusable && r.deducted !== false).forEach(r => { 
-      const master = stock.find(s => compareNames(s.name, r.productName));
+      const master = stockMap.findMaster(r.productName);
       if (master && sums[master.id]) { sums[master.id].returned += Number(r.quantity) || 0; }
     });
     const purchasesByProductAndVendor = {};
     purchaseRecords.filter(r => isTarget(r.date, periodStr)).forEach(r => { 
-      const master = stock.find(s => compareNames(s.name, r.productName));
+      const master = stockMap.findMaster(r.productName);
       if (master && sums[master.id]) { 
         sums[master.id].purchased += Number(r.quantity) || 0; 
         if (!purchasesByProductAndVendor[master.id]) {
@@ -341,28 +365,27 @@ const MonthlyStockCheck = () => {
     replacementRecords.filter(r => isTarget(r.date, periodStr) && r.deducted).forEach(r => { 
       const prods = r.products || [{ name: r.productName, quantity: r.quantity }]; 
       prods.forEach(p => { 
-        const master = stock.find(s => compareNames(s.name, p.name));
+        const master = stockMap.findMaster(p.name);
         if (master && sums[master.id]) { sums[master.id].replacement += Number(p.quantity) || 0; }
       }); 
     });
     (productionRecords || []).filter(r => isTarget(r.date, periodStr)).forEach(r => { 
-      const master = stock.find(s => compareNames(s.name, r.productName));
+      const master = stockMap.findMaster(r.productName);
       if (master && sums[master.id]) { sums[master.id].produced += Number(r.quantity) || 0; }
       (r.rawMaterials || []).forEach(rm => { 
-        const rmMaster = stock.find(s => compareNames(s.name, rm.name));
+        const rmMaster = stockMap.findMaster(rm.name);
         if (rmMaster && sums[rmMaster.id]) { sums[rmMaster.id].used += Number(rm.quantity) || 0; }
       }); 
     });
 
     (reworkRecords || []).forEach(r => {
-      // 1. Rework Outward: subtract from stock
       if (isTarget(r.outDate, periodStr)) {
         const products = r.products && r.products.length > 0 
           ? r.products 
           : [{ productName: r.productName, quantity: r.quantity }];
         
         products.forEach(p => {
-          const master = stock.find(s => compareNames(s.name, p.productName));
+          const master = stockMap.findMaster(p.productName);
           if (master && sums[master.id]) {
             sums[master.id].stockDeduction += Number(p.quantity) || 0;
             sums[master.id].reworkOut = (sums[master.id].reworkOut || 0) + (Number(p.quantity) || 0);
@@ -370,14 +393,13 @@ const MonthlyStockCheck = () => {
         });
       }
 
-      // 2. Rework Inward: add to stock
       if (r.status === 'Reworked' && isTarget(r.returnDate, periodStr)) {
         const returnProducts = r.returnProducts && r.returnProducts.length > 0
           ? r.returnProducts
           : [{ returnProductName: r.returnProductName, returnQuantity: r.returnQuantity }];
         
         returnProducts.forEach(rp => {
-          const master = stock.find(s => compareNames(s.name, rp.returnProductName));
+          const master = stockMap.findMaster(rp.returnProductName);
           if (master && sums[master.id]) {
             sums[master.id].returned += Number(rp.returnQuantity) || 0;
           }
@@ -385,7 +407,6 @@ const MonthlyStockCheck = () => {
       }
     });
 
-    // Final UI cleanup: Out = B2C + B2B Dispatched + Rework Out
     Object.keys(sums).forEach(id => {
       sums[id].out = sums[id].b2cOut + sums[id].b2bOut + (sums[id].reworkOut || 0);
       
@@ -393,10 +414,8 @@ const MonthlyStockCheck = () => {
       let effectiveQCAndPurchase = 0;
       const productQCs = qcStatsByProductAndVendor[id] || {};
       const productPurchases = purchasesByProductAndVendor[id] || {};
-      const allVendors = new Set([
-        ...Object.keys(productQCs),
-        ...Object.keys(productPurchases)
-      ]);
+      const allVendors = new Set([...Object.keys(productQCs), ...Object.keys(productPurchases)]);
+      
       allVendors.forEach(vendorKey => {
         const A = productQCs[vendorKey]?.accepted || 0;
         const C = productQCs[vendorKey]?.checked || 0;
@@ -404,10 +423,10 @@ const MonthlyStockCheck = () => {
         totalQCAccepted += A;
         effectiveQCAndPurchase += A + Math.max(0, P - C);
       });
+
       sums[id].qcAccepted = totalQCAccepted;
       sums[id].qcAcceptedOrPurchase = effectiveQCAndPurchase;
     });
-
     return sums;
   };
 
@@ -649,42 +668,137 @@ const MonthlyStockCheck = () => {
   const calculateExpected = (opening, otherIn, purchased, produced, returned, stockDeduction, replacement, damage, rejected, used, qcAcceptedOrPurchase = 0) => 
     Number(opening || 0) + Number(otherIn || 0) + Number(produced || 0) + Number(returned || 0) + Number(qcAcceptedOrPurchase || 0) - Number(stockDeduction || 0) - Number(replacement || 0) - Number(damage || 0) - Number(used || 0);
 
-  // Automatically derive Opening Stock from previous week's Expected Stock if not manually entered
+  const getIsoWeekMonday = (y, w) => {
+    const simple = new Date(y, 0, 1 + (w - 1) * 7);
+    const dow = simple.getDay();
+    const ISOweekStart = simple;
+    if (dow <= 4)
+      ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+    else
+      ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+    return ISOweekStart;
+  };
+
+  const getPeriodSequence = (startPeriod, endPeriod) => {
+    if (!startPeriod || !endPeriod) return [];
+    if (startPeriod > endPeriod) return [endPeriod];
+    
+    const isWeekly = startPeriod.includes('-W');
+    const periods = [];
+    let curr = startPeriod;
+    let safety = 0;
+
+    while (curr <= endPeriod && safety < 120) {
+      periods.push(curr);
+      if (curr === endPeriod) break;
+
+      if (isWeekly) {
+        const [y, w] = curr.split('-W').map(Number);
+        const mDate = getIsoWeekMonday(y, w);
+        mDate.setDate(mDate.getDate() + 7);
+        curr = getWeekStr(mDate);
+      } else {
+        const [y, m] = curr.split('-').map(Number);
+        const d = new Date(y, m, 1);
+        const nextY = d.getFullYear();
+        const nextM = String(d.getMonth() + 1).padStart(2, '0');
+        curr = `${nextY}-${nextM}`;
+      }
+      safety++;
+    }
+    return periods;
+  };
+
+  const stockChains = useMemo(() => {
+    const isWeekly = activePeriod ? activePeriod.includes('-W') : true;
+    const MAY_BASE_PERIOD = isWeekly ? '2026-W18' : '2026-05';
+    
+    const startPeriod = (activePeriod && activePeriod < MAY_BASE_PERIOD) ? activePeriod : MAY_BASE_PERIOD;
+    const periodList = getPeriodSequence(startPeriod, activePeriod);
+
+    // Fast O(1) map for monthlyStockData
+    const monthlyDataMap = {};
+    (monthlyStockData || []).forEach(d => {
+      if (d.month && d.productId) {
+        monthlyDataMap[`${d.month}_${d.productId}`] = d;
+      }
+    });
+
+    // Fast O(1) map for approved expected stock requests
+    const approvedReqMap = {};
+    (expectedStockRequests || []).forEach(r => {
+      if (r.status === 'approved' && r.period && r.items) {
+        r.items.forEach(it => {
+          if (it.productId && it.proposedExpected !== undefined && it.proposedExpected !== '') {
+            approvedReqMap[`${r.period}_${it.productId}`] = Number(it.proposedExpected);
+          }
+        });
+      }
+    });
+
+    const runningOpenings = {};
+    const chains = {};
+    stock.forEach(item => { chains[item.id] = {}; });
+
+    for (let i = 0; i < periodList.length; i++) {
+      const pStr = periodList[i];
+      const mData = getMovements(pStr);
+
+      for (let j = 0; j < stock.length; j++) {
+        const item = stock[j];
+        if (item.isComposite) continue;
+
+        const key = `${pStr}_${item.id}`;
+        const doc = monthlyDataMap[key];
+        const approvedExpected = approvedReqMap[key];
+
+        let opening;
+        if (runningOpenings[item.id] !== undefined) {
+          opening = runningOpenings[item.id];
+        } else if (doc?.opening !== undefined && doc?.opening !== '') {
+          opening = Number(doc.opening);
+        } else {
+          opening = Number(item?.openingStock) || 0;
+        }
+
+        let expected;
+        if (approvedExpected !== undefined) {
+          expected = approvedExpected;
+        } else if (doc?.isCorrected && doc?.expected !== undefined && doc?.expected !== '') {
+          expected = Number(doc.expected);
+        } else {
+          const m = mData[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
+          expected = calculateExpected(
+            opening,
+            doc?.in || 0,
+            m.purchased || 0,
+            m.produced || 0,
+            m.returned || 0,
+            m.stockDeduction || 0,
+            m.replacement || 0,
+            m.damage || 0,
+            m.rejected || 0,
+            m.used || 0,
+            m.qcAcceptedOrPurchase || 0
+          );
+        }
+
+        // Always carry forward expected stock (never physical stock)
+        runningOpenings[item.id] = expected;
+
+        if (chains[item.id]) {
+          chains[item.id][pStr] = { opening, expected };
+        }
+      }
+    }
+
+    return chains;
+  }, [stock, activePeriod, monthlyStockData, expectedStockRequests, b2bShipments, b2cShipments, damageRecords, returnRecords, qcRecords, purchaseRecords, replacementRecords, productionRecords, reworkRecords]);
+
+  // Automatically derive Opening Stock by carrying forward from May month
   const getEffectiveOpeningStock = (periodStr, itemId, itemRef) => {
-    const doc = monthlyStockData.find(d => d.month === periodStr && d.productId === itemId);
-    if (doc?.opening !== undefined && doc?.opening !== '') {
-      return Number(doc.opening);
-    }
-
-    const prevPeriodStr = getPrevPeriodStr(periodStr);
-    const prevDoc = monthlyStockData.find(d => d.month === prevPeriodStr && d.productId === itemId);
-
-    const prevApprovedReq = expectedStockRequests.find(r => r.status === 'approved' && r.period === prevPeriodStr && r.items?.some(i => i.productId === itemId));
-    const prevApprovedItem = prevApprovedReq?.items?.find(i => i.productId === itemId);
-    if (prevApprovedItem && prevApprovedItem.proposedExpected !== undefined && prevApprovedItem.proposedExpected !== '') {
-      return Number(prevApprovedItem.proposedExpected);
-    }
-
-    if (prevDoc?.expected !== undefined && prevDoc?.expected !== '') {
-      return Number(prevDoc.expected);
-    }
-
-    const prevM = getMovements(prevPeriodStr)[itemId] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-    const prevOpening = prevDoc?.opening !== undefined && prevDoc.opening !== '' ? Number(prevDoc.opening) : (Number(itemRef?.openingStock) || 0);
-
-    return calculateExpected(
-      prevOpening,
-      prevDoc?.in || 0,
-      prevM.purchased,
-      prevM.produced,
-      prevM.returned,
-      prevM.stockDeduction,
-      prevM.replacement,
-      prevM.damage,
-      prevM.rejected,
-      prevM.used,
-      prevM.qcAcceptedOrPurchase
-    );
+    const chainInfo = stockChains[itemId]?.[periodStr];
+    return chainInfo?.opening !== undefined ? chainInfo.opening : (Number(itemRef?.openingStock) || 0);
   };
 
   const handleResetExpectedStock = async () => {
@@ -731,41 +845,11 @@ const MonthlyStockCheck = () => {
   };
 
   const getItemExpectedStock = (item, periodStr = activePeriod) => {
-    const approvedReq = expectedStockRequests.find(r => r.status === 'approved' && r.period === periodStr && r.items?.some(i => i.productId === item.id));
-    const approvedItem = approvedReq?.items?.find(i => i.productId === item.id);
-    if (approvedItem && approvedItem.proposedExpected !== undefined && approvedItem.proposedExpected !== '') {
-      return Number(approvedItem.proposedExpected);
-    }
-
-    const mData = monthlyStockData.find(d => d.month === periodStr && d.productId === item.id) || {};
-    if (mData.isCorrected && mData.expected !== undefined && mData.expected !== '') {
-      return Number(mData.expected);
-    }
-
-    const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-    const opening = getEffectiveOpeningStock(periodStr, item.id, item);
-    return calculateExpected(opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
+    const chainInfo = stockChains[item.id]?.[periodStr];
+    return chainInfo?.expected !== undefined ? chainInfo.expected : (Number(item?.openingStock) || 0);
   };
 
-  useEffect(() => {
-    if (!monthlyMovements || stock.length === 0) return;
-    const sync = async () => {
-      stock.forEach(item => {
-        if (item.isComposite) return;
-        const mData = monthlyStockData.find(d => d.month === activePeriod && d.productId === item.id) || {};
-        const hasApprovedReq = expectedStockRequests.some(r => r.status === 'approved' && r.period === activePeriod && r.items?.some(i => i.productId === item.id));
-        if (hasApprovedReq || mData.isCorrected) return;
 
-        const opening = getEffectiveOpeningStock(activePeriod, item.id, item);
-        const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
-        const expected = calculateExpected(opening, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
-        if (mData.expected !== expected) {
-          saveMonthlyStock(activePeriod, item.id, { expected, isCorrected: false });
-        }
-      });
-    };
-    sync();
-  }, [monthlyMovements, activePeriod, monthlyStockData, stock, expectedStockRequests]);
 
   // Handle direct approval link from email (?approveRequestId=...)
   useEffect(() => {
@@ -901,14 +985,13 @@ const MonthlyStockCheck = () => {
         const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, dispatched: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
         const expected = getItemExpectedStock(item);
         
-        const physical = mData.physical !== undefined && mData.physical !== '' ? Number(mData.physical) : null;
-        const diff = physical !== null ? physical - expected : -expected;
+        const opening = getEffectiveOpeningStock(activePeriod, item.id, item);
 
         return { 
           SKU: item.sku, 
           Name: item.name, 
           Period: activePeriod, 
-          Opening: mData.opening || 0, 
+          Opening: opening, 
           'Stock In': (Number(mData.in) || 0) + m.produced + (m.qcAcceptedOrPurchase || 0), 
           Returns: m.returned, 
           Dispatch: m.out, 
@@ -1081,7 +1164,7 @@ const MonthlyStockCheck = () => {
                       <input 
                         type="number" 
                         className="w-14 mx-auto block px-1 py-1 text-center text-xs border border-slate-200 rounded outline-none font-semibold text-slate-800" 
-                        value={mData.opening !== undefined && mData.opening !== '' ? mData.opening : opening} 
+                        value={opening} 
                         onChange={(e) => {
                           const val = e.target.value === '' ? '' : Number(e.target.value);
                           const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
@@ -1160,7 +1243,7 @@ const MonthlyStockCheck = () => {
                <div className="grid grid-cols-2 gap-3 p-3 border-b border-slate-100">
                   <div>
                     <span className="text-[9px] text-slate-400 uppercase font-bold block mb-1">Opening Stock</span>
-                    <input type="number" className="w-full px-2 py-1.5 text-sm font-bold bg-slate-50 border border-slate-200 rounded outline-none focus:border-indigo-500" value={mData.opening !== undefined && mData.opening !== '' ? mData.opening : opening} onChange={(e) => {
+                    <input type="number" className="w-full px-2 py-1.5 text-sm font-bold bg-slate-50 border border-slate-200 rounded outline-none focus:border-indigo-500" value={opening} onChange={(e) => {
                       const val = e.target.value === '' ? '' : Number(e.target.value);
                       const m = monthlyMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, rejected: 0, replacement: 0, purchased: 0, produced: 0, used: 0, qcAcceptedOrPurchase: 0 };
                       const exp = calculateExpected(val === '' ? opening : val, mData.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
