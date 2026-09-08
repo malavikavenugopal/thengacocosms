@@ -182,7 +182,9 @@ const ExpectedStockCorrectionModal = ({ isOpen, onClose, activePeriod, itemsList
     requestId
   }) => {
     const baseUrl = window.location.origin;
-    const approvalUrl = `${baseUrl}/stock?approveRequestId=${requestId}`;
+    const approvalUrl = period && String(period).includes('-W')
+      ? `${baseUrl}/two-week-stock?approveRequestId=${requestId}`
+      : `${baseUrl}/stock?approveRequestId=${requestId}`;
 
     const itemsHtml = (selectedItems || []).map(p => `
       <tr style="border-bottom: 1px solid #e2e8f0;">

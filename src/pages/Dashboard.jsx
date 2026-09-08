@@ -15,7 +15,8 @@ import {
   ShieldCheck,
   ShoppingBag,
   Store,
-  History
+  History,
+  Scale
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useGlobalState } from '../context/GlobalContext';
@@ -226,8 +227,8 @@ const Dashboard = () => {
                    {[
                      { label: 'SKU Master', path: '/products', icon: <Package size={16}/>, color: 'bg-white' },
                      { label: 'Stock Audit', path: '/stock', icon: <Clock size={16}/>, color: 'bg-white' },
-                     { label: 'Reports', path: '/reports', icon: <TrendingUp size={16}/>, color: 'bg-white' },
-                     { label: 'Staff Info', path: '/staff', icon: <Plus size={16}/>, color: 'bg-white' }
+                     { label: 'Weekly Discrepancy', path: '/two-week-stock', icon: <Scale size={16}/>, color: 'bg-white' },
+                     { label: 'Reports', path: '/reports', icon: <TrendingUp size={16}/>, color: 'bg-white' }
                    ].map((btn, i) => (
                      <button 
                        key={i}

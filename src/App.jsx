@@ -77,8 +77,8 @@ function App() {
             <Route path="b2b" element={<B2BShipments />} />
             <Route path="b2c" element={<B2CShipments />} />
             <Route path="damage" element={<DamageTracking />} />
-            <Route path="stock" element={<AdminRoute><MonthlyStockCheck /></AdminRoute>} />
-            <Route path="two-week-stock" element={<AdminRoute><TwoWeekStockCheck /></AdminRoute>} />
+            <Route path="stock" element={<MonthlyStockCheck />} />
+            <Route path="two-week-stock" element={<TwoWeekStockCheck />} />
             <Route path="rop" element={<ReorderPoint />} />
             <Route path="manufacturing" element={<CandleManufacturing />} />
             <Route path="rework" element={<ReworkLog />} />

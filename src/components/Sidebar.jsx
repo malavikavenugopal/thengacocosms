@@ -25,10 +25,7 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
     { name: 'Stock Check', path: '/stock', icon: <ClipboardList size={20} /> },
     { name: 'Weekly Discrepancy', path: '/two-week-stock', icon: <Scale size={20} /> },
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
-  ].filter(link => {
-    if ((link.name === 'Stock Check' || link.name === 'Weekly Discrepancy') && currentUser?.role === 'staff') return false;
-    return true;
-  });
+  ];
 
   const sidebarClasses = `w-64 bg-slate-900 text-slate-300 flex flex-col h-screen fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
     }`;

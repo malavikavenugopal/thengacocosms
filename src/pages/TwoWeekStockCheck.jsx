@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Card, Button } from '../components/ui';
 import { 
   Search, DownloadCloud, Eye, Calendar, ArrowRightLeft, X, 
@@ -24,18 +24,18 @@ const isOptionMatch = (n1, n2) => {
 
 const TwoWeekStockCheck = () => {
   const { 
-    stock, 
-    b2bShipments, 
-    b2cShipments, 
-    damageRecords, 
-    returnRecords, 
-    qcRecords,
-    purchaseRecords,
-    replacementRecords,
-    monthlyStockData,
+    stock = [], 
+    b2bShipments = [], 
+    b2cShipments = [], 
+    damageRecords = [], 
+    returnRecords = [], 
+    qcRecords = [],
+    purchaseRecords = [],
+    replacementRecords = [],
+    monthlyStockData = [],
     saveMonthlyStock,
-    productionRecords,
-    reworkRecords,
+    productionRecords = [],
+    reworkRecords = [],
     expectedStockRequests = [],
     approveExpectedStockRequest
   } = useGlobalState();
@@ -100,41 +100,38 @@ const TwoWeekStockCheck = () => {
     return ISOweekStart;
   };
 
-  // Generate single-week period options starting from April 2026 (Week 14) up to current week.
-  // Filters to ONLY show weeks where physical stock has been entered (plus CURRENT week for new entries).
+  // Generate single-week period options (last 26 weeks dynamically from current date)
   const getWeeklyPeriodOptions = () => {
     const options = [];
-    const currentWeekStr = getWeekStr(new Date()); // e.g. 2026-W35
-    const [currYear, currWNum] = currentWeekStr.split('-W').map(Number);
+    const now = new Date();
+    const currentWeekStr = getWeekStr(now);
+    const d = new Date(now);
+    const seenWeeks = new Set();
 
-    const startWeekNum = 14; // April 2026 (starts Monday April 6, 2026)
-    const startYear = 2026;
+    for (let i = 0; i < 26; i++) {
+      const wStr = getWeekStr(d);
+      if (wStr && !seenWeeks.has(wStr)) {
+        seenWeeks.add(wStr);
+        const [yNum, wNum] = wStr.split('-W').map(Number);
+        const mDate = getIsoWeekMonday(yNum, wNum);
+        const sDate = new Date(mDate);
+        sDate.setDate(mDate.getDate() + 6);
 
-    for (let w = currWNum; w >= startWeekNum; w--) {
-      const wStr = `${currYear}-W${String(w).padStart(2, '0')}`;
-      const mDate = getIsoWeekMonday(currYear, w);
-      const sDate = new Date(mDate);
-      sDate.setDate(mDate.getDate() + 6);
+        const mFormat = mDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
+        const sFormat = sDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const isCurrent = wStr === currentWeekStr;
 
-      const mFormat = mDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
-      const sFormat = sDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+        const hasPhysicalInWeek = (monthlyStockData || []).some(item => 
+          item.month === wStr && 
+          item.physical !== undefined && 
+          item.physical !== '' && 
+          item.physical !== null
+        );
 
-      const isCurrent = wStr === currentWeekStr;
-
-      // Check if physical stock was entered in firebase for this specific week
-      const hasPhysicalInWeek = monthlyStockData?.some(d => 
-        d.month === wStr && 
-        d.physical !== undefined && 
-        d.physical !== '' && 
-        d.physical !== null
-      );
-
-      // Only include weeks that have physical stock entered OR the current week
-      if (hasPhysicalInWeek || isCurrent) {
-        const label = `Week ${w} (${mFormat} - ${sFormat}) ${isCurrent ? '★ CURRENT' : ''}${hasPhysicalInWeek ? ' ✓ Physical Entered' : ''}`;
+        const label = `Week ${wNum} (${mFormat} - ${sFormat}) ${isCurrent ? '★ CURRENT' : ''}${hasPhysicalInWeek ? ' ✓ Physical Entered' : ''}`;
 
         options.push({
-          wNum: w,
+          wNum,
           wStr,
           mFormat,
           sFormat,
@@ -144,6 +141,7 @@ const TwoWeekStockCheck = () => {
           hasPhysicalInWeek
         });
       }
+      d.setDate(d.getDate() - 7);
     }
     return options;
   };
@@ -222,8 +220,17 @@ const TwoWeekStockCheck = () => {
     return periodOptions.find(p => p.key === selectedBlockKey) || periodOptions[0] || { wStr: getWeekStr(new Date()), label: 'Current Week' };
   }, [periodOptions, selectedBlockKey]);
 
+  const movementsCache = useRef({});
+  useEffect(() => {
+    movementsCache.current = {};
+  }, [stock, b2bShipments, b2cShipments, damageRecords, qcRecords, returnRecords, purchaseRecords, replacementRecords, productionRecords, reworkRecords]);
+
   // Exact Movement Calculation matching MonthlyStockCheck.jsx
   const getMovementsForWeek = (periodStr) => {
+    if (!periodStr) return {};
+    if (movementsCache.current[periodStr]) {
+      return movementsCache.current[periodStr];
+    }
     const sums = {};
     const compareNames = (n1, n2) => {
       if (!n1 || !n2) return false;
@@ -472,6 +479,7 @@ const TwoWeekStockCheck = () => {
       sums[id].qcAcceptedOrPurchase = effectiveQCAndPurchase;
     });
 
+    movementsCache.current[periodStr] = sums;
     return sums;
   };
 
