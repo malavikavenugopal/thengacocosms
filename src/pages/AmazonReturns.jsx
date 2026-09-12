@@ -1,10 +1,11 @@
-import React, { useState, useRef } from 'react';
-import { Card, Input, Select, Button } from '../components/ui';
+import React, { useState, useRef, useMemo } from 'react';
+import { Card, Input, Select, SearchableSelect, Button } from '../components/ui';
 import { Upload, Edit2, Trash2, X, Save, Search, Download, FileSpreadsheet, RotateCcw, Package, RefreshCcw, AlertCircle, DollarSign, Shield, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import * as XLSX from 'xlsx';
 import { useGlobalState } from '../context/GlobalContext';
+import { getCategoryOptions } from '../utils/categoryUtils';
 
 const COL_MAP = {
   'Order ID': 'orderId',
@@ -95,6 +96,7 @@ const parseDate = (dateStr) => {
 
 export default function AmazonReturns() {
   const { amazonReturnRecords, addAmazonReturnRecords, updateAmazonReturnRecord, deleteAmazonReturnRecord, stock } = useGlobalState();
+  const categoryOptions = useMemo(() => getCategoryOptions(stock), [stock]);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -418,7 +420,13 @@ export default function AmazonReturns() {
             <Input label="SafeT Claim Creation Time" value={editForm.safetClaimCreationTime} onChange={ef('safetClaimCreationTime')} />
             <Input label="SafeT Reimb. Amount" value={editForm.safetReimbursementAmount} onChange={ef('safetReimbursementAmount')} />
             <Input label="Refunded Amount" value={editForm.refundedAmount} onChange={ef('refundedAmount')} />
-            <Input label="Category" value={editForm.category} onChange={ef('category')} />
+            <SearchableSelect 
+              label="Category" 
+              options={categoryOptions} 
+              value={editForm.category} 
+              onChange={(val) => setEditForm(prev => ({ ...prev, category: val }))} 
+              allowCustom={true} 
+            />
             <Input label="Order Item ID" value={editForm.orderItemId} onChange={ef('orderItemId')} />
           </div>
           <div className="flex justify-end mt-5">

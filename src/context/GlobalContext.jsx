@@ -14,6 +14,7 @@ import {
   query,
   orderBy
 } from 'firebase/firestore';
+import { normalizeCategory } from '../utils/categoryUtils';
 const isOptionMatch = (productName, stockOption) => {
   if (!productName || !stockOption || stockOption === 'None') return false;
   const p = productName.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -462,7 +463,10 @@ export const GlobalProvider = ({ children }) => {
   useEffect(() => {
     if (!currentUser) return;
     const unsubStock = onSnapshot(collection(db, 'stock'), (snapshot) => {
-      setStock(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+      setStock(snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { ...data, id: doc.id, category: normalizeCategory(data.category, data.name) };
+      }));
       setLoading(false); // Stock is the core data, once it's here, we can show the UI
     });
     const unsubB2B = onSnapshot(query(collection(db, 'b2bShipments'), orderBy('date', 'desc')), (snapshot) => {
@@ -965,11 +969,18 @@ export const GlobalProvider = ({ children }) => {
   const updateStandardRecipient = async (id, data) => { await updateDoc(doc(db, 'standardRecipients', id), data); };
   const deleteStandardRecipient = async (id) => { await deleteDoc(doc(db, 'standardRecipients', id)); };
   const addSKU = async (sku) => {
-    const finalized = { ...sku, packSize: sku.isComposite ? 1 : (Number(sku.packSize) || 1) };
+    const finalized = { 
+      ...sku, 
+      category: normalizeCategory(sku.category, sku.name),
+      packSize: sku.isComposite ? 1 : (Number(sku.packSize) || 1) 
+    };
     await addDoc(collection(db, 'stock'), { ...finalized, in: 0, out: 0, damage: 0, returned: 0, produced: 0, used: 0, physical: '' });
   };
   const updateSKU = async (id, updates) => {
     const finalized = { ...updates };
+    if (updates.category !== undefined || updates.name !== undefined) {
+      finalized.category = normalizeCategory(updates.category, updates.name);
+    }
     if (updates.isComposite !== undefined) {
       finalized.packSize = updates.isComposite ? 1 : (Number(updates.packSize) || 1);
     }

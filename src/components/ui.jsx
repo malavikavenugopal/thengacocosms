@@ -49,7 +49,7 @@ export const Select = ({ label, options, className = '', ...props }) => (
   </div>
 );
 
-export const SearchableSelect = ({ label, options, value, onChange, placeholder = "Select...", className = "" }) => {
+export const SearchableSelect = ({ label, options, value, onChange, placeholder = "Select...", className = "", allowCustom = false, onAddNewCategory = null }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const wrapperRef = useRef(null);
@@ -67,6 +67,10 @@ export const SearchableSelect = ({ label, options, value, onChange, placeholder 
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const showCustomOption = allowCustom && 
+    searchTerm.trim() !== '' && 
+    !options.some(opt => opt.toLowerCase() === searchTerm.trim().toLowerCase());
 
   return (
     <div className={`flex flex-col gap-1.5 w-full ${className}`} ref={wrapperRef}>
@@ -89,13 +93,26 @@ export const SearchableSelect = ({ label, options, value, onChange, placeholder 
             <input 
               autoFocus
               type="text"
-              className="w-full p-2.5 mb-2 text-sm border-b border-slate-100 outline-none placeholder:text-slate-300 font-medium"
-              placeholder="Type to search..."
+              className="w-full p-2.5 mb-2 text-sm border-b border-slate-100 outline-none placeholder:text-slate-300 font-medium text-slate-800"
+              placeholder="Search or type custom category..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               onClick={(e) => e.stopPropagation()}
             />
             <div className="overflow-y-auto custom-scrollbar flex-1">
+              {showCustomOption && (
+                <div 
+                  className="p-2.5 text-sm rounded-lg cursor-pointer transition-colors mb-1 bg-indigo-50 text-indigo-700 font-semibold hover:bg-indigo-100 flex items-center gap-1.5"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChange(searchTerm.trim());
+                    setIsOpen(false);
+                    setSearchTerm('');
+                  }}
+                >
+                  <Plus size={14} /> Add custom: "{searchTerm.trim()}"
+                </div>
+              )}
               {filteredOptions.length > 0 ? (
                 filteredOptions.map((opt, i) => (
                   <div 
@@ -116,9 +133,23 @@ export const SearchableSelect = ({ label, options, value, onChange, placeholder 
                   </div>
                 ))
               ) : (
-                <div className="p-4 text-xs text-slate-400 italic text-center">No results found</div>
+                !showCustomOption && (
+                  <div className="p-4 text-xs text-slate-400 italic text-center">No matching options</div>
+                )
               )}
             </div>
+            {onAddNewCategory && (
+              <div 
+                className="pt-2 mt-1 border-t border-slate-100 text-xs text-indigo-600 font-bold hover:bg-indigo-50 p-2 rounded-lg flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsOpen(false);
+                  onAddNewCategory();
+                }}
+              >
+                <Plus size={14} /> Add New Category...
+              </div>
+            )}
           </div>
         )}
       </div>

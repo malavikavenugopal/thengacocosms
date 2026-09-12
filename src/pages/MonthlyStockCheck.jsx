@@ -3,6 +3,7 @@ import { Card, Button } from '../components/ui';
 import { Search, DownloadCloud, Eye, Calendar, ArrowRightLeft, X, ShoppingCart, MapPin, ClipboardList, History, Zap, Package, TrendingUp, TrendingDown, Layers, Save, CheckCircle2, AlertTriangle, Clock, RefreshCw } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import { exportFormattedStockCheck } from '../utils/exportUtils';
+import { getCategoryOptions } from '../utils/categoryUtils';
 import ExpectedStockCorrectionModal from '../components/ExpectedStockCorrectionModal';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
@@ -81,6 +82,11 @@ const MonthlyStockCheck = () => {
   const [selectedMonth, setSelectedMonth] = useState(() => getMonthStr(new Date()));
   const [isCarryingForward, setIsCarryingForward] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState('all');
+
+  const categoryOptions = useMemo(() => {
+    return ['all', ...getCategoryOptions(stock)];
+  }, [stock]);
 
   const activePeriod = auditMode === 'monthly' ? selectedMonth : selectedWeek;
 
@@ -925,12 +931,18 @@ const MonthlyStockCheck = () => {
 
   const filteredStock = useMemo(() => {
     return stock
-      .filter(item => !item.isComposite && (item.name.toLowerCase().includes(searchTerm.toLowerCase()) || (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()))))
+      .filter(item => {
+        if (item.isComposite) return false;
+        const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                              (item.sku && item.sku.toLowerCase().includes(searchTerm.toLowerCase()));
+        const matchesCategory = categoryFilter === 'all' || item.category === categoryFilter;
+        return matchesSearch && matchesCategory;
+      })
       .sort((a, b) => {
         const comparison = a.name.localeCompare(b.name);
         return sortOrder === 'asc' ? comparison : -comparison;
       });
-  }, [stock, searchTerm, sortOrder]);
+  }, [stock, searchTerm, categoryFilter, sortOrder]);
 
   const analyticsData = useMemo(() => {
     let perfectMatch = [];
@@ -1072,7 +1084,7 @@ const MonthlyStockCheck = () => {
             )}
           </div>
 
-          {/* Search SKU & Sort */}
+          {/* Search SKU & Category Filter & Sort */}
           <div className="relative min-w-[140px] max-w-[200px] flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
             <input 
@@ -1083,6 +1095,19 @@ const MonthlyStockCheck = () => {
               onChange={(e) => setSearchTerm(e.target.value)} 
             />
           </div>
+
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 cursor-pointer shrink-0"
+          >
+            {categoryOptions.map(cat => (
+              <option key={cat} value={cat}>
+                {cat === 'all' ? 'All Categories' : cat}
+              </option>
+            ))}
+          </select>
+
           <button
             onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
             className="px-3 h-10 rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition-all flex items-center gap-1.5 shrink-0"
@@ -1100,10 +1125,6 @@ const MonthlyStockCheck = () => {
                 {expectedStockRequests.filter(r => r.status === 'pending').length}
               </span>
             )}
-          </Button>
-
-          <Button onClick={handleResetExpectedStock} variant="secondary" className="whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold flex items-center gap-1.5 shadow-sm" title="Recalculate and reset expected stock for all products based on all movements">
-            <RefreshCw size={14} className="text-amber-600" /> <span>Reset Expected Stock</span>
           </Button>
 
           <Button onClick={handleCarryForward} variant="secondary" loading={isCarryingForward} className="whitespace-nowrap text-xs h-10 px-3 rounded-xl shrink-0" title="Carry forward expected stock to next period">

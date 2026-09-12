@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import { exportToExcel, exportToCSV } from '../utils/exportUtils';
+import { getCategoryOptions } from '../utils/categoryUtils';
 import ExpectedStockCorrectionModal from '../components/ExpectedStockCorrectionModal';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
@@ -790,8 +791,7 @@ const TwoWeekStockCheck = () => {
 
   // Categories
   const categories = useMemo(() => {
-    const set = new Set(stock.map(s => s.category).filter(Boolean));
-    return ['all', ...Array.from(set)];
+    return ['all', ...getCategoryOptions(stock)];
   }, [stock]);
 
   // Handle Physical Stock input change - automatically saves to Firebase in real-time

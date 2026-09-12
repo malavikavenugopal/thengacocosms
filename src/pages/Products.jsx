@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, Input, Button, Table, SearchableSelect } from '../components/ui';
-import { Plus, Trash2, Edit2, Check, X, Layers, Box, Upload, FileDown, AlertCircle, ArrowUpDown } from 'lucide-react';
+import { Plus, Trash2, Edit2, Check, X, Layers, Box, Upload, FileDown, AlertCircle, ArrowUpDown, Sparkles } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
 import { exportToCSV } from '../utils/exportUtils';
+import { getCategoryOptions, normalizeCategory } from '../utils/categoryUtils';
 import { Download } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 
 const Products = () => {
   const { stock, addSKU, updateSKU, deleteSKU, getAvailableStock } = useGlobalState();
+  const categoryOptions = useMemo(() => getCategoryOptions(stock), [stock]);
   const [newProduct, setNewProduct] = useState({ 
     name: '', sku: '', category: '', opening: 0, packSize: 1, 
     isComposite: false, components: [] 
@@ -29,7 +31,67 @@ const Products = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isBulkUploading, setIsBulkUploading] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
   const [sortOrder, setSortOrder] = useState('asc'); // Default to A-Z as requested
+
+  const handleBatchCleanCategories = async () => {
+    const confirm = await Swal.fire({
+      title: 'Clean & Standardize Categories?',
+      text: 'This will automatically update all existing products with mixed category names (e.g. Bowl -> Bowls, Cutlery & Cooking Spoons -> Spoons, Decors -> Decor) to clean standard categories in Firebase.',
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Clean Up Database',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#4f46e5'
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    setIsCleaning(true);
+    let updatedCount = 0;
+    try {
+      for (const item of (stock || [])) {
+        const cleanCat = normalizeCategory(item.category, item.name);
+        if (cleanCat !== item.category) {
+          await updateSKU(item.id, { category: cleanCat });
+          updatedCount++;
+        }
+      }
+      toast.success(`Successfully cleaned & updated ${updatedCount} products in the database!`);
+    } catch (err) {
+      console.error('Error cleaning categories:', err);
+      toast.error('Failed to clean up categories');
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
+  const handleAddNewCategoryPrompt = async (isEditing = false) => {
+    const { value: categoryName } = await Swal.fire({
+      title: 'Add New Category',
+      input: 'text',
+      inputLabel: 'Category Name',
+      inputPlaceholder: 'e.g. Handmade Crafts',
+      showCancelButton: true,
+      confirmButtonText: 'Add Category',
+      confirmButtonColor: '#4f46e5',
+      inputValidator: (val) => {
+        if (!val || !val.trim()) {
+          return 'Please enter a category name!';
+        }
+      }
+    });
+
+    if (categoryName && categoryName.trim()) {
+      const formattedCat = categoryName.trim().charAt(0).toUpperCase() + categoryName.trim().slice(1);
+      if (isEditing && editingProduct) {
+        setEditingProduct(prev => ({ ...prev, category: formattedCat }));
+      } else {
+        setNewProduct(prev => ({ ...prev, category: formattedCat }));
+      }
+      toast.success(`Category "${formattedCat}" selected!`);
+    }
+  };
 
   const handleAddProduct = async (e) => {
     e.preventDefault();
@@ -392,6 +454,25 @@ const Products = () => {
             >
               <Download size={16} className="mr-2" /> Export
             </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => handleAddNewCategoryPrompt(false)}
+              className="text-indigo-600 border border-indigo-200 hover:bg-indigo-50 h-9"
+              title="Create a new custom category"
+            >
+              <Plus size={16} className="mr-1.5" /> Add Category
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={handleBatchCleanCategories}
+              className="text-indigo-600 border border-indigo-200 hover:bg-indigo-50 h-9"
+              loading={isCleaning}
+              title="Clean up mixed category names across all database records"
+            >
+              <Sparkles size={16} className="mr-2 text-indigo-500 animate-pulse" /> Clean Categories
+            </Button>
             <div className="hidden sm:flex gap-2">
               <Button 
                 variant="ghost" 
@@ -436,12 +517,29 @@ const Products = () => {
               onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
               required
             />
-            <Input 
-              label="Category" 
-              placeholder="e.g. Bowls" 
-              value={newProduct.category}
-              onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}
-            />
+            <div className="flex gap-2 items-end">
+              <div className="flex-1">
+                <SearchableSelect 
+                  label="Category" 
+                  placeholder="Select Category (e.g. Spoons, Bowls...)" 
+                  options={categoryOptions}
+                  value={newProduct.category}
+                  onChange={(val) => setNewProduct({...newProduct, category: val})}
+                  allowCustom={true}
+                  onAddNewCategory={() => handleAddNewCategoryPrompt(false)}
+                />
+              </div>
+              <Button 
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => handleAddNewCategoryPrompt(false)}
+                className="h-[42px] px-3 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 text-slate-600 flex items-center gap-1 font-semibold text-xs whitespace-nowrap"
+                title="Add a new category"
+              >
+                <Plus size={15} /> Add Category
+              </Button>
+            </div>
             {!newProduct.isComposite && (
               <Input 
                 label="Opening Stock" 
@@ -782,11 +880,29 @@ const Products = () => {
                 onChange={(e) => setEditingProduct({...editingProduct, name: e.target.value})}
                 required
               />
-              <Input 
-                label="Category" 
-                value={editingProduct.category}
-                onChange={(e) => setEditingProduct({...editingProduct, category: e.target.value})}
-              />
+              <div className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <SearchableSelect 
+                    label="Category" 
+                    placeholder="Select Category (e.g. Spoons, Bowls...)" 
+                    options={categoryOptions}
+                    value={editingProduct.category}
+                    onChange={(val) => setEditingProduct({...editingProduct, category: val})}
+                    allowCustom={true}
+                    onAddNewCategory={() => handleAddNewCategoryPrompt(true)}
+                  />
+                </div>
+                <Button 
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => handleAddNewCategoryPrompt(true)}
+                  className="h-[42px] px-3 border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 text-slate-600 flex items-center gap-1 font-semibold text-xs whitespace-nowrap"
+                  title="Add a new category"
+                >
+                  <Plus size={15} /> Add Category
+                </Button>
+              </div>
 
               <div className="pt-2 border-t border-slate-100">
                  <label className="flex items-center gap-2 cursor-pointer">
