@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Package, Truck, AlertTriangle, ClipboardList, BarChart3, Box, X, Layers, Users, Globe, RotateCcw, LogOut, ShoppingCart, Hammer, RefreshCcw, Store, Scale } from 'lucide-react';
+import { LayoutDashboard, Package, Truck, AlertTriangle, ClipboardList, BarChart3, Box, X, Layers, Users, Globe, RotateCcw, LogOut, ShoppingCart, Hammer, RefreshCcw, Store, Scale, FileSpreadsheet, Calendar } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 
 const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
@@ -24,6 +24,8 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
     { name: 'Reorder Points', path: '/rop', icon: <Package size={20} /> },
     { name: 'Stock Check', path: '/stock', icon: <ClipboardList size={20} /> },
     { name: 'Weekly Discrepancy', path: '/two-week-stock', icon: <Scale size={20} /> },
+    { name: 'Date Range Audit', path: '/date-range-stock', icon: <Calendar size={20} /> },
+    { name: 'Tally Verification', path: '/tally-verification', icon: <FileSpreadsheet size={20} /> },
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
   ];
 

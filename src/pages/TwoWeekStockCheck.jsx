@@ -168,56 +168,7 @@ const TwoWeekStockCheck = () => {
     }
   }, [periodOptions]);
 
-  // Handle direct approval link from email (?approveRequestId=...)
-  React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const reqId = params.get('approveRequestId');
-    if (!reqId || !expectedStockRequests || expectedStockRequests.length === 0) return;
 
-    const targetReq = expectedStockRequests.find(r => r.id === reqId);
-    if (!targetReq) return;
-
-    if (targetReq.status === 'approved') {
-      toast.success('This stock correction request has already been approved and applied!');
-      window.history.replaceState({}, '', window.location.pathname);
-      return;
-    }
-
-    if (targetReq.status === 'pending') {
-      Swal.fire({
-        title: 'Approve Stock Correction Request?',
-        html: `
-          <div style="text-align: left; font-size: 13px; color: #334155;">
-            <p style="margin-bottom: 8px;"><b>Period:</b> ${targetReq.period}</p>
-            <p style="margin-bottom: 8px;"><b>Requested By:</b> ${targetReq.requestedBy || 'Staff'}</p>
-            <p style="margin-bottom: 12px;"><b>Reason:</b> ${targetReq.reason || 'Correction'}</p>
-            <p style="font-weight: bold; color: #4f46e5; margin-bottom: 6px;">Products to be corrected (${targetReq.items?.length || 0}):</p>
-            <ul style="max-height: 150px; overflow-y: auto; background: #f8fafc; padding: 10px 15px; border-radius: 8px; font-size: 12px; margin: 0;">
-              ${(targetReq.items || []).map(i => `<li><b>${i.productName}</b>: ${i.currentExpected} &rarr; <b style="color: #059669;">${i.proposedExpected}</b></li>`).join('')}
-            </ul>
-          </div>
-        `,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#059669',
-        cancelButtonColor: '#64748b',
-        confirmButtonText: 'Yes, Approve & Apply Stock',
-        cancelButtonText: 'Review Later'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          approveExpectedStockRequest(reqId).then(() => {
-            toast.success('Expected stock corrections approved & applied to stock!');
-            window.history.replaceState({}, '', window.location.pathname);
-          }).catch(err => {
-            toast.error('Approval failed: ' + err.message);
-          });
-        } else {
-          setIsCorrectionModalOpen(true);
-          window.history.replaceState({}, '', window.location.pathname);
-        }
-      });
-    }
-  }, [expectedStockRequests, approveExpectedStockRequest]);
 
   // Selected weekly period
   const activePeriod = useMemo(() => {
@@ -873,12 +824,12 @@ const TwoWeekStockCheck = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="bg-slate-800 border border-slate-700/80 rounded-xl px-3 py-2 flex items-center gap-2 text-xs">
-            <Calendar size={15} className="text-indigo-400 shrink-0" />
+          <div className="relative flex items-center shrink-0">
+            <Calendar size={15} className="absolute left-3 text-indigo-400 pointer-events-none z-10" />
             <select
               value={selectedBlockKey}
               onChange={(e) => setSelectedBlockKey(e.target.value)}
-              className="bg-transparent text-white text-xs font-semibold focus:outline-none cursor-pointer pr-2 max-w-[320px] sm:max-w-none truncate"
+              className="bg-slate-800 border border-slate-700 hover:border-slate-600 text-white text-xs font-bold pl-8 pr-4 py-2 rounded-xl outline-none cursor-pointer focus:ring-2 focus:ring-indigo-500/50 shadow-sm max-w-[340px] sm:max-w-none"
             >
               {periodOptions.map(opt => (
                 <option key={opt.key} value={opt.key} className="bg-slate-900 text-white py-1">
@@ -983,10 +934,10 @@ const TwoWeekStockCheck = () => {
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs sm:text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer"
+              className="bg-slate-50 border border-slate-200 hover:border-slate-300 rounded-xl px-3 py-1.5 text-xs sm:text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 cursor-pointer shadow-sm"
             >
               {categories.map(cat => (
-                <option key={cat} value={cat}>
+                <option key={cat} value={cat} className="bg-white text-slate-800 py-1">
                   {cat === 'all' ? 'All Categories' : cat}
                 </option>
               ))}

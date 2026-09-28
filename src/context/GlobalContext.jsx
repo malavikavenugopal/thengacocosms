@@ -55,6 +55,9 @@ export const useGlobalState = () => {
       amazonReturnRecords: [],
       storeReminders: [],
       standardRecipients: [],
+      tallyVerifications: [],
+      addTallyVerification: async () => {},
+      deleteTallyVerification: async () => {},
       loading: true,
       drafts: { b2b: null, b2c: null, purchase: null, return: null, damage: null, qc: null, replacement: null, production: null, rework: null },
       updateDraft: () => {},
@@ -142,6 +145,7 @@ export const GlobalProvider = ({ children }) => {
   const [storeSales, setStoreSales] = useState([]);
   const [storeReminders, setStoreReminders] = useState([]);
   const [expectedStockRequests, setExpectedStockRequests] = useState([]);
+  const [tallyVerifications, setTallyVerifications] = useState([]);
   const [standardRecipients, setStandardRecipients] = useState([
     { email: 'sudha.thenga@gmail.com', label: 'Sudha' },
     { email: 'sumitha@thengacoco.com', label: 'Sumitha' },
@@ -531,6 +535,9 @@ export const GlobalProvider = ({ children }) => {
     const unsubExpectedRequests = onSnapshot(collection(db, 'expectedStockRequests'), (snapshot) => {
       setExpectedStockRequests(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
     });
+    const unsubTally = onSnapshot(query(collection(db, 'tallyVerifications'), orderBy('createdAt', 'desc')), (snapshot) => {
+      setTallyVerifications(snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id })));
+    });
 
     // Fallback: If data takes too long (e.g. empty database), stop loading after 3 seconds
     const timeout = setTimeout(() => setLoading(false), 3000);
@@ -540,7 +547,7 @@ export const GlobalProvider = ({ children }) => {
       unsubStock(); unsubB2B(); unsubB2C(); unsubDamage();
       unsubReturns(); unsubQC(); unsubStaff(); unsubChannels(); unsubCouriers();
       unsubMonthly(); unsubPurchases(); unsubVendors(); unsubReplacements(); unsubProduction(); unsubRework(); unsubAmazonReturns();
-      unsubStores(); unsubStoreSales(); unsubStoreReminders(); unsubStandardRecipients(); unsubExpectedRequests();
+      unsubStores(); unsubStoreSales(); unsubStoreReminders(); unsubStandardRecipients(); unsubExpectedRequests(); unsubTally();
     };
   }, [currentUser]);
 
@@ -1199,6 +1206,18 @@ export const GlobalProvider = ({ children }) => {
       storeReminders, addStoreReminder,
       standardRecipients, addStandardRecipient, updateStandardRecipient, deleteStandardRecipient,
       expectedStockRequests, addExpectedStockRequest, approveExpectedStockRequest, rejectExpectedStockRequest, deleteExpectedStockRequest,
+      tallyVerifications,
+      addTallyVerification: async (record) => {
+        const sanitized = JSON.parse(JSON.stringify(record));
+        await addDoc(collection(db, 'tallyVerifications'), {
+          ...sanitized,
+          createdAt: new Date().toISOString()
+        });
+      },
+      deleteTallyVerification: async (id) => {
+        if (!id) return;
+        await deleteDoc(doc(db, 'tallyVerifications', String(id)));
+      },
       monthlyStockData, saveMonthlyStock: async (month, productId, updates) => {
         const id = `${month}_${productId}`;
         await setDoc(doc(db, 'monthlyStockData', id), { ...updates, month, productId }, { merge: true });

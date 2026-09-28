@@ -21,6 +21,8 @@ import CandleManufacturing from './pages/CandleManufacturing';
 import ExpoDashboard from './pages/ExpoDashboard';
 import StoreManagement from './pages/StoreManagement';
 import TwoWeekStockCheck from './pages/TwoWeekStockCheck';
+import CustomDateStockCheck from './pages/CustomDateStockCheck';
+import TallyVerification from './pages/TallyVerification';
 import Login from './pages/Login';
 import { GlobalProvider, useGlobalState } from './context/GlobalContext';
 
@@ -79,6 +81,8 @@ function App() {
             <Route path="damage" element={<DamageTracking />} />
             <Route path="stock" element={<MonthlyStockCheck />} />
             <Route path="two-week-stock" element={<TwoWeekStockCheck />} />
+            <Route path="date-range-stock" element={<CustomDateStockCheck />} />
+            <Route path="tally-verification" element={<TallyVerification />} />
             <Route path="rop" element={<ReorderPoint />} />
             <Route path="manufacturing" element={<CandleManufacturing />} />
             <Route path="rework" element={<ReworkLog />} />

@@ -361,6 +361,21 @@ const ExpectedStockCorrectionModal = ({ isOpen, onClose, activePeriod, itemsList
     }
   };
 
+  // Delete request
+  const handleDelete = async (requestId) => {
+    if (!window.confirm("Are you sure you want to delete this correction request?")) return;
+    setProcessingId(requestId);
+    try {
+      await deleteExpectedStockRequest(requestId);
+      toast.success('Correction request deleted.');
+    } catch (err) {
+      toast.error('Failed to delete: ' + err.message);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+
   // Resend approval email to recipient
   const handleResendEmail = async (req) => {
     setProcessingId(req.id);
@@ -693,7 +708,16 @@ const ExpectedStockCorrectionModal = ({ isOpen, onClose, activePeriod, itemsList
                         </p>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => handleApprove(req.id)}
+                          disabled={processingId === req.id}
+                          className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                          title="Approve & Save Expected Stock to Database"
+                        >
+                          <CheckCircle2 size={14} />
+                          <span>{processingId === req.id ? 'Approving...' : 'Approve & Apply'}</span>
+                        </button>
                         <button
                           onClick={() => handleReject(req.id)}
                           disabled={processingId === req.id}
@@ -705,11 +729,19 @@ const ExpectedStockCorrectionModal = ({ isOpen, onClose, activePeriod, itemsList
                         <button
                           onClick={() => handleResendEmail(req)}
                           disabled={processingId === req.id}
-                          className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+                          className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 disabled:opacity-50"
                           title="Resend approval email to recipient"
                         >
                           <Mail size={14} />
                           <span>Resend Email</span>
+                        </button>
+                        <button
+                          onClick={() => handleDelete(req.id)}
+                          disabled={processingId === req.id}
+                          className="px-2.5 py-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs transition-all"
+                          title="Delete request"
+                        >
+                          <X size={14} />
                         </button>
                       </div>
                     </div>

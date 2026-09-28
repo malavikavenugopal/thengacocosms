@@ -106,6 +106,7 @@ const Layout = () => {
       case '/damage': return 'Damage Tracking';
       case '/stock': return 'Stock Check';
       case '/two-week-stock': return 'Weekly Discrepancy Analysis';
+      case '/date-range-stock': return 'Date Range Stock Audit';
       case '/manufacturing': return 'Candle Manufacturing';
       case '/rework': return 'Rework Log Entry';
       case '/reports': return 'Analytics & Reports';

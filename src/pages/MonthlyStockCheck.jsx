@@ -857,56 +857,7 @@ const MonthlyStockCheck = () => {
 
 
 
-  // Handle direct approval link from email (?approveRequestId=...)
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const reqId = params.get('approveRequestId');
-    if (!reqId || !expectedStockRequests || expectedStockRequests.length === 0) return;
 
-    const targetReq = expectedStockRequests.find(r => r.id === reqId);
-    if (!targetReq) return;
-
-    if (targetReq.status === 'approved') {
-      toast.success('This stock correction request has already been approved and applied!');
-      window.history.replaceState({}, '', window.location.pathname);
-      return;
-    }
-
-    if (targetReq.status === 'pending') {
-      Swal.fire({
-        title: 'Approve Stock Correction Request?',
-        html: `
-          <div style="text-align: left; font-size: 13px; color: #334155;">
-            <p style="margin-bottom: 8px;"><b>Period:</b> ${targetReq.period}</p>
-            <p style="margin-bottom: 8px;"><b>Requested By:</b> ${targetReq.requestedBy || 'Staff'}</p>
-            <p style="margin-bottom: 12px;"><b>Reason:</b> ${targetReq.reason || 'Correction'}</p>
-            <p style="font-weight: bold; color: #4f46e5; margin-bottom: 6px;">Products to be corrected (${targetReq.items?.length || 0}):</p>
-            <ul style="max-height: 150px; overflow-y: auto; background: #f8fafc; padding: 10px 15px; border-radius: 8px; font-size: 12px; margin: 0;">
-              ${(targetReq.items || []).map(i => `<li><b>${i.productName}</b>: ${i.currentExpected} &rarr; <b style="color: #059669;">${i.proposedExpected}</b></li>`).join('')}
-            </ul>
-          </div>
-        `,
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#059669',
-        cancelButtonColor: '#64748b',
-        confirmButtonText: 'Yes, Approve & Apply Stock',
-        cancelButtonText: 'Review Later'
-      }).then((result) => {
-        if (result.isConfirmed) {
-          approveExpectedStockRequest(reqId).then(() => {
-            toast.success('Expected stock corrections approved & applied to stock!');
-            window.history.replaceState({}, '', window.location.pathname);
-          }).catch(err => {
-            toast.error('Approval failed: ' + err.message);
-          });
-        } else {
-          setIsCorrectionModalOpen(true);
-          window.history.replaceState({}, '', window.location.pathname);
-        }
-      });
-    }
-  }, [expectedStockRequests, approveExpectedStockRequest]);
 
   const handleCarryForward = async () => {
     setIsCarryingForward(true);
@@ -1032,34 +983,10 @@ const MonthlyStockCheck = () => {
             <div className="p-2 md:p-3 bg-indigo-50 text-indigo-600 rounded-xl"><Calendar size={20} className="md:w-6 md:h-6"/></div>
             <div>
               <h2 className="text-base md:text-lg font-bold text-slate-800 leading-tight">
-                {auditMode === 'monthly' ? 'Monthly Stock Report' : 'Weekly Stock Report'}
+                Weekly Stock Report
               </h2>
               <p className="text-[10px] md:text-xs text-slate-500 font-medium">Expected stock & movements overview</p>
             </div>
-          </div>
-
-          {/* Mode Switcher: Weekly / Monthly */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shrink-0">
-            <button
-              onClick={() => setAuditMode('weekly')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                auditMode === 'weekly' 
-                  ? 'bg-white text-indigo-600 shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Weekly
-            </button>
-            <button
-              onClick={() => setAuditMode('monthly')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                auditMode === 'monthly' 
-                  ? 'bg-white text-indigo-600 shadow-sm' 
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Monthly
-            </button>
           </div>
         </div>
         
@@ -1099,10 +1026,10 @@ const MonthlyStockCheck = () => {
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="h-10 px-3 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 cursor-pointer shrink-0"
+            className="h-10 px-3 bg-white border border-slate-200 hover:border-slate-300 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 cursor-pointer shrink-0 shadow-sm"
           >
             {categoryOptions.map(cat => (
-              <option key={cat} value={cat}>
+              <option key={cat} value={cat} className="bg-white text-slate-800 py-1 font-medium">
                 {cat === 'all' ? 'All Categories' : cat}
               </option>
             ))}
