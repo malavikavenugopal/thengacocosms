@@ -389,13 +389,6 @@ const CustomDateStockCheck = () => {
     let prevIn = 0;
     let prevOut = 0;
 
-    purchaseRecords.forEach(p => {
-      if (p.date && p.date >= weekStartDate && p.date < fromDate) {
-        const master = stockMap.findMaster(p.productName);
-        if (master?.id === item.id) prevIn += Number(p.quantity) || 0;
-      }
-    });
-
     (productionRecords || []).forEach(pr => {
       if (pr.date && pr.date >= weekStartDate && pr.date < fromDate) {
         const master = stockMap.findMaster(pr.productName);
@@ -529,16 +522,7 @@ const CustomDateStockCheck = () => {
       resMap[productId].outRecords.push({ date, type, qty: amount, notes, ref });
     };
 
-    // 1. Purchases (IN)
-    purchaseRecords.forEach(p => {
-      if (!isDateInRange(p.date)) return;
-      const master = stockMap.findMaster(p.productName);
-      if (master && resMap[master.id]) {
-        addIn(master.id, Number(p.quantity) || 0, 'Purchase', p.date, `Vendor: ${p.vendorName || '-'}`, `PO #${p.invoiceNo || p.id}`);
-      }
-    });
-
-    // 2. Production / Manufacturing (IN for produced candle, OUT for components)
+    // 1. Production / Manufacturing (IN for produced candle, OUT for components)
     (productionRecords || []).forEach(pr => {
       if (!isDateInRange(pr.date)) return;
       const master = stockMap.findMaster(pr.productName);
@@ -681,7 +665,7 @@ const CustomDateStockCheck = () => {
         expectedStock
       };
     });
-  }, [stock, monthlyStockData, purchaseRecords, productionRecords, returnRecords, qcRecords, b2bShipments, b2cShipments, damageRecords, reworkRecords, replacementRecords, fromDate, toDate, stockMap]);
+  }, [stock, monthlyStockData, productionRecords, returnRecords, qcRecords, b2bShipments, b2cShipments, damageRecords, reworkRecords, replacementRecords, fromDate, toDate, stockMap]);
 
   // Filtered rows for UI
   const filteredData = useMemo(() => {
