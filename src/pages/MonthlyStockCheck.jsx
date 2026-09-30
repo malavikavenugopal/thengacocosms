@@ -117,7 +117,7 @@ const MonthlyStockCheck = () => {
 
   const handleCarryPhysicalForward = async () => {
     setIsSyncing(true);
-    const toastId = toast.loading(`Carrying forward Expected Stock to ${activePeriod}...`);
+    const toastId = toast.loading(`Carrying forward Physical Stock to ${activePeriod}...`);
     try {
       const prevPeriodStr = getPrevPeriodStr(activePeriod);
       const prevMovements = getMovements(prevPeriodStr);
@@ -129,10 +129,13 @@ const MonthlyStockCheck = () => {
         const m = prevMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, purchased: 0, produced: 0, rejected: 0, replacement: 0, used: 0, qcAcceptedOrPurchase: 0 };
         const expected = calculateExpected(prevOpening, pData.in || 0, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
         
-        await saveMonthlyStock(activePeriod, item.id, { opening: expected });
+        const hasPhysical = pData.physical !== undefined && pData.physical !== '' && pData.physical !== null;
+        const carryVal = hasPhysical ? Number(pData.physical) : expected;
+
+        await saveMonthlyStock(activePeriod, item.id, { opening: carryVal });
         await saveMonthlyStock(prevPeriodStr, item.id, { expected });
       }
-      toast.success(`Success! Carried forward balances from ${prevPeriodStr}`, { id: toastId });
+      toast.success(`Success! Carried forward physical balances from ${prevPeriodStr}`, { id: toastId });
     } catch (error) {
       toast.error("Process failed: " + error.message, { id: toastId });
     } finally {
@@ -759,10 +762,10 @@ const MonthlyStockCheck = () => {
         const approvedExpected = approvedReqMap[key];
 
         let opening;
-        if (runningOpenings[item.id] !== undefined) {
-          opening = runningOpenings[item.id];
-        } else if (doc?.opening !== undefined && doc?.opening !== '') {
+        if (doc?.opening !== undefined && doc?.opening !== '') {
           opening = Number(doc.opening);
+        } else if (runningOpenings[item.id] !== undefined) {
+          opening = runningOpenings[item.id];
         } else {
           opening = Number(item?.openingStock) || 0;
         }
@@ -855,29 +858,29 @@ const MonthlyStockCheck = () => {
     return chainInfo?.expected !== undefined ? chainInfo.expected : (Number(item?.openingStock) || 0);
   };
 
-
-
-
-
   const handleCarryForward = async () => {
     setIsCarryingForward(true);
+    const toastId = toast.loading(`Carrying forward Expected Stock to ${activePeriod}...`);
     try {
       const prevPeriodStr = getPrevPeriodStr(activePeriod);
-
-      const prevData = monthlyStockData.filter(d => d.month === prevPeriodStr);
-      if (prevData.length === 0) { toast.error(`No data found for previous period (${prevPeriodStr})`); return; }
-      
       const prevMovements = getMovements(prevPeriodStr);
-      for (const item of prevData) {
-        const product = stock.find(s => s.id === item.productId);
-        if (!product) continue;
-        const m = prevMovements[product.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, purchased: 0, produced: 0, rejected: 0, replacement: 0, used: 0, qcAcceptedOrPurchase: 0 };
-        const expected = calculateExpected(item.opening, item.in, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
-        await saveMonthlyStock(activePeriod, item.productId, { opening: expected });
-        await saveMonthlyStock(prevPeriodStr, item.productId, { expected });
+
+      for (const item of stock) {
+        if (item.isComposite) continue;
+        const prevOpening = getEffectiveOpeningStock(prevPeriodStr, item.id, item);
+        const pData = monthlyStockData.find(d => d.month === prevPeriodStr && d.productId === item.id) || {};
+        const m = prevMovements[item.id] || { out: 0, stockDeduction: 0, returned: 0, damage: 0, purchased: 0, produced: 0, rejected: 0, replacement: 0, used: 0, qcAcceptedOrPurchase: 0 };
+        const expected = calculateExpected(prevOpening, pData.in || 0, m.purchased, m.produced, m.returned, m.stockDeduction, m.replacement, m.damage, m.rejected, m.used, m.qcAcceptedOrPurchase);
+        
+        await saveMonthlyStock(activePeriod, item.id, { opening: expected });
+        await saveMonthlyStock(prevPeriodStr, item.id, { expected });
       }
-      toast.success('Balances carried forward successfully!');
-    } finally { setIsCarryingForward(false); }
+      toast.success(`Balances carried forward successfully from ${prevPeriodStr}!`, { id: toastId });
+    } catch (err) {
+      toast.error("Carry forward failed: " + err.message, { id: toastId });
+    } finally {
+      setIsCarryingForward(false);
+    }
   };
 
   const filteredStock = useMemo(() => {

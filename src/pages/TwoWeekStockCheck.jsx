@@ -559,10 +559,10 @@ const TwoWeekStockCheck = () => {
         const approvedExpected = approvedReqMap[key];
 
         let opening;
-        if (runningOpenings[item.id] !== undefined) {
-          opening = runningOpenings[item.id];
-        } else if (doc?.opening !== undefined && doc?.opening !== '') {
+        if (doc?.opening !== undefined && doc?.opening !== '') {
           opening = Number(doc.opening);
+        } else if (runningOpenings[item.id] !== undefined) {
+          opening = runningOpenings[item.id];
         } else {
           opening = Number(item?.openingStock) || 0;
         }
