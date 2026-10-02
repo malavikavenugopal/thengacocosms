@@ -452,26 +452,19 @@ const TwoWeekStockCheck = () => {
       }
     });
 
-    // Effective QC and Purchase calculation
+    // Effective QC calculation (only QC accepted, no unchecked purchases)
     Object.keys(sums).forEach(id => {
       sums[id].out = sums[id].b2cOut + sums[id].b2bOut + sums[id].reworkOut;
       
       let totalQCAccepted = 0;
-      let effectiveQCAndPurchase = 0;
       const productQCs = qcStatsByProductAndVendor[id] || {};
-      const productPurchases = purchasesByProductAndVendor[id] || {};
-      const allVendors = new Set([...Object.keys(productQCs), ...Object.keys(productPurchases)]);
       
-      allVendors.forEach(vendorKey => {
-        const A = productQCs[vendorKey]?.accepted || 0;
-        const C = productQCs[vendorKey]?.checked || 0;
-        const P = productPurchases[vendorKey]?.quantity || 0;
-        totalQCAccepted += A;
-        effectiveQCAndPurchase += A + Math.max(0, P - C);
+      Object.values(productQCs).forEach(v => {
+        totalQCAccepted += (v.accepted || 0);
       });
 
       sums[id].qcAccepted = totalQCAccepted;
-      sums[id].qcAcceptedOrPurchase = effectiveQCAndPurchase;
+      sums[id].qcAcceptedOrPurchase = totalQCAccepted;
     });
 
     movementsCache.current[periodStr] = sums;

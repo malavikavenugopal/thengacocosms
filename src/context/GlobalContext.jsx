@@ -350,16 +350,8 @@ export const GlobalProvider = ({ children }) => {
       });
 
       let qcAcceptedOrPurchase = 0;
-      const allVendors = new Set([
-        ...Object.keys(qcStatsByVendor),
-        ...Object.keys(purchasesByVendor)
-      ]);
-
-      allVendors.forEach(vendorKey => {
-        const A = qcStatsByVendor[vendorKey]?.accepted || 0;
-        const C = qcStatsByVendor[vendorKey]?.checked || 0;
-        const P = purchasesByVendor[vendorKey] || 0;
-        qcAcceptedOrPurchase += A + Math.max(0, P - C);
+      Object.values(qcStatsByVendor).forEach(v => {
+        qcAcceptedOrPurchase += (v.accepted || 0);
       });
 
       if (!mData) {

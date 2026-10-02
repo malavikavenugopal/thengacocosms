@@ -276,7 +276,7 @@ const CustomDateStockCheck = () => {
     stock.forEach(item => {
       if (!sums[item.id]) return;
       const s = sums[item.id];
-      s.qcAcceptedOrPurchase = s.qcAccepted > 0 ? s.qcAccepted : s.purchased;
+      s.qcAcceptedOrPurchase = s.qcAccepted || 0;
     });
 
     return sums;

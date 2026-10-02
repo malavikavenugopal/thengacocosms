@@ -420,21 +420,14 @@ const MonthlyStockCheck = () => {
       sums[id].out = sums[id].b2cOut + sums[id].b2bOut + (sums[id].reworkOut || 0);
       
       let totalQCAccepted = 0;
-      let effectiveQCAndPurchase = 0;
       const productQCs = qcStatsByProductAndVendor[id] || {};
-      const productPurchases = purchasesByProductAndVendor[id] || {};
-      const allVendors = new Set([...Object.keys(productQCs), ...Object.keys(productPurchases)]);
       
-      allVendors.forEach(vendorKey => {
-        const A = productQCs[vendorKey]?.accepted || 0;
-        const C = productQCs[vendorKey]?.checked || 0;
-        const P = productPurchases[vendorKey]?.quantity || 0;
-        totalQCAccepted += A;
-        effectiveQCAndPurchase += A + Math.max(0, P - C);
+      Object.values(productQCs).forEach(v => {
+        totalQCAccepted += (v.accepted || 0);
       });
 
       sums[id].qcAccepted = totalQCAccepted;
-      sums[id].qcAcceptedOrPurchase = effectiveQCAndPurchase;
+      sums[id].qcAcceptedOrPurchase = totalQCAccepted;
     });
     return sums;
   };
@@ -563,27 +556,6 @@ const MonthlyStockCheck = () => {
       });
     });
 
-    // Group purchases and QC by vendor to match the mathematical logic
-    const vendorMap = {};
-
-    purchaseRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name)).forEach(r => {
-      const vendorName = r.vendorName || 'Unknown';
-      const key = vendorName.trim().toLowerCase();
-      if (!vendorMap[key]) {
-        vendorMap[key] = { vendorName, purchases: [], qcs: [] };
-      }
-      vendorMap[key].purchases.push(r);
-    });
-
-    qcRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name)).forEach(r => {
-      const vendorName = r.vendorName || 'Unknown';
-      const key = vendorName.trim().toLowerCase();
-      if (!vendorMap[key]) {
-        vendorMap[key] = { vendorName, purchases: [], qcs: [] };
-      }
-      vendorMap[key].qcs.push(r);
-    });
-
     // Add production and return records normally
     productionRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name)).forEach(r => {
       results.in.push({ id: r.id, label: `Mfg: ${r.location}`, impact: Number(r.quantity) || 0, color: 'indigo' });
@@ -593,33 +565,14 @@ const MonthlyStockCheck = () => {
       results.in.push({ id: r.id, label: `Return: ${r.channel}`, impact: Number(r.quantity) || 0, color: 'blue' });
     });
 
-    // Now process the vendors and calculate QC Accepted + Unchecked Purchase balance
-    Object.values(vendorMap).forEach(v => {
-      const totalPurchased = v.purchases.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
-      const totalChecked = v.qcs.reduce((sum, r) => sum + (Number(r.checked) || 0), 0);
-      
-      // Add each QC record's accepted quantity
-      v.qcs.forEach(r => {
-        const accepted = Number(r.checked) - (Number(r.damaged) || 0) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0) - (Number(r.hole) || 0);
-        if (accepted > 0) {
-          results.in.push({
-            id: r.id,
-            label: `QC Accepted: ${v.vendorName}`,
-            impact: accepted,
-            color: 'emerald'
-          });
-        }
-      });
-
-      // Add the remaining unchecked purchase balance if any
-      const unchecked = Math.max(0, totalPurchased - totalChecked);
-      if (unchecked > 0) {
-        const label = totalChecked > 0 ? `Unchecked Purchase: ${v.vendorName}` : `Purchase: ${v.vendorName}`;
-        const repId = v.purchases[0]?.id || `unchecked-${v.vendorName}`;
+    // Only add QC accepted records (purchases are not included)
+    qcRecords.filter(r => isTarget(r.date, period) && compareNames(r.productName, product.name)).forEach(r => {
+      const accepted = Number(r.checked) - (Number(r.damaged) || 0) - (Number(r.rejected) || 0) - (Number(r.baseless) || 0) - (Number(r.hole) || 0);
+      if (accepted > 0) {
         results.in.push({
-          id: repId,
-          label: label,
-          impact: unchecked,
+          id: r.id,
+          label: `QC Accepted: ${r.vendorName || 'Unknown'}`,
+          impact: accepted,
           color: 'emerald'
         });
       }
