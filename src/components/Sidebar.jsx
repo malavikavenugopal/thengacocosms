@@ -25,7 +25,7 @@ const Sidebar = ({ mobileMenuOpen, setMobileMenuOpen }) => {
     { name: 'Stock Check', path: '/stock', icon: <ClipboardList size={20} /> },
     { name: 'Weekly Discrepancy', path: '/two-week-stock', icon: <Scale size={20} /> },
     { name: 'Date Range Audit', path: '/date-range-stock', icon: <Calendar size={20} /> },
-    { name: 'Tally Verification', path: '/tally-verification', icon: <FileSpreadsheet size={20} /> },
+    // { name: 'Tally Verification', path: '/tally-verification', icon: <FileSpreadsheet size={20} /> },
     { name: 'Reports', path: '/reports', icon: <BarChart3 size={20} /> },
   ];
 
