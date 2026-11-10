@@ -759,9 +759,10 @@ export const GlobalProvider = ({ children }) => {
   const addPurchaseRecord = async (record) => {
     const masterSKU = stock.find(s => s.name === record.productName);
     const finalized = { ...record, packSize: masterSKU?.packSize || 1 };
-    await addDoc(collection(db, 'purchaseRecords'), finalized);
+    const docRef = await addDoc(collection(db, 'purchaseRecords'), finalized);
     const totalUnits = (Number(record.quantity) || 0) * (masterSKU?.packSize || 1);
     await updateFirestoreStock(record.productName, totalUnits, 'add', 'in');
+    return docRef.id;
   };
 
   const deletePurchaseRecord = async (id) => {

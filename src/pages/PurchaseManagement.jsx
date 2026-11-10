@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { Card, Input, Button, Table, SearchableSelect } from '../components/ui';
-import { ShoppingCart, Plus, Trash2, Save, MapPin, History, Lock, Edit2, X, ClipboardCheck, CheckCircle2, XCircle, PackagePlus, MinusCircle } from 'lucide-react';
+import { ShoppingCart, Plus, Trash2, Save, MapPin, History, Lock, Edit2, X, ClipboardCheck, CheckCircle2, XCircle, PackagePlus, MinusCircle, Mail } from 'lucide-react';
 import { useGlobalState } from '../context/GlobalContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import { isRecordEditable } from '../utils/dateUtils';
+import emailjs from 'emailjs-com';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 const PurchaseManagement = () => {
   const { 
@@ -17,6 +20,7 @@ const PurchaseManagement = () => {
     updateDraft, 
     clearDraft, 
     qcRecords, 
+    updateQCRecord,
     vendors, 
     addVendor, 
     updateVendor, 
@@ -30,6 +34,7 @@ const PurchaseManagement = () => {
   const [editingId, setEditingId] = useState(null);
   const [historySubTab, setHistorySubTab] = useState('qc');
   const [activeTab, setActiveTab] = useState('entry');
+  const [sendEmailOnSave, setSendEmailOnSave] = useState(false);
   const [qcPage, setQcPage] = useState(1);
   const [purchasePage, setPurchasePage] = useState(1);
   const itemsPerPage = 10;
@@ -218,6 +223,7 @@ const PurchaseManagement = () => {
         await updatePurchaseRecord(editingId, recordData);
         toast.success('Purchase record updated!');
       } else {
+        const addedRecords = [];
         for (const item of formData.items) {
           const recordData = {
             vendorName: formData.vendorName,
@@ -225,12 +231,55 @@ const PurchaseManagement = () => {
             date: formData.date,
             productName: item.productName,
             quantity: item.quantity,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            emailSent: false
           };
-          await addPurchaseRecord({ ...recordData, id: Date.now() + Math.random() });
+          const newDocId = await addPurchaseRecord({ ...recordData, id: Date.now() + Math.random() });
+          addedRecords.push({ ...recordData, id: newDocId || (Date.now() + Math.random()) });
         }
         toast.success(`Successfully added ${formData.items.length} products!`);
         clearDraft('purchase');
+
+        if (sendEmailOnSave && addedRecords.length > 0) {
+          const vendor = vendors.find(v => v.name === formData.vendorName);
+          const defaultRecipients = vendor?.email || standardRecipients.filter(r => r.label.toLowerCase() !== 'dhanya').map(r => r.email).join(', ') || standardRecipients.map(r => r.email).join(', ');
+          const defaultSubject = `Purchase Report - ${formData.vendorName || 'General'} (${formData.date})`;
+
+          Swal.fire({
+            title: 'Customize Purchase Email',
+            html: `
+              <div style="text-align: left; font-size: 13px;">
+                <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #334155;">Email Subject:</label>
+                <input id="swal-purchase-subject" class="swal2-input" style="width: 100%; margin: 0 0 14px 0; font-size: 14px; box-sizing: border-box;" value="${defaultSubject}" />
+                
+                <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #334155;">Recipient Emails (comma separated):</label>
+                <input id="swal-purchase-recipients" class="swal2-input" style="width: 100%; margin: 0; font-size: 14px; box-sizing: border-box;" value="${defaultRecipients}" />
+              </div>
+            `,
+            showCancelButton: true,
+            confirmButtonColor: '#4f46e5',
+            confirmButtonText: 'Send Email',
+            preConfirm: () => {
+              const subject = document.getElementById('swal-purchase-subject')?.value?.trim();
+              const recipients = document.getElementById('swal-purchase-recipients')?.value?.trim();
+              if (!subject) {
+                Swal.showValidationMessage('Email subject is required!');
+                return false;
+              }
+              if (!recipients) {
+                Swal.showValidationMessage('At least one recipient email is required!');
+                return false;
+              }
+              return { subject, recipients };
+            }
+          }).then((result) => {
+            if (result.isConfirmed && result.value) {
+              const { subject, recipients } = result.value;
+              const rIds = addedRecords.map(a => a.id);
+              sendPurchaseEmail(formData.vendorName, formData.date, addedRecords, rIds, recipients, subject);
+            }
+          });
+        }
       }
       handleCancel();
     } catch (err) {
@@ -296,6 +345,176 @@ const PurchaseManagement = () => {
   };
 
   const soloProducts = stock.filter(s => !s.isComposite);
+
+  const sendPurchaseEmail = (vendorName, date, records, recordIds = [], customRecipients = null, customSubject = null) => {
+    const SERVICE_ID = "service_3oswmta";
+    const TEMPLATE_ID = "template_3py8m97";
+    const PUBLIC_KEY = "ZOxREJf15qCqFOcBq";
+
+    const defaultSubject = `Purchase Report - ${vendorName || 'Multiple Vendors'} (${date})`;
+    const finalSubject = (customSubject || defaultSubject).trim();
+
+    const totalQty = (records || []).reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+
+    const purchaseDetailsHtml = (records || []).map(p => {
+      const sku = soloProducts.find(s => s.name === p.productName)?.sku || '';
+      return `
+      <div style="font-size: 16px; font-family: sans-serif; line-height: 1.5; margin-bottom: 15px; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #f8fafc;">
+        <b style="font-size: 18px; color: #4338ca; display: block; margin-bottom: 8px;">
+          ${p.productName} ${sku ? `<span style="font-size: 13px; color: #6366f1; font-family: monospace; font-weight: bold;">[${sku}]</span>` : ''}
+          <span style="font-size: 13px; color: #64748b; font-weight: normal;">${p.vendorName && p.vendorName !== vendorName ? `(${p.vendorName})` : ''}</span>
+        </b>
+        <div style="margin-left: 10px; color: #334155;">
+          • Quantity Inward: <b style="color: #059669; font-size: 17px;">+${p.quantity}</b><br/>
+          • Place / Location: <b>${p.place || 'N/A'}</b><br/>
+          • Date: <b>${p.date || date}</b>
+        </div>
+      </div>
+      `;
+    }).join('');
+
+    const summaryHtml = `
+      <div style="margin-bottom: 20px; padding: 12px 18px; background: #eef2ff; border-left: 4px solid #4f46e5; border-radius: 6px; font-family: sans-serif;">
+        <span style="font-size: 13px; color: #4338ca; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px;">Summary</span>
+        <div style="margin-top: 6px; font-size: 15px; color: #1e1b4b;">
+          Total Items: <b>${records.length}</b> &nbsp;|&nbsp; Total Quantity Inward: <b style="color: #059669; font-size: 17px;">+${totalQty}</b>
+        </div>
+      </div>
+    `;
+
+    const headerHtml = `
+      <div style="text-align: center; margin-bottom: 25px; padding-bottom: 20px; border-bottom: 3px solid #4f46e5;">
+        <h1 style="color: #4f46e5; font-size: 32px; font-family: 'Georgia', serif; margin: 0; text-transform: uppercase; letter-spacing: 3px;">ThengaCoco</h1>
+        <p style="color: #64748b; font-size: 14px; font-weight: bold; margin: 5px 0 10px 0; text-transform: uppercase; letter-spacing: 1px;">${finalSubject}</p>
+        <div style="margin-top: 15px; color: #334155; font-family: sans-serif; font-size: 15px; background: #f1f5f9; padding: 10px 16px; border-radius: 6px; display: inline-block;">
+          Vendor: <b style="color: #4f46e5;">${vendorName || "Multiple Vendors"}</b> &nbsp; | &nbsp; Date: <b style="color: #4f46e5;">${date}</b>
+        </div>
+      </div>
+    `;
+
+    const defaultRecipients = standardRecipients.filter(r => r.label.toLowerCase() !== 'dhanya').map(r => r.email).join(', ') || standardRecipients.map(r => r.email).join(', ');
+    const recipients = customRecipients || defaultRecipients;
+
+    const fullContent = headerHtml + summaryHtml + purchaseDetailsHtml;
+
+    const templateParams = {
+      to_email: recipients,
+      recipient_email: recipients,
+      subject: finalSubject,
+      email_subject: finalSubject,
+      title: finalSubject,
+      vendor_name: finalSubject,
+      vendor: vendorName || "N/A",
+      date: date,
+      product_details: fullContent,
+      message: fullContent,
+      html_message: fullContent
+    };
+
+    return emailjs.send(SERVICE_ID, TEMPLATE_ID, templateParams, PUBLIC_KEY)
+      .then(async (res) => {
+        console.log("Purchase Email sent successfully:", res.status);
+        toast.success("Purchase Report emailed successfully.");
+
+        let ids = recordIds;
+        if (ids && !Array.isArray(ids)) {
+          ids = [ids];
+        }
+        if (ids && ids.length > 0) {
+          for (const id of ids) {
+            try {
+              await updateDoc(doc(db, 'purchaseRecords', String(id)), { emailSent: true });
+            } catch (err) {
+              console.warn("Could not update emailSent flag on purchase record:", err);
+            }
+          }
+        }
+        return true;
+      })
+      .catch((err) => {
+        console.error("Purchase Email send failure:", err);
+        toast.error("Failed to send purchase email.");
+        return false;
+      });
+  };
+
+  const sendQCEmail = (vendorName, date, products, images = [], recordIds = [], customRecipients = null, customSubject = null) => {
+    const SERVICE_ID = "service_3oswmta";
+    const TEMPLATE_ID = "template_3py8m97";
+    const PUBLIC_KEY = "ZOxREJf15qCqFOcBq";
+
+    const defaultSubject = `Quality Inspection Report - ${vendorName || 'Multiple Vendors'} (${date})`;
+    const finalSubject = (customSubject || defaultSubject).trim();
+    
+    const productDetails = (products || []).map(p => `
+      <div style="font-size: 16px; font-family: sans-serif; line-height: 1.5; margin-bottom: 20px; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; background-color: #f8fafc;">
+        <b style="font-size: 20px; color: #065f46; display: block; margin-bottom: 10px;">${p.productName} <span style="font-size: 14px; color: #64748b; font-weight: normal;">${p.vendorName && p.vendorName !== vendorName ? `(${p.vendorName})` : ''}</span></b>
+        <div style="margin-left: 10px;">
+          • Checked: <b>${p.checked}</b><br/>
+          • Rejected: <b>${p.rejected || 0}</b> ${p.rejectionReason ? `(${p.rejectionReason})` : ''}<br/>
+          • Damaged: <b>${p.damaged || 0}</b><br/>
+          • Baseless: <b>${p.baseless || 0}</b><br/>
+          • Holes: <b>${p.hole || 0}</b><br/>
+          • Approved: <b style="color: #059669;">${Number(p.checked) - Number(p.damaged || 0) - (Number(p.rejected) || 0) - (Number(p.baseless) || 0) - (Number(p.hole) || 0)}</b>
+        </div>
+      </div>
+    `).join('');
+
+    const defaultRecipients = standardRecipients.map(r => r.email).join(', ');
+    const recipients = customRecipients || defaultRecipients; 
+
+    const headerHtml = `
+      <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #065f46;">
+        <h1 style="color: #065f46; font-size: 32px; font-family: 'Georgia', serif; margin: 0; text-transform: uppercase; letter-spacing: 3px;">ThengaCoco</h1>
+        <p style="color: #64748b; font-size: 14px; font-weight: bold; margin: 5px 0 10px 0; text-transform: uppercase; letter-spacing: 1px;">${finalSubject}</p>
+        <div style="margin-top: 15px; color: #334155; font-family: sans-serif; font-size: 16px; background: #f1f5f9; padding: 10px; border-radius: 6px; display: inline-block;">
+          Vendor: <b style="color: #065f46;">${vendorName || "N/A"}</b> &nbsp; | &nbsp; Date: <b style="color: #065f46;">${date}</b>
+        </div>
+      </div>
+    `;
+
+    const fullContent = headerHtml + productDetails;
+
+    const templateParams = {
+      to_email: recipients,
+      recipient_email: recipients,
+      subject: finalSubject,
+      email_subject: finalSubject,
+      title: finalSubject,
+      vendor_name: finalSubject,
+      vendor: vendorName || "N/A",
+      date: date,
+      product_details: fullContent,
+      message: fullContent,
+      html_message: fullContent
+    };
+
+    return emailjs.send(SERVICE_ID, TEMPLATE_ID, templateParams, PUBLIC_KEY)
+      .then(async (res) => {
+        console.log("QC Email sent successfully:", res.status);
+        toast.success("QC Report emailed to accounts.");
+
+        let ids = recordIds;
+        if (ids && !Array.isArray(ids)) {
+          ids = [ids];
+        }
+        if (ids && ids.length > 0) {
+          for (const id of ids) {
+            try {
+              await updateDoc(doc(db, 'qcRecords', String(id)), { emailSent: true });
+            } catch (err) {
+              console.warn("Could not update emailSent flag on QC record:", err);
+            }
+          }
+        }
+        return true;
+      })
+      .catch((err) => {
+        console.error("QC Email send failure:", err);
+        toast.error("Failed to send QC email.");
+        return false;
+      });
+  };
 
   return (
     <div className="space-y-6">
@@ -427,13 +646,27 @@ const PurchaseManagement = () => {
               )}
             </div>
 
-            <div className="flex justify-end gap-3 pt-6 border-t border-white/50">
-              {isEditing && (
-                <Button type="button" variant="secondary" onClick={handleCancel}>Cancel Edit</Button>
-              )}
-              <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700 shadow-xl shadow-indigo-200 px-8 py-3 h-auto" loading={isSubmitting}>
-                <Save size={18} className="mr-2" /> {isEditing ? 'Update Selection' : 'Save all Arrivals'}
-              </Button>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 pt-6 border-t border-white/50">
+              {!isEditing ? (
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none bg-white/60 px-3 py-2 rounded-lg border border-slate-200/60 hover:bg-white transition-all shadow-sm">
+                  <input 
+                    type="checkbox" 
+                    checked={sendEmailOnSave} 
+                    onChange={(e) => setSendEmailOnSave(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <Mail size={15} className="text-indigo-600" />
+                  <span>Email Purchase Report to Accounts / Vendor after saving</span>
+                </label>
+              ) : <div />}
+              <div className="flex justify-end gap-3">
+                {isEditing && (
+                  <Button type="button" variant="secondary" onClick={handleCancel}>Cancel Edit</Button>
+                )}
+                <Button type="submit" className="bg-indigo-600 hover:bg-indigo-700 shadow-xl shadow-indigo-200 px-8 py-3 h-auto" loading={isSubmitting}>
+                  <Save size={18} className="mr-2" /> {isEditing ? 'Update Selection' : 'Save all Arrivals'}
+                </Button>
+              </div>
             </div>
           </form>
         </Card>
@@ -555,7 +788,7 @@ const PurchaseManagement = () => {
 
             {historySubTab === 'purchase' ? (
               <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-white">
+                <div className="p-6 border-b border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-white">
                   <h3 className="font-bold text-slate-900 flex items-center gap-2">
                     <History size={18} className="text-slate-400" />
                     Purchase History
@@ -563,6 +796,63 @@ const PurchaseManagement = () => {
                       {filteredHistory.length} Records
                     </span>
                   </h3>
+                  <Button
+                    onClick={() => {
+                      if (filteredHistory.length === 0) {
+                        toast.error("No purchase records found to email.");
+                        return;
+                      }
+
+                      const vendor = vendors.find(v => v.name === historyFilters.vendor);
+                      const defaultRecipients = vendor?.email || standardRecipients.filter(r => r.label.toLowerCase() !== 'dhanya').map(r => r.email).join(', ') || standardRecipients.map(r => r.email).join(', ');
+
+                      const vendorText = historyFilters.vendor || 'Multiple Vendors';
+                      const dateText = historyFilters.startDate === historyFilters.endDate 
+                        ? (historyFilters.startDate || 'All Dates') 
+                        : `${historyFilters.startDate || ''} to ${historyFilters.endDate || ''}`;
+                      const defaultSubject = `Purchase Report - ${vendorText} (${dateText})`;
+
+                      Swal.fire({
+                        title: 'Customize Purchase Email',
+                        html: `
+                          <div style="text-align: left; font-size: 13px;">
+                            <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #334155;">Email Subject:</label>
+                            <input id="swal-batch-purchase-subject" class="swal2-input" style="width: 100%; margin: 0 0 14px 0; font-size: 14px; box-sizing: border-box;" value="${defaultSubject}" />
+                            
+                            <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #334155;">Recipient Emails (comma separated):</label>
+                            <input id="swal-batch-purchase-recipients" class="swal2-input" style="width: 100%; margin: 0; font-size: 14px; box-sizing: border-box;" value="${defaultRecipients}" />
+                          </div>
+                        `,
+                        showCancelButton: true,
+                        confirmButtonColor: '#4f46e5',
+                        confirmButtonText: 'Send Report',
+                        preConfirm: () => {
+                          const subject = document.getElementById('swal-batch-purchase-subject')?.value?.trim();
+                          const recipients = document.getElementById('swal-batch-purchase-recipients')?.value?.trim();
+                          if (!subject) {
+                            Swal.showValidationMessage('Email subject is required!');
+                            return false;
+                          }
+                          if (!recipients) {
+                            Swal.showValidationMessage('At least one recipient email is required!');
+                            return false;
+                          }
+                          return { subject, recipients };
+                        }
+                      }).then((result) => {
+                        if (result.isConfirmed && result.value) {
+                          const { subject, recipients } = result.value;
+                          const rIds = filteredHistory.map(r => r.id);
+                          sendPurchaseEmail(vendorText, dateText, filteredHistory, rIds, recipients, subject);
+                        }
+                      });
+                    }}
+                    variant="primary"
+                    size="sm"
+                    className="text-[10px] h-8 px-2 bg-blue-600 hover:bg-blue-700 border-none shadow-md text-white"
+                  >
+                    <Mail size={14} className="mr-1" /> Email Purchase Report
+                  </Button>
                 </div>
                 <div className="overflow-x-auto">
                   <Table headers={['Date', 'Product / SKU', 'Vendor', 'Place', 'Quantity', 'Action']}>
@@ -591,14 +881,62 @@ const PurchaseManagement = () => {
                             </div>
                           </td>
                           <td className="py-4 px-6 text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                  <button onClick={() => handleEdit(r)} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
-                                    <Edit2 size={18} />
-                                  </button>
-                                  <button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
-                                    <Trash2 size={18} />
-                                  </button>
-                                </div>
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => {
+                                  if (r.emailSent) return;
+                                  const vendor = vendors.find(v => v.name === r.vendorName);
+                                  const defaultRecipients = vendor?.email || standardRecipients.filter(r => r.label.toLowerCase() !== 'dhanya').map(r => r.email).join(', ') || standardRecipients.map(r => r.email).join(', ');
+
+                                  const defaultSubject = `Purchase Report - ${r.vendorName || 'Vendor'} - ${r.productName} (${r.date})`;
+
+                                  Swal.fire({
+                                    title: 'Customize Purchase Email',
+                                    html: `
+                                      <div style="text-align: left; font-size: 13px;">
+                                        <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #334155;">Email Subject:</label>
+                                        <input id="swal-row-purchase-subject" class="swal2-input" style="width: 100%; margin: 0 0 14px 0; font-size: 14px; box-sizing: border-box;" value="${defaultSubject}" />
+                                        
+                                        <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #334155;">Recipient Emails (comma separated):</label>
+                                        <input id="swal-row-purchase-recipients" class="swal2-input" style="width: 100%; margin: 0; font-size: 14px; box-sizing: border-box;" value="${defaultRecipients}" />
+                                      </div>
+                                    `,
+                                    showCancelButton: true,
+                                    confirmButtonColor: '#4f46e5',
+                                    confirmButtonText: 'Send Email',
+                                    preConfirm: () => {
+                                      const subject = document.getElementById('swal-row-purchase-subject')?.value?.trim();
+                                      const recipients = document.getElementById('swal-row-purchase-recipients')?.value?.trim();
+                                      if (!subject) {
+                                        Swal.showValidationMessage('Email subject is required!');
+                                        return false;
+                                      }
+                                      if (!recipients) {
+                                        Swal.showValidationMessage('At least one recipient email is required!');
+                                        return false;
+                                      }
+                                      return { subject, recipients };
+                                    }
+                                  }).then((result) => {
+                                    if (result.isConfirmed && result.value) {
+                                      const { subject, recipients } = result.value;
+                                      sendPurchaseEmail(r.vendorName, r.date, [r], [r.id], recipients, subject);
+                                    }
+                                  });
+                                }}
+                                disabled={r.emailSent}
+                                className={`p-1.5 rounded-lg border border-transparent transition-all shadow-sm ${r.emailSent ? 'text-slate-300 bg-slate-50 cursor-not-allowed' : 'text-blue-500 hover:text-blue-600 hover:bg-white hover:border-blue-100'}`}
+                                title={r.emailSent ? "Email already sent" : "Send Email"}
+                              >
+                                <Mail size={18} />
+                              </button>
+                              <button onClick={() => handleEdit(r)} className="p-1.5 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
+                                <Edit2 size={18} />
+                              </button>
+                              <button onClick={() => handleDelete(r.id)} className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg">
+                                <Trash2 size={18} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
@@ -660,7 +998,7 @@ const PurchaseManagement = () => {
               </Card>
             ) : (
               <Card className="px-0 pt-0 pb-0 overflow-hidden shadow-none border-slate-200">
-                <div className="p-6 border-b border-slate-100 bg-indigo-50/10 flex items-center justify-between">
+                <div className="p-6 border-b border-slate-100 bg-indigo-50/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                   <div>
                     <h3 className="font-bold text-slate-900 flex items-center gap-2">
                       <ClipboardCheck size={20} className="text-indigo-500" />
@@ -668,14 +1006,73 @@ const PurchaseManagement = () => {
                     </h3>
                     <p className="text-xs text-slate-500 mt-1">Inspection logs for products received from vendors</p>
                   </div>
-                  <span className="bg-white text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-200">
-                    Filtered: {filteredQc.length}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-white text-slate-600 px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-200">
+                      Filtered: {filteredQc.length}
+                    </span>
+                    <Button
+                      onClick={() => {
+                        if (filteredQc.length === 0) {
+                          toast.error("No QC records found to email.");
+                          return;
+                        }
+
+                        const vendor = vendors.find(v => v.name === historyFilters.vendor);
+                        const defaultRecipients = vendor?.email || standardRecipients.map(r => r.email).join(', ');
+
+                        const vendorText = historyFilters.vendor || 'Multiple Vendors';
+                        const dateText = historyFilters.startDate === historyFilters.endDate 
+                          ? (historyFilters.startDate || 'All Dates') 
+                          : `${historyFilters.startDate || ''} to ${historyFilters.endDate || ''}`;
+                        const defaultSubject = `Quality Inspection Report - ${vendorText} (${dateText})`;
+
+                        Swal.fire({
+                          title: 'Customize QC Email',
+                          html: `
+                            <div style="text-align: left; font-size: 13px;">
+                              <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #334155;">Email Subject:</label>
+                              <input id="swal-batch-qc-subject" class="swal2-input" style="width: 100%; margin: 0 0 14px 0; font-size: 14px; box-sizing: border-box;" value="${defaultSubject}" />
+                              
+                              <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #334155;">Recipient Emails (comma separated):</label>
+                              <input id="swal-batch-qc-recipients" class="swal2-input" style="width: 100%; margin: 0; font-size: 14px; box-sizing: border-box;" value="${defaultRecipients}" />
+                            </div>
+                          `,
+                          showCancelButton: true,
+                          confirmButtonColor: '#4f46e5',
+                          confirmButtonText: 'Send Report',
+                          preConfirm: () => {
+                            const subject = document.getElementById('swal-batch-qc-subject')?.value?.trim();
+                            const recipients = document.getElementById('swal-batch-qc-recipients')?.value?.trim();
+                            if (!subject) {
+                              Swal.showValidationMessage('Email subject is required!');
+                              return false;
+                            }
+                            if (!recipients) {
+                              Swal.showValidationMessage('At least one recipient email is required!');
+                              return false;
+                            }
+                            return { subject, recipients };
+                          }
+                        }).then((result) => {
+                          if (result.isConfirmed && result.value) {
+                            const { subject, recipients } = result.value;
+                            const rIds = filteredQc.map(r => r.id);
+                            sendQCEmail(vendorText, dateText, filteredQc, [], rIds, recipients, subject);
+                          }
+                        });
+                      }}
+                      variant="primary"
+                      size="sm"
+                      className="text-[10px] h-8 px-2 bg-blue-600 hover:bg-blue-700 border-none shadow-md text-white"
+                    >
+                      <Mail size={14} className="mr-1" /> Email QC Report
+                    </Button>
+                  </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <Table headers={['Date', 'Product / SKU', 'Vendor', 'Checked', 'Accepted', 'Status']}>
+                  <Table headers={['Date', 'Product / SKU', 'Vendor', 'Checked', 'Accepted', 'Status', 'Actions']}>
                     {paginatedQc.length === 0 ? (
-                      <tr><td colSpan="6" className="py-12 text-center text-slate-400 font-medium">No QC reports available matching your filters.</td></tr>
+                      <tr><td colSpan="7" className="py-12 text-center text-slate-400 font-medium">No QC reports available matching your filters.</td></tr>
                     ) : (
                       paginatedQc.map(r => (
                         <tr key={r.id} className="hover:bg-slate-50 border-b border-slate-50 last:border-0 font-medium">
@@ -700,6 +1097,56 @@ const PurchaseManagement = () => {
                              ) : (
                                <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-500 text-[10px] font-bold">LOG ONLY</span>
                              )}
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <button
+                              onClick={() => {
+                                if (r.emailSent) return;
+                                const vendor = vendors.find(v => v.name === r.vendorName);
+                                const defaultRecipients = vendor?.email || standardRecipients.map(r => r.email).join(', ');
+
+                                 const defaultSubject = `Quality Inspection Report - ${r.vendorName || 'Vendor'} - ${r.productName} (${r.date})`;
+
+                                Swal.fire({
+                                  title: 'Customize QC Email',
+                                  html: `
+                                    <div style="text-align: left; font-size: 13px;">
+                                      <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #334155;">Email Subject:</label>
+                                      <input id="swal-row-qc-subject" class="swal2-input" style="width: 100%; margin: 0 0 14px 0; font-size: 14px; box-sizing: border-box;" value="${defaultSubject}" />
+                                      
+                                      <label style="display: block; font-weight: bold; margin-bottom: 5px; color: #334155;">Recipient Emails (comma separated):</label>
+                                      <input id="swal-row-qc-recipients" class="swal2-input" style="width: 100%; margin: 0; font-size: 14px; box-sizing: border-box;" value="${defaultRecipients}" />
+                                    </div>
+                                  `,
+                                  showCancelButton: true,
+                                  confirmButtonColor: '#4f46e5',
+                                  confirmButtonText: 'Send Email',
+                                  preConfirm: () => {
+                                    const subject = document.getElementById('swal-row-qc-subject')?.value?.trim();
+                                    const recipients = document.getElementById('swal-row-qc-recipients')?.value?.trim();
+                                    if (!subject) {
+                                      Swal.showValidationMessage('Email subject is required!');
+                                      return false;
+                                    }
+                                    if (!recipients) {
+                                      Swal.showValidationMessage('At least one recipient email is required!');
+                                      return false;
+                                    }
+                                    return { subject, recipients };
+                                  }
+                                }).then((result) => {
+                                  if (result.isConfirmed && result.value) {
+                                    const { subject, recipients } = result.value;
+                                    sendQCEmail(r.vendorName, r.date, [r], r.images || [], [r.id], recipients, subject);
+                                  }
+                                });
+                              }}
+                              disabled={r.emailSent}
+                              className={`p-1.5 rounded-lg border border-transparent transition-all shadow-sm ${r.emailSent ? 'text-slate-300 bg-slate-50 cursor-not-allowed' : 'text-blue-500 hover:text-blue-600 hover:bg-white hover:border-blue-100'}`}
+                              title={r.emailSent ? "Email already sent" : "Send QC Email"}
+                            >
+                              <Mail size={18} />
+                            </button>
                           </td>
                         </tr>
                       ))
